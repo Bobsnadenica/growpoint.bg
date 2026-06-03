@@ -1,0 +1,52 @@
+project_name     = "careerdoc"
+environment      = "dev"
+aws_region       = "eu-west-1"
+
+# Use the live site origin here so API Gateway and the S3 upload bucket both allow the browser.
+frontend_origins = [
+  "https://www.bobsnadenica.com"
+]
+
+# Cost / protection defaults for a small production rollout.
+# Increase these only when real traffic requires it.
+# api_throttle_burst_limit = 50
+# api_throttle_rate_limit  = 20
+#
+# Optional: cap Lambda concurrency to avoid runaway spend during unexpected traffic.
+# Leave unset for normal AWS-managed scaling.
+# lambda_reserved_concurrency = 10
+
+# Optional: set a stable Cognito Hosted UI domain prefix once before connecting
+# Google / Apple / LinkedIn. If omitted, Terraform derives one automatically.
+# cognito_domain_prefix = "careerlane-auth"
+
+# Optional: override the exact callback/logout URLs. By default Terraform derives
+# both the origin and /career/index.html from frontend_origins.
+# frontend_oauth_callback_urls = [
+#   "https://www.bobsnadenica.com/career/index.html"
+# ]
+#
+# frontend_oauth_logout_urls = [
+#   "https://www.bobsnadenica.com/career/index.html"
+# ]
+
+# Social login providers. Fill only the providers you want to activate.
+# google_client_id     = ""
+# google_client_secret = ""
+#
+# apple_client_id   = ""
+# apple_team_id     = ""
+# apple_key_id      = ""
+# apple_private_key = <<EOF
+# -----BEGIN PRIVATE KEY-----
+# ...
+# -----END PRIVATE KEY-----
+# EOF
+#
+# linkedin_client_id     = ""
+# linkedin_client_secret = ""
+
+tags = {
+  Project = "CareerDoc"
+  Owner   = "BobSNadenica"
+}

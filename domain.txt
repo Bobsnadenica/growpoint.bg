@@ -1,0 +1,2 @@
+ns1.eu1001.jethosting.com
+ns2.eu1001.jethosting.com
