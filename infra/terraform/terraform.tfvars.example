@@ -4,7 +4,7 @@ aws_region       = "eu-west-1"
 
 # Use the live site origin here so API Gateway and the S3 upload bucket both allow the browser.
 frontend_origins = [
-  "https://www.bobsnadenica.com"
+  "https://www.growpoint.bg"
 ]
 
 # Cost / protection defaults for a small production rollout.
@@ -21,13 +21,13 @@ frontend_origins = [
 # cognito_domain_prefix = "careerlane-auth"
 
 # Optional: override the exact callback/logout URLs. By default Terraform derives
-# both the origin and /career/index.html from frontend_origins.
+# the origin, /, and /index.html from frontend_origins.
 # frontend_oauth_callback_urls = [
-#   "https://www.bobsnadenica.com/career/index.html"
+#   "https://www.growpoint.bg/"
 # ]
 #
 # frontend_oauth_logout_urls = [
-#   "https://www.bobsnadenica.com/career/index.html"
+#   "https://www.growpoint.bg/"
 # ]
 
 # Social login providers. Fill only the providers you want to activate.

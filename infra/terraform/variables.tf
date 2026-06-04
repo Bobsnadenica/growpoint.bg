@@ -105,6 +105,6 @@ variable "ses_from_email" {
 
 variable "app_url" {
   type        = string
-  default     = "https://www.bobsnadenica.com/career/"
+  default     = "https://www.growpoint.bg/"
   description = "Public app URL used in email bodies."
 }

@@ -23,13 +23,13 @@ Leave blank to get a random suffix appended (handy for first deploy).
 The hosted UI redirects to your frontend after success/sign-out. Set both for every URL the app runs at (dev + prod):
 
 ```hcl
-frontend_origins             = ["https://www.bobsnadenica.com", "http://localhost:5173"]
+frontend_origins             = ["https://www.growpoint.bg", "http://localhost:5173"]
 frontend_oauth_callback_urls = [
-  "https://www.bobsnadenica.com/career/",
+  "https://www.growpoint.bg/",
   "http://localhost:5173/"
 ]
 frontend_oauth_logout_urls = [
-  "https://www.bobsnadenica.com/career/",
+  "https://www.growpoint.bg/",
   "http://localhost:5173/"
 ]
 ```
@@ -108,18 +108,18 @@ terraform output api_base_url
 
 ## 5. Frontend env
 
-Put the outputs into `career/.env.production` (and `.env.local` for dev). The relevant keys:
+Put the outputs into `.env.production` (and `.env.local` for dev). The relevant keys:
 
 ```
 VITE_COGNITO_USER_POOL_ID=<output>
 VITE_COGNITO_USER_POOL_CLIENT_ID=<output>
 VITE_API_BASE_URL=<output>
-VITE_COGNITO_HOSTED_UI_DOMAIN=<prefix>.auth.<region>.amazoncognito.com
-VITE_OAUTH_REDIRECT_SIGN_IN=https://www.bobsnadenica.com/career/
-VITE_OAUTH_REDIRECT_SIGN_OUT=https://www.bobsnadenica.com/career/
+VITE_COGNITO_DOMAIN=<prefix>.auth.<region>.amazoncognito.com
+VITE_COGNITO_SOCIAL_PROVIDERS=Google,Apple,LinkedIn
+VITE_BASE_PATH=/
 ```
 
-The frontend's `isCognitoHostedUiConfigured` (`src/lib/config.ts`) checks for `VITE_COGNITO_HOSTED_UI_DOMAIN` + a redirect URI. As soon as both are present, the demo prefill in `tryProviderLogin` is bypassed and `loginWithProvider` (Amplify `signInWithRedirect`) runs the real flow.
+The frontend's `isCognitoHostedUiConfigured` (`src/lib/config.ts`) checks for `VITE_COGNITO_DOMAIN` plus at least one `VITE_COGNITO_SOCIAL_PROVIDERS` entry. As soon as both are present, `loginWithProvider` (Amplify `signInWithRedirect`) runs the real flow.
 
 Re-run `npm run build` and redeploy.
 
@@ -127,7 +127,7 @@ Re-run `npm run build` and redeploy.
 
 1. Open `/auth` in an incognito window.
 2. The social section now reads `Вход с външен профил` (no дашед "ДЕМО" banner).
-3. Click **Google** → redirect to `accounts.google.com/...` → grant consent → bounced back to `/career/` signed in.
+3. Click **Google** → redirect to `accounts.google.com/...` → grant consent → bounced back to `/` signed in.
 4. First-time login auto-bootstraps a user record via `POST /auth/bootstrap` (see `AppShell.tsx` social effect). Confirm the record exists in DynamoDB.
 5. Repeat for Apple and LinkedIn if configured.
 

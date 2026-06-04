@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
     envDir: projectDir,
     publicDir: path.join(projectDir, "public"),
     plugins: [react()],
-    base: env.VITE_BASE_PATH || "/dev/career/",
+    base: env.VITE_BASE_PATH || "/",
     build: {
       outDir: path.join(projectDir, "dist"),
       emptyOutDir: true

@@ -1,7 +1,8 @@
 # CareerLane Production Readiness Memory
 
 Review date: 2026-05-06
-Workspace: `/Users/privileged/Projects/BobSNadenica.com/bobsnadenica.com/career`
+Domain migration review: 2026-06-04
+Workspace: `/Users/privileged/Projects/growpoint.bg/growpoint.bg`
 
 This file is the working memory for taking CareerLane from early-stage prototype to a professional, production-ready user test. It should be used as the execution plan in future implementation sessions.
 
@@ -14,7 +15,7 @@ CareerLane is a two-sided career platform:
 
 Current deployment model:
 
-- React + Vite SPA under `/career/` using `HashRouter`.
+- React + Vite SPA at `https://www.growpoint.bg/` using `HashRouter`.
 - AWS Cognito for auth.
 - AWS HTTP API Gateway + Lambda + DynamoDB + S3 for backend.
 - Terraform for AWS infrastructure.
@@ -38,13 +39,18 @@ Commands run:
 - `terraform fmt -check -diff` - failed because `infra/terraform/main.tf` needs formatting alignment only.
 - `npm --prefix backend/api ls --depth=0` - backend dependencies resolved.
 
-Rendered checks performed in the in-app browser against:
+Rendered checks performed in the in-app browser against the old nested test path:
 
 - `http://127.0.0.1:5173/career/#/`
 - `http://127.0.0.1:5173/career/#/consultants`
 - `http://127.0.0.1:5173/career/#/consultants/ana-petrova`
 - `http://127.0.0.1:5173/career/#/auth?tab=register&role=consultant`
 - `http://127.0.0.1:5173/career/#/users`
+
+Current root-domain smoke checks now use:
+
+- `http://127.0.0.1:8000/`
+- `https://www.growpoint.bg/`
 
 Observed:
 
@@ -605,4 +611,3 @@ Before inviting real testers, all of this should be true:
 8. Add booking lifecycle actions.
 9. Replace demo media and tighten production copy.
 10. Add observability and final release checklist.
-

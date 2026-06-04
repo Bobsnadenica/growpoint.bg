@@ -8,7 +8,9 @@ function cleanLocalCareerLaneCaches() {
       .then((registrations) =>
         Promise.all(
           registrations
-            .filter((registration) => registration.scope.includes("/dev/career/"))
+            .filter((registration) =>
+              ["/dev/career/", "/career/"].some((scope) => registration.scope.includes(scope))
+            )
             .map((registration) => registration.unregister())
         )
       )

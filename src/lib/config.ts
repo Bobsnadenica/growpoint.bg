@@ -28,7 +28,7 @@ function normalizeCognitoDomain(value: string) {
 export const config = {
   appName: import.meta.env.VITE_APP_NAME || "CareerLane",
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "",
-  basePath: normalizeBasePath(import.meta.env.VITE_BASE_PATH || "/dev/career/"),
+  basePath: normalizeBasePath(import.meta.env.VITE_BASE_PATH || "/"),
   region: import.meta.env.VITE_AWS_REGION || "eu-west-1",
   cognito: {
     userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID || "",

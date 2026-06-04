@@ -2,13 +2,13 @@
   "name": "CareerLane: Професионална мрежа",
   "short_name": "CareerLane",
   "description": "Платформа за кариерни консултации и професионално позициониране.",
-  "start_url": "/dev/career/",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4b6a60",
   "icons": [
     {
-      "src": "/dev/career/favicon.svg",
+      "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

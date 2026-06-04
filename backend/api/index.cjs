@@ -28,9 +28,9 @@ const env = {
   consultantsTable: process.env.CONSULTANTS_TABLE,
   bookingsTable: process.env.BOOKINGS_TABLE,
   cvBucket: process.env.CV_BUCKET,
-  allowedOrigin: process.env.ALLOWED_ORIGIN || "https://www.bobsnadenica.com",
+  allowedOrigin: process.env.ALLOWED_ORIGIN || "https://www.growpoint.bg",
   sesFromEmail: process.env.SES_FROM_EMAIL || "",
-  appUrl: process.env.APP_URL || "https://www.bobsnadenica.com/career/"
+  appUrl: process.env.APP_URL || "https://www.growpoint.bg/"
 };
 
 const CONSULTANT_PROFILE_THEMES = new Set(["violet", "sky", "rose", "mint", "amber"]);
@@ -49,7 +49,7 @@ const MAX_USER_TOTAL_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const MAX_USER_DOCUMENTS = 50;
 const ACCOUNT_DELETION_DELAY_DAYS = 7;
 const CONSULTANT_PROFILE_STATUSES = new Set(["pending", "approved", "rejected"]);
-const VISIBLE_CONSULTANT_STATUSES = new Set(["approved", "active"]);
+const VISIBLE_CONSULTANT_STATUSES = new Set(["approved"]);
 const ADMIN_GROUP = "admin";
 
 function response(statusCode, body, extraHeaders = {}) {
@@ -1196,17 +1196,67 @@ function isConsultantRecord(item) {
   return !item.consultantId.startsWith(SLUG_CLAIM_PREFIX);
 }
 
+function isPlaceholderPublicText(value) {
+  const compact = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s._-]+/g, "");
+
+  if (!compact) return true;
+  return /^(test|testing|sample|placeholder|asdf|qwerty|none|null|na)+$/.test(compact);
+}
+
+function hasUsefulPublicList(value) {
+  return (
+    Array.isArray(value) &&
+    value.some((item) => {
+      const text = String(item || "").trim();
+      return text.length >= 2 && !isPlaceholderPublicText(text);
+    })
+  );
+}
+
+function hasValidPublicMediaUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return true;
+
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function isReasonablePublicNumber(value, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max;
+}
+
 function isVisibleConsultant(consultant) {
   if (!isConsultantRecord(consultant)) return false;
   if (consultant.isPublic === false) return false;
-  const status = consultant.profileStatus || "approved";
+  const status = consultant.profileStatus || "pending";
   if (!VISIBLE_CONSULTANT_STATUSES.has(status)) return false;
   // Minimum quality bar — empty or junk profiles never appear in the public
   // catalog even when their flags read public+approved. Stops the catalog
   // from leaking half-set-up accounts or stale legacy rows.
-  if (!String(consultant.name || "").trim()) return false;
-  if (!String(consultant.headline || "").trim()) return false;
-  if (!String(consultant.bio || "").trim()) return false;
+  const name = String(consultant.name || "").trim();
+  const headline = String(consultant.headline || "").trim();
+  const bio = String(consultant.bio || "").trim();
+  const experienceSummary = String(consultant.experienceSummary || "").trim();
+  if (name.length < 2 || isPlaceholderPublicText(name)) return false;
+  if (headline.length < 10 || isPlaceholderPublicText(headline)) return false;
+  if (bio.length < 80 || isPlaceholderPublicText(bio)) return false;
+  if (experienceSummary.length < 20 || isPlaceholderPublicText(experienceSummary)) return false;
+  if (!hasUsefulPublicList(consultant.languages)) return false;
+  if (!hasUsefulPublicList(consultant.specializations)) return false;
+  if (!hasUsefulPublicList(consultant.sessionModes)) return false;
+  if (!hasValidPublicMediaUrl(consultant.avatarUrl)) return false;
+  if (!hasValidPublicMediaUrl(consultant.heroUrl)) return false;
+  if (!isReasonablePublicNumber(consultant.experienceYears || 0, 0, 70)) return false;
+  if (!isReasonablePublicNumber(consultant.priceBgn || 0, 0, 5000)) return false;
+  if (!isReasonablePublicNumber(consultant.sessionLengthMinutes || 60, 15, 240)) return false;
   return true;
 }
 

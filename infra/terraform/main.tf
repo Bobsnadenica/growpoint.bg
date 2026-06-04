@@ -10,7 +10,8 @@ locals {
   default_oauth_urls = distinct(flatten([
     for origin in local.normalized_frontend_origins : [
       origin,
-      "${origin}/career/index.html"
+      "${origin}/",
+      "${origin}/index.html"
     ]
   ]))
   oauth_callback_urls    = length(var.frontend_oauth_callback_urls) > 0 ? var.frontend_oauth_callback_urls : local.default_oauth_urls

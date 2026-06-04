@@ -27,6 +27,6 @@ VITE_COGNITO_USER_POOL_ID=${aws_cognito_user_pool.main.id}
 VITE_COGNITO_USER_POOL_CLIENT_ID=${aws_cognito_user_pool_client.frontend.id}
 ${local.hosted_ui_enabled ? "VITE_COGNITO_DOMAIN=${aws_cognito_user_pool_domain.frontend[0].domain}.auth.${var.aws_region}.amazoncognito.com" : ""}
 ${length(local.social_provider_labels) > 0 ? "VITE_COGNITO_SOCIAL_PROVIDERS=${join(",", local.social_provider_labels)}" : ""}
-VITE_BASE_PATH=/career/
+VITE_BASE_PATH=/
 EOT
 }

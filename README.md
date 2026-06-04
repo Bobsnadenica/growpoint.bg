@@ -7,7 +7,7 @@ CareerLane is a full-stack career platform for two main roles:
 
 The project is intentionally split into three layers:
 
-1. a static React + Vite frontend that is deployed under `/career/` on GitHub Pages
+1. a static React + Vite frontend that is deployed at the root of `https://www.growpoint.bg/` on GitHub Pages
 2. a serverless AWS backend made of API Gateway + Lambda + DynamoDB + S3
 3. Terraform infrastructure that creates and wires the AWS resources
 
@@ -17,7 +17,7 @@ This README is meant to explain the whole architecture in a practical, step-by-s
 
 ```mermaid
 flowchart LR
-    U["Browser<br/>GitHub Pages /career/"] --> F["React + Vite SPA<br/>HashRouter"]
+    U["Browser<br/>GitHub Pages<br/>www.growpoint.bg"] --> F["React + Vite SPA<br/>HashRouter"]
     F --> C["AWS Cognito<br/>Email/password auth"]
     F --> A["HTTP API Gateway"]
     A --> L["Lambda API<br/>backend/api/index.cjs"]
@@ -29,7 +29,7 @@ flowchart LR
 
 At runtime:
 
-- GitHub Pages serves the static frontend from `/career/index.html`
+- GitHub Pages serves the static frontend from `/index.html`
 - the React app uses `HashRouter`, so navigation works on a static host without server-side route rewrites
 - Cognito handles login, registration, confirmation, and password reset
 - the frontend calls the AWS HTTP API with a JWT token for protected routes
@@ -158,9 +158,9 @@ Routes include:
 - `/contact`
 - `/legal`
 
-Because this is a GitHub Pages deployment under `/career/`, the app uses:
+Because this is a GitHub Pages deployment at the domain root, the app uses:
 
-- Vite base path: `/career/`
+- Vite base path: `/`
 - `HashRouter`: routes look like `#/dashboard`, `#/consultants/some-slug`, etc.
 
 This avoids 404s on refresh that would happen with a normal browser-history router on a static host.
@@ -705,11 +705,11 @@ The relevant files are:
 
 The site is served from:
 
-- `/career/index.html`
+- `/index.html`
 
 and the built assets must land directly in:
 
-- `/career/assets`
+- `/assets`
 
 GitHub Pages serves the repository content as static files, so the build process must finish by copying the final output to the repository root.
 
@@ -723,12 +723,12 @@ When you run `npm run build`:
 4. `scripts/site-build.mjs` deletes the old root `assets/`
 5. it copies `dist/assets/` into root `assets/`
 6. it copies `dist/index.html` into root `index.html`
-7. it copies static public files such as `manifest.json`, `sw.js`, icons, and OG image into the `career/` root
+7. it copies static public files such as `manifest.json`, `sw.js`, icons, and OG image into the repository root
 8. it deletes `dist/` again
 
 Result:
 
-- `career/index.html` points to built `/career/assets/...` files and can be served by GitHub Pages
+- `index.html` points to built `/assets/...` files and can be served by GitHub Pages
 
 ### 12.3 Dev Mode Step by Step
 
@@ -737,9 +737,9 @@ When you run `npm run dev`:
 1. Vite reads `src/index.html`
 2. Vite starts the local dev server
 3. the app runs with hot reload against source files in `src/`
-4. the root deploy artifact `career/index.html` is not rewritten
+4. the root deploy artifact `index.html` is not rewritten
 
-The dev entry also unregisters the `/career/` service worker and clears
+The dev entry also unregisters old `/dev/career/` and `/career/` service workers and clears
 `careerlane-*` caches. This prevents a previously built GitHub Pages service
 worker from serving stale cached HTML while Vite is running locally.
 
@@ -756,7 +756,7 @@ The key frontend variables are:
 | `VITE_COGNITO_USER_POOL_CLIENT_ID` | Cognito app client id |
 | `VITE_COGNITO_DOMAIN` | Cognito Hosted UI domain for social login |
 | `VITE_COGNITO_SOCIAL_PROVIDERS` | enabled social providers list |
-| `VITE_BASE_PATH` | base path for GitHub Pages, currently `/career/` |
+| `VITE_BASE_PATH` | base path for GitHub Pages, currently `/` |
 
 Terraform exports these through:
 
@@ -776,7 +776,7 @@ npm run dev
 Open the local site at:
 
 ```bash
-http://127.0.0.1:5173/career/
+http://127.0.0.1:5173/
 ```
 
 ### Frontend production build
@@ -810,14 +810,14 @@ terraform apply
 4. run `npm run build`
 5. confirm the root `index.html` and `assets/` changed as expected
 6. commit and push the repository
-7. GitHub Pages serves the updated static app from `/career/`
+7. GitHub Pages serves the updated static app from `/`
 
 ### Frontend-only deploy flow
 
 If only UI code changed and AWS outputs did not change:
 
 1. run `npm run build`
-2. confirm `career/index.html` does not reference `/src/main.tsx`
+2. confirm `index.html` does not reference `/src/main.tsx`
 3. commit `index.html`, `assets/`, and source changes
 4. push to the GitHub Pages branch / source branch
 
@@ -857,7 +857,7 @@ These are important to know when working on the project:
 - most of the UI implementation still lives in `src/app/legacy/SiteAppLegacy.tsx`
 - route-level structure now lives in `src/app/pages/` and `src/app/layout/PageScene.tsx`, but detailed page logic is still being extracted gradually from the legacy file
 - the public site is static, so route handling depends on `HashRouter`
-- the root `career/index.html` is generated during build and must be committed as a deploy artifact while GitHub Pages serves the repository directly
+- the root `index.html` is generated during build and must be committed as a deploy artifact while GitHub Pages serves the repository directly
 
 ## 18. Mental Model for Future Work
 
