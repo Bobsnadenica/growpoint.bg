@@ -30,6 +30,7 @@ Latest production decisions:
 - Registration has two roles only: user/professional or expert profile. Consultant vs mentor is chosen later in the profile editor.
 - Confirmation-code resend must use Cognito `resendSignUpCode`; do not call `signUp` again from "Изпрати нов код".
 - Cognito signup verification currently uses the built-in Cognito sender so code delivery is not blocked by an unverified SES identity. Set `cognito_ses_from_email` only after `contactus@growpoint.bg` or the GrowPoint domain is verified in SES `eu-west-1`.
+- Platform notification emails from the Lambda still require `ses_from_email` to be a verified SES identity in `eu-west-1`. The email templates are GrowPoint-branded, but delivery depends on SES verification.
 - Users can choose light/dark site theme through `growpoint.theme` in local storage.
 - Backend emails use direct BrowserRouter URLs such as `/dashboard/` and `/users/`, not old hash routes.
 - DynamoDB now has point-in-time recovery enabled in Terraform, and public consultant listing can use `profile-status-index` with bounded-scan fallback during rollout.
