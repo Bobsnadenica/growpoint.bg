@@ -17,7 +17,7 @@ This README is meant to explain the whole architecture in a practical, step-by-s
 
 ```mermaid
 flowchart LR
-    U["Browser<br/>GitHub Pages<br/>www.growpoint.bg"] --> F["React + Vite SPA<br/>HashRouter"]
+    U["Browser<br/>GitHub Pages<br/>www.growpoint.bg"] --> F["React + Vite SPA<br/>BrowserRouter"]
     F --> C["AWS Cognito<br/>Email/password auth"]
     F --> A["HTTP API Gateway"]
     A --> L["Lambda API<br/>backend/api/index.cjs"]
@@ -29,8 +29,8 @@ flowchart LR
 
 At runtime:
 
-- GitHub Pages serves the static frontend from `/index.html`
-- the React app uses `HashRouter`, so navigation works on a static host without server-side route rewrites
+- GitHub Pages serves the static frontend from `/index.html` plus generated public route copies such as `/users/index.html`
+- the React app uses `BrowserRouter`; `scripts/site-build.mjs` writes static route entries so public routes return `200` on refresh
 - Cognito handles login, registration, confirmation, and password reset
 - the frontend calls the AWS HTTP API with a JWT token for protected routes
 - the Lambda reads and writes data in DynamoDB
@@ -122,12 +122,12 @@ The source HTML loads `src/main.tsx`. `src/main.tsx` then:
 
 `src/app/App.tsx` then wraps the app in:
 
-- `HashRouter` from `react-router-dom`
+- `BrowserRouter` from `react-router-dom`
 - `AuthProvider` from `src/lib/auth.tsx`
 
 This is important because:
 
-- `HashRouter` keeps routing compatible with GitHub Pages static hosting
+- generated route copies keep browser-history routing compatible with GitHub Pages static hosting
 - `AuthProvider` makes the current Cognito user and JWT token available throughout the app
 
 ### 3.2 Routing Model
@@ -161,9 +161,10 @@ Routes include:
 Because this is a GitHub Pages deployment at the domain root, the app uses:
 
 - Vite base path: `/`
-- `HashRouter`: routes look like `#/dashboard`, `#/consultants/some-slug`, etc.
+- `BrowserRouter`: routes look like `/users/`, `/consultants/some-slug/`, etc.
+- static route copies generated from `src/lib/seo-data.json`
 
-This avoids 404s on refresh that would happen with a normal browser-history router on a static host.
+This avoids 404s on refresh for known public and app routes while keeping those URLs crawlable for search engines.
 
 ### 3.3 Current UI Code Organization
 
@@ -723,12 +724,14 @@ When you run `npm run build`:
 4. `scripts/site-build.mjs` deletes the old root `assets/`
 5. it copies `dist/assets/` into root `assets/`
 6. it copies `dist/index.html` into root `index.html`
-7. it copies static public files such as `manifest.json`, `sw.js`, icons, and OG image into the repository root
-8. it deletes `dist/` again
+7. it copies static public files such as `manifest.json`, `sw.js`, `robots.txt`, icons, and OG image into the repository root
+8. it generates static route entries, `404.html`, and `sitemap.xml` from `src/lib/seo-data.json`
+9. it deletes `dist/` again
 
 Result:
 
 - `index.html` points to built `/assets/...` files and can be served by GitHub Pages
+- public SEO routes such as `/users/`, `/about/`, `/faq/`, and consultant profile URLs return static `index.html` files with route-specific metadata
 
 ### 12.3 Dev Mode Step by Step
 
@@ -856,8 +859,8 @@ These are important to know when working on the project:
 - the payment / subscription model is presented in the UI, but paid billing is not yet fully wired into a real payments backend
 - most of the UI implementation still lives in `src/app/legacy/SiteAppLegacy.tsx`
 - route-level structure now lives in `src/app/pages/` and `src/app/layout/PageScene.tsx`, but detailed page logic is still being extracted gradually from the legacy file
-- the public site is static, so route handling depends on `HashRouter`
-- the root `index.html` is generated during build and must be committed as a deploy artifact while GitHub Pages serves the repository directly
+- the public site is static, so route handling depends on `BrowserRouter` plus generated route copies
+- the root `index.html`, route `index.html` copies, `robots.txt`, and `sitemap.xml` are generated during build and must be committed as deploy artifacts while GitHub Pages serves the repository directly
 
 ## 18. Mental Model for Future Work
 

@@ -31,6 +31,7 @@ import {
   writeSocialAuthIntent
 } from "../../lib/auth-flow";
 import { getPersonaById, personaPresets, type PersonaPreset } from "../../lib/personas";
+import { applyConsultantProfileSeo } from "../../lib/seo";
 import {
   DOCUMENT_UPLOAD_ACCEPT,
   DOCUMENT_UPLOAD_FORMAT_LABEL,
@@ -490,8 +491,8 @@ function applySuggestedFieldValue(
   control.focus();
 }
 
-// HashRouter owns the URL fragment, so `<a href="#section">` would be
-// interpreted as a route ("/section" → 404). Scroll programmatically instead.
+// Keep dashboard section jumps programmatic so they do not create shareable
+// route-looking fragments in the address bar.
 function scrollToDashboardSection(id: string) {
   if (typeof document === "undefined") return;
   const el = document.getElementById(id);
@@ -1673,6 +1674,12 @@ export function ConsultantPage() {
     return () => window.clearTimeout(timeout);
   }, [shareMessage]);
 
+  useEffect(() => {
+    if (consultant) {
+      applyConsultantProfileSeo(consultant);
+    }
+  }, [consultant]);
+
   if (error) {
     return (
       <section className="section">
@@ -1711,7 +1718,7 @@ export function ConsultantPage() {
   ].filter((fact) => String(fact.value || "").trim());
   const shareUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}${import.meta.env.BASE_URL}#/consultants/${consultant.slug}`
+      ? `${window.location.origin}${import.meta.env.BASE_URL}consultants/${consultant.slug}/`
       : "";
 
   const shareProfile = async () => {
@@ -3850,7 +3857,7 @@ export function DashboardPage() {
   const consultantPublicUrl =
     profile.role === "consultant" && consultantPublicSlug
       ? typeof window !== "undefined"
-        ? `${window.location.origin}${import.meta.env.BASE_URL}#/consultants/${consultantPublicSlug}`
+        ? `${window.location.origin}${import.meta.env.BASE_URL}consultants/${consultantPublicSlug}/`
         : `/consultants/${consultantPublicSlug}`
       : "";
   const profileSetupSections = [

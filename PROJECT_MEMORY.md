@@ -15,11 +15,11 @@ CareerLane is a two-sided career platform:
 
 Current deployment model:
 
-- React + Vite SPA at `https://www.growpoint.bg/` using `HashRouter`.
+- React + Vite SPA at `https://www.growpoint.bg/` using `BrowserRouter`.
 - AWS Cognito for auth.
 - AWS HTTP API Gateway + Lambda + DynamoDB + S3 for backend.
 - Terraform for AWS infrastructure.
-- GitHub Pages root `index.html` and `assets/` are generated deployment artifacts.
+- GitHub Pages root `index.html`, generated route copies, `sitemap.xml`, `robots.txt`, and `assets/` are deployment artifacts.
 
 Important user preference from the review:
 
@@ -50,13 +50,14 @@ Rendered checks performed in the in-app browser against the old nested test path
 Current root-domain smoke checks now use:
 
 - `http://127.0.0.1:8000/`
+- `http://127.0.0.1:8000/users/`
 - `https://www.growpoint.bg/`
 
 Observed:
 
 - App loads and is not blank.
 - No Vite/React error overlay.
-- Directory keyword filter works and updates the URL, for example `#/consultants?q=Product`.
+- Directory keyword filter works and updates the URL, for example `/users/?q=Product`.
 - Console shows React Router v7 future flag warnings only.
 - Mobile/narrow layout has real visual issues around hierarchy, oversized headings, header wrapping, card dominance, and route-transition fade timing.
 

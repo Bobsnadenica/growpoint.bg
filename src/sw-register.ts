@@ -33,7 +33,8 @@ function cleanLocalCareerLaneCaches() {
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(new URL("sw.js", window.location.href));
+    const basePath = import.meta.env.BASE_URL || "/";
+    navigator.serviceWorker.register(`${basePath}sw.js`, { scope: basePath });
   });
 }
 

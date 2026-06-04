@@ -9,6 +9,7 @@ import {
   readSocialAuthIntent
 } from "../../lib/auth-flow";
 import { config } from "../../lib/config";
+import { applyRouteSeo } from "../../lib/seo";
 import AboutPage from "../pages/AboutPage";
 import AccountPage from "../pages/AccountPage";
 import AdminConsultantPreviewPage from "../pages/AdminConsultantPreviewPage";
@@ -49,66 +50,17 @@ const footerLinks = [
   { to: "/privacy", label: "Политика за поверителност" }
 ] as const;
 
-function resolveDocumentTitle(pathname: string) {
-  if (pathname === "/") {
-    return "Начало";
-  }
-
-  if (pathname === "/users") {
-    return "За потребители";
-  }
-
-  if (pathname.startsWith("/consultants/")) {
-    return "Профил на консултант";
-  }
-
-  if (pathname === "/auth") {
-    return "Вход и регистрация";
-  }
-
-  if (pathname === "/account" || pathname === "/dashboard") {
-    return "Моето табло";
-  }
-
-  if (pathname === "/about") {
-    return "За нас";
-  }
-
-  if (pathname === "/contact") {
-    return "Контакти";
-  }
-
-  if (pathname === "/faq") {
-    return "Често задавани въпроси";
-  }
-
-  if (pathname === "/legal") {
-    return "Правна информация";
-  }
-
-  if (pathname === "/terms") {
-    return "Условия за ползване";
-  }
-
-  if (pathname === "/privacy") {
-    return "Политика за поверителност";
-  }
-
-  if (pathname === "/admin") {
-    return "Админ";
-  }
-
-  return "CareerLane";
-}
-
 function RouteExperience() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const title = resolveDocumentTitle(location.pathname);
+    if (!location.hash.startsWith("#/")) return;
+    navigate(location.hash.slice(1), { replace: true });
+  }, [location.hash, navigate]);
 
-    document.title =
-      title === config.appName ? config.appName : `${title} | ${config.appName}`;
+  useEffect(() => {
+    applyRouteSeo(location.pathname);
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [location.pathname]);
 
