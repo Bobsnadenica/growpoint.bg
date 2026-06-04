@@ -8,6 +8,8 @@ import type {
 } from "../../lib/types";
 import PageScene from "../layout/PageScene";
 
+const BGN_PER_EUR = 1.95583;
+
 function statusLabel(status: AdminConsultantDetail["profileStatus"]) {
   if (status === "approved" || status === "active") return "Одобрен";
   if (status === "rejected") return "Отказан";
@@ -34,6 +36,29 @@ function formatAuditDate(value: string) {
   } catch {
     return parsed.toISOString();
   }
+}
+
+function getPriceEur(consultant: AdminConsultantDetail) {
+  const explicit = Number(consultant.priceEur);
+
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return explicit;
+  }
+
+  const legacyBgn = Number((consultant as AdminConsultantDetail & { priceBgn?: number }).priceBgn);
+  if (Number.isFinite(legacyBgn) && legacyBgn > 0) {
+    return Math.round((legacyBgn / BGN_PER_EUR) * 100) / 100;
+  }
+
+  return 0;
+}
+
+function formatEuroPrice(value: number) {
+  return new Intl.NumberFormat("bg-BG", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2
+  }).format(value);
 }
 
 function getInitials(name: string) {
@@ -257,7 +282,9 @@ export default function AdminConsultantPreviewPage() {
               </div>
               <div>
                 <dt>Цена</dt>
-                <dd>{consultant.priceBgn ? `${consultant.priceBgn} лв` : "—"}</dd>
+                <dd>
+                  {getPriceEur(consultant) ? formatEuroPrice(getPriceEur(consultant)) : "—"}
+                </dd>
               </div>
               <div>
                 <dt>Сесия</dt>

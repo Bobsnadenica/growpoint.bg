@@ -65,7 +65,7 @@ type UpdateConsultantInput = Partial<
     | "educationHighlights"
     | "city"
     | "experienceYears"
-    | "priceBgn"
+    | "priceEur"
     | "featured"
     | "rating"
     | "reviewCount"

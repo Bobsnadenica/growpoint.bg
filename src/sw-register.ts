@@ -1,7 +1,7 @@
 // Service-worker bootstrap. Kept out of index.html so the Content-Security-
 // Policy can keep script-src strictly 'self' (no 'unsafe-inline' for scripts).
 
-function cleanLocalCareerLaneCaches() {
+function cleanLocalGrowPointCaches() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker
       .getRegistrations()
@@ -23,7 +23,7 @@ function cleanLocalCareerLaneCaches() {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith("careerlane-"))
+            .filter((key) => key.startsWith("growpoint-") || key.startsWith("careerlane-"))
             .map((key) => caches.delete(key))
         )
       )
@@ -39,5 +39,5 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 }
 
 if (import.meta.env.DEV) {
-  window.addEventListener("load", cleanLocalCareerLaneCaches);
+  window.addEventListener("load", cleanLocalGrowPointCaches);
 }

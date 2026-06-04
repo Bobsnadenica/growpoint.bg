@@ -80,7 +80,7 @@ export interface ConsultantProfile {
   languages: string[];
   specializations: string[];
   experienceYears: number;
-  priceBgn: number;
+  priceEur: number;
   sessionModes: string[];
   featured: boolean;
   rating: number;

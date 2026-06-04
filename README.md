@@ -1,6 +1,6 @@
-# CareerLane
+# GrowPoint
 
-CareerLane is a full-stack career platform for two main roles:
+GrowPoint is a full-stack career platform for two main roles:
 
 - users / professionals who want to build a profile, upload a CV, browse consultants, and request sessions
 - consultants / mentors who want to publish a profile, upload profile media, manage availability, and receive booking requests
@@ -261,6 +261,7 @@ When the app loads:
 1. the user enters the confirmation code
 2. the frontend calls `confirmSignUp(...)`
 3. Cognito marks the account as confirmed
+4. if the user clicks `Изпрати нов код`, the frontend calls `resendSignUpCode(...)` instead of trying to register the account again
 
 #### Login flow
 
@@ -423,6 +424,7 @@ GSIs:
 
 - `slug-index`
 - `owner-index`
+- `profile-status-index`
 
 Stores data such as:
 
@@ -445,6 +447,7 @@ Stores data such as:
 - `consultationTopics`
 - `workApproach`
 - `sessionLengthMinutes`
+- `priceEur`
 - `availability`
 - `nextAvailable`
 - `avatarUrl`
@@ -572,22 +575,29 @@ The local fallback catalogue in `src/lib/demo-data.ts` includes seeded demo cons
 - The backend only persists a consultant `theme` when the consultant's account plan is `pro`; free saved profiles are normalized back to the standard theme.
 - Theme editing/gating still needs the paid-plan control flow before real users can choose themes in production.
 
-### 9.7 Public Consultant Browsing
+### 9.8 Site Light/Dark Theme
+
+- The app shell exposes a light/dark theme toggle in the desktop header and mobile menu.
+- The selected value is stored in `localStorage` under `growpoint.theme`.
+- CSS variables in `src/styles/global.css` drive the global color mode; this is separate from consultant profile color themes.
+
+### 9.9 Public Consultant Browsing
 
 1. the public frontend calls `GET /consultants`
-2. the backend scans the consultants table
-3. it filters out non-public profiles
-4. it optionally filters by:
+2. the backend queries `profile-status-index` for approved profiles when the index is available
+3. during rollout/backfill, the backend falls back to a bounded scan instead of failing the request
+4. it filters out non-public or incomplete profiles
+5. it optionally filters by:
    - query
    - city
-5. it sorts results by:
+6. it sorts results by:
    - featured first
    - review count
    - rating
    - name
-6. it decorates media and normalizes arrays before returning JSON
+7. it decorates media, converts legacy BGN prices to `priceEur`, and normalizes arrays before returning JSON
 
-### 9.8 Booking Flow
+### 9.10 Booking Flow
 
 1. a logged-in user opens a consultant page
 2. the frontend shows public consultant details and availability
@@ -606,7 +616,7 @@ The local fallback catalogue in `src/lib/demo-data.ts` includes seeded demo cons
 
 ## 10. S3 Upload Model
 
-CareerLane does not upload large files through the Lambda directly.
+GrowPoint does not upload large files through the Lambda directly.
 
 Instead:
 
@@ -675,11 +685,14 @@ The user pool resource includes:
 
 This is important because AWS Cognito does not allow arbitrary schema mutations after a pool has been created. Without this guard, later `terraform apply` runs can fail even when the rest of the infrastructure changes are valid.
 
+Cognito signup verification emails use the built-in Cognito sender by default so registration codes keep working even when no GrowPoint SES identity is verified yet. To send verification emails from `contactus@growpoint.bg`, first verify that address or the `growpoint.bg` domain in SES `eu-west-1`, then set `cognito_ses_from_email`.
+
 ### 11.4 Cost and Performance Guardrails
 
 The current Terraform stack is tuned for a small production rollout:
 
 - DynamoDB uses `PAY_PER_REQUEST`, which avoids paying for provisioned capacity while traffic is low
+- DynamoDB point-in-time recovery is enabled for users, consultants, and bookings
 - Lambda runs on `arm64`, which is generally cheaper than x86 for the same workload
 - the S3 upload bucket uses direct browser uploads through pre-signed URLs, so Lambda does not spend time proxying file data
 - API Gateway applies default throttling to protect the backend from accidental spikes
@@ -743,7 +756,7 @@ When you run `npm run dev`:
 4. the root deploy artifact `index.html` is not rewritten
 
 The dev entry also unregisters old `/dev/career/` and `/career/` service workers and clears
-`careerlane-*` caches. This prevents a previously built GitHub Pages service
+`growpoint-*` caches. This prevents a previously built GitHub Pages service
 worker from serving stale cached HTML while Vite is running locally.
 
 ## 13. Environment Variables
@@ -875,4 +888,4 @@ If you need to reason about the system quickly, use this model:
 7. GitHub Pages serves the frontend
 8. Terraform is the source of truth for AWS infrastructure
 
-That is the core architecture of CareerLane.
+That is the core architecture of GrowPoint.

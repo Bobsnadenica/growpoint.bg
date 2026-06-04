@@ -1,19 +1,19 @@
 {
   "siteUrl": "https://www.growpoint.bg",
-  "siteName": "CareerLane",
+  "siteName": "GrowPoint",
   "language": "bg-BG",
   "locale": "bg_BG",
   "defaultImage": "https://www.growpoint.bg/assets/advertisement/3.jpg",
-  "defaultTitle": "CareerLane | Кариерни консултации и менторство в България",
+  "defaultTitle": "GrowPoint | Кариерни консултации и менторство в България",
   "defaultDescription": "Намери кариерен консултант или ментор за CV, интервю, кариерна промяна, leadership и професионално позициониране.",
   "organization": {
-    "name": "CareerLane",
-    "email": "support@careerlane.eu"
+    "name": "GrowPoint",
+    "email": "contactus@growpoint.bg"
   },
   "routes": [
     {
       "path": "/",
-      "title": "CareerLane | Кариерни консултации и менторство в България",
+      "title": "GrowPoint | Кариерни консултации и менторство в България",
       "description": "Намери кариерен консултант или ментор за CV, интервю, кариерна промяна, leadership и професионално позициониране.",
       "schemaType": "WebPage",
       "changefreq": "weekly",
@@ -25,7 +25,7 @@
     },
     {
       "path": "/users",
-      "title": "Кариерни консултанти и ментори | CareerLane",
+      "title": "Кариерни консултанти и ментори | GrowPoint",
       "description": "Разгледай активни кариерни консултанти и ментори по тема, формат, наличност и професионален фокус.",
       "schemaType": "CollectionPage",
       "changefreq": "daily",
@@ -38,7 +38,7 @@
     {
       "path": "/consultants",
       "canonicalPath": "/users",
-      "title": "Кариерни консултанти и ментори | CareerLane",
+      "title": "Кариерни консултанти и ментори | GrowPoint",
       "description": "Каталог с кариерни консултанти и ментори за CV, интервю, leadership, product, tech, finance и кариерна промяна.",
       "schemaType": "CollectionPage",
       "changefreq": "daily",
@@ -50,8 +50,8 @@
     },
     {
       "path": "/about",
-      "title": "За CareerLane | Платформа за кариерно развитие",
-      "description": "Научи как CareerLane свързва професионалисти, кариерни консултанти и ментори в подредена онлайн платформа.",
+      "title": "За GrowPoint | Платформа за кариерно развитие",
+      "description": "Научи как GrowPoint свързва професионалисти, кариерни консултанти и ментори в подредена онлайн платформа.",
       "schemaType": "AboutPage",
       "changefreq": "monthly",
       "priority": "0.6",
@@ -62,8 +62,8 @@
     },
     {
       "path": "/faq",
-      "title": "Често задавани въпроси | CareerLane",
-      "description": "Отговори за регистрация, публични профили, кариерни консултации, документи, поверителност и работа с CareerLane.",
+      "title": "Често задавани въпроси | GrowPoint",
+      "description": "Отговори за регистрация, публични профили, кариерни консултации, документи, поверителност и работа с GrowPoint.",
       "schemaType": "FAQPage",
       "changefreq": "monthly",
       "priority": "0.6",
@@ -74,8 +74,8 @@
     },
     {
       "path": "/contact",
-      "title": "Контакти | CareerLane",
-      "description": "Свържи се с CareerLane за поддръжка, партньорства, реклама, правни въпроси и заявки за данни.",
+      "title": "Контакти | GrowPoint",
+      "description": "Свържи се с GrowPoint за поддръжка, партньорства, реклама, правни въпроси и заявки за данни.",
       "schemaType": "ContactPage",
       "changefreq": "monthly",
       "priority": "0.5",
@@ -86,8 +86,8 @@
     },
     {
       "path": "/terms",
-      "title": "Условия за ползване | CareerLane",
-      "description": "Условия за достъп, резервации, профили, отзиви и използване на CareerLane.",
+      "title": "Условия за ползване | GrowPoint",
+      "description": "Условия за достъп, резервации, профили, отзиви и използване на GrowPoint.",
       "schemaType": "WebPage",
       "changefreq": "yearly",
       "priority": "0.3",
@@ -98,8 +98,8 @@
     },
     {
       "path": "/privacy",
-      "title": "Политика за поверителност | CareerLane",
-      "description": "Как CareerLane събира, използва, пази и изтрива лични данни според GDPR.",
+      "title": "Политика за поверителност | GrowPoint",
+      "description": "Как GrowPoint събира, използва, пази и изтрива лични данни според GDPR.",
       "schemaType": "WebPage",
       "changefreq": "yearly",
       "priority": "0.3",
@@ -110,7 +110,7 @@
     },
     {
       "path": "/consultants/georgi-dimitrov-tech-careers",
-      "title": "Георги Димитров - tech кариерен консултант | CareerLane",
+      "title": "Георги Димитров - tech кариерен консултант | GrowPoint",
       "description": "Tech career coach за софтуерни инженери с фокус tech leveling, системен дизайн интервюта и IC/Manager преходи.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -122,7 +122,7 @@
     },
     {
       "path": "/consultants/ivan-todorov-startup-mentor",
-      "title": "Иван Тодоров - startup ментор | CareerLane",
+      "title": "Иван Тодоров - startup ментор | GrowPoint",
       "description": "Startup ментор за founders, early-stage GTM, validation experiments и първи клиенти.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -134,7 +134,7 @@
     },
     {
       "path": "/consultants/elena-petrova-career-leadership",
-      "title": "Елена Петрова - кариерен консултант за лидерство | CareerLane",
+      "title": "Елена Петрова - кариерен консултант за лидерство | GrowPoint",
       "description": "Кариерен консултант за leadership преходи, личен бранд, executive CV и подготовка за ръководни роли.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -146,7 +146,7 @@
     },
     {
       "path": "/consultants/petar-andreev-finance-careers",
-      "title": "Петър Андреев - finance кариерен консултант | CareerLane",
+      "title": "Петър Андреев - finance кариерен консултант | GrowPoint",
       "description": "Кариерна консултация за финансови специалисти, Big 4 преходи, investment banking и CFO track.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -158,7 +158,7 @@
     },
     {
       "path": "/consultants/dimitar-petkov-product-management",
-      "title": "Димитър Петков - product management ментор | CareerLane",
+      "title": "Димитър Петков - product management ментор | GrowPoint",
       "description": "Product management ментор за engineer to PM преход, първа PM роля, PRD writing и stakeholder management.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -170,7 +170,7 @@
     },
     {
       "path": "/consultants/ana-koleva-design-careers",
-      "title": "Ана Колева - UX и design career консултант | CareerLane",
+      "title": "Ана Колева - UX и design career консултант | GrowPoint",
       "description": "Design portfolio review и кариерна консултация за UX, product design, case studies и интервюта.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -182,7 +182,7 @@
     },
     {
       "path": "/consultants/nikolay-georgiev-data-science",
-      "title": "Николай Георгиев - Data Science и ML ментор | CareerLane",
+      "title": "Николай Георгиев - Data Science и ML ментор | GrowPoint",
       "description": "Data Science и ML кариерен ментор за ML system design, senior IC track и PhD to industry преход.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -194,7 +194,7 @@
     },
     {
       "path": "/consultants/maria-stoyanova-pivot-coach",
-      "title": "Мария Стоянова - ментор за кариерна промяна | CareerLane",
+      "title": "Мария Стоянова - ментор за кариерна промяна | GrowPoint",
       "description": "Ментор за смяна на сектор, кариерен рестарт, прехвърляеми умения и първи стъпки в нова посока.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -206,7 +206,7 @@
     },
     {
       "path": "/consultants/vesela-mihaylova-hr-mentor",
-      "title": "Весела Михайлова - HR и People ментор | CareerLane",
+      "title": "Весела Михайлова - HR и People ментор | GrowPoint",
       "description": "HR ментор за People Partner преход, compensation design, organization design и talent роли.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -218,7 +218,7 @@
     },
     {
       "path": "/consultants/kalina-ivanova-marketing-coach",
-      "title": "Калина Иванова - marketing career консултант | CareerLane",
+      "title": "Калина Иванова - marketing career консултант | GrowPoint",
       "description": "Marketing кариерен консултант за growth, brand, content, portfolio of campaigns и senior marketing роли.",
       "schemaType": "ProfilePage",
       "changefreq": "weekly",
@@ -230,8 +230,8 @@
     },
     {
       "path": "/auth",
-      "title": "Вход и регистрация | CareerLane",
-      "description": "Влез или създай профил в CareerLane.",
+      "title": "Вход и регистрация | GrowPoint",
+      "description": "Влез или създай профил в GrowPoint.",
       "schemaType": "WebPage",
       "index": false,
       "sitemap": false,
@@ -239,8 +239,8 @@
     },
     {
       "path": "/account",
-      "title": "Моят акаунт | CareerLane",
-      "description": "Личен акаунт в CareerLane.",
+      "title": "Моят акаунт | GrowPoint",
+      "description": "Личен акаунт в GrowPoint.",
       "schemaType": "WebPage",
       "index": false,
       "sitemap": false,
@@ -248,8 +248,8 @@
     },
     {
       "path": "/dashboard",
-      "title": "Моето табло | CareerLane",
-      "description": "Лично табло в CareerLane.",
+      "title": "Моето табло | GrowPoint",
+      "description": "Лично табло в GrowPoint.",
       "schemaType": "WebPage",
       "index": false,
       "sitemap": false,
@@ -257,8 +257,8 @@
     },
     {
       "path": "/admin",
-      "title": "Админ | CareerLane",
-      "description": "Административна секция на CareerLane.",
+      "title": "Админ | GrowPoint",
+      "description": "Административна секция на GrowPoint.",
       "schemaType": "WebPage",
       "index": false,
       "sitemap": false,

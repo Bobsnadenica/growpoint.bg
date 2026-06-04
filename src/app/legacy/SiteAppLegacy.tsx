@@ -170,27 +170,13 @@ const authRoleChoices: Record<
   },
   consultant: {
     title: "Създавам експертен профил",
-    text: "Стартирай публична страница като консултант или ментор с ясни теми, формат и първа наличност.",
+    text: "Стартирай публична експертна страница с ясни теми, формат и първа наличност.",
     meta: "Публичен профил",
-    badge: "Консултант / ментор"
+    badge: "Експерт"
   }
 };
 
-const consultantProfileTypeChoices: Record<
-  ConsultantProfileType,
-  { title: string; text: string; meta: string }
-> = {
-  consultant: {
-    title: "Консултант",
-    text: "Подходящо за експертни кариерни, HR, CV, интервю и професионални консултации.",
-    meta: "Експертна услуга"
-  },
-  mentor: {
-    title: "Ментор",
-    text: "Подходящо за по-дългосрочна подкрепа, развитие, лидерство и професионална посока.",
-    meta: "Развитие във времето"
-  }
-};
+const BGN_PER_EUR = 1.95583;
 
 type ConsultantThemeToken = NonNullable<ConsultantProfile["theme"]>;
 
@@ -773,8 +759,33 @@ function getConsultantDirectorySummary(consultant: ConsultantProfile) {
   );
 }
 
+function getConsultantPriceEur(consultant: ConsultantProfile) {
+  const legacyPrice = (consultant as ConsultantProfile & { priceBgn?: number }).priceBgn;
+  const explicitPrice = Number(consultant.priceEur);
+
+  if (Number.isFinite(explicitPrice) && explicitPrice > 0) {
+    return explicitPrice;
+  }
+
+  const legacyBgn = Number(legacyPrice);
+  if (Number.isFinite(legacyBgn) && legacyBgn > 0) {
+    return Math.round((legacyBgn / BGN_PER_EUR) * 100) / 100;
+  }
+
+  return 0;
+}
+
+function formatEuroPrice(value: number) {
+  return new Intl.NumberFormat("bg-BG", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2
+  }).format(value);
+}
+
 function getConsultantPriceLabel(consultant: ConsultantProfile) {
-  return consultant.priceBgn > 0 ? `от ${consultant.priceBgn} лв` : "Цена при запитване";
+  const price = getConsultantPriceEur(consultant);
+  return price > 0 ? `от ${formatEuroPrice(price)}` : "Цена при запитване";
 }
 
 function getNameInitials(name: string) {
@@ -1239,11 +1250,11 @@ export function HomePage() {
             <p className="eyebrow">Консултации и менторство за кариера</p>
             <h1>Избери своята следваща кариерна стъпка.</h1>
             <p className="hero__lede">
-              CareerLane свързва професионалисти с консултанти и ментори в подреден
+              GrowPoint свързва професионалисти с консултанти и ментори в подреден
               каталог с ясни профили, фокус и свободни часове.
             </p>
 
-            <div className="hero-choice-grid" aria-label="Избери как искаш да използваш CareerLane">
+            <div className="hero-choice-grid" aria-label="Избери как искаш да използваш GrowPoint">
               {homeRoleChoices.map((choice) => (
                 <Link className="hero-choice-card" key={choice.step} to={choice.ctaTo}>
                   <span>{choice.step}</span>
@@ -1430,7 +1441,7 @@ export function UsersPage() {
             <h1>Избираш консултант по съвпадение, тема и наличност.</h1>
             <p className="hero__lede">
               {isConsultantViewer
-                ? "Това е потребителският изглед на CareerLane. Подходящите професионалисти за теб се подреждат в профила и таблото ти."
+                ? "Това е потребителският изглед на GrowPoint. Подходящите професионалисти за теб се подреждат в профила и таблото ти."
                 : persona
                   ? `Каталогът показва ${persona.type === "mentor" ? "ментори" : "консултанти"} за „${persona.name}".`
                   : "Избери архетип по-долу или попълни профила си, за да виждаш по-подходящите експерти."}
@@ -1727,7 +1738,7 @@ export function ConsultantPage() {
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
         await navigator.share({
-          title: `${consultant.name} | CareerLane`,
+          title: `${consultant.name} | GrowPoint`,
           text: consultant.headline,
           url: shareUrl
         });
@@ -2050,7 +2061,7 @@ export function ConsultantPage() {
               <div className="panel panel--subtle role-guard-panel">
                 <strong>Тази стъпка е активна за потребители.</strong>
                 <p>
-                  CareerLane съпоставя консултантите с потребители, а не с други
+                  GrowPoint съпоставя консултантите с потребители, а не с други
                   консултанти. Подходящите професионалисти за теб се показват в профила
                   и таблото ти.
                 </p>
@@ -2200,7 +2211,7 @@ function ConsultantAdvertisement({ consultant }: { consultant: ConsultantProfile
         )}
       </div>
       <div className="profile-ad-card__copy">
-        <p className="eyebrow">CareerLane Select</p>
+        <p className="eyebrow">GrowPoint Select</p>
         <strong>Подготви следващия си професионален ход.</strong>
         <span>
           Използвай сесията с {consultant.name} за CV, интервю или стратегическо
@@ -2233,6 +2244,7 @@ export function AuthPage() {
     loading,
     register: registerWithAuth,
     confirm: confirmWithAuth,
+    resendConfirmationCode,
     login: loginWithAuth,
     loginWithProvider,
     requestPasswordReset,
@@ -2258,8 +2270,7 @@ export function AuthPage() {
     password: "",
     code: "",
     newPassword: "",
-    role: initialRole as UserRole,
-    consultantProfileType: "consultant" as ConsultantProfileType
+    role: initialRole as UserRole
   });
 
   useEffect(() => {
@@ -2312,7 +2323,7 @@ export function AuthPage() {
           ? "Възстанови достъпа"
           : screen === "forgot-confirm"
             ? "Нова парола"
-            : "Вход в CareerLane";
+            : "Вход в GrowPoint";
 
   const headerSubtitle =
     screen === "register"
@@ -2352,9 +2363,7 @@ export function AuthPage() {
       name: form.name.trim(),
       email: form.email.trim(),
       role: form.role,
-      plan: "free",
-      consultantProfileType:
-        form.role === "consultant" ? form.consultantProfileType : undefined
+      plan: "free"
     });
 
     writeSocialAuthIntent({
@@ -2442,9 +2451,7 @@ export function AuthPage() {
           email: form.email.trim() || user.email,
           role: form.role,
           plan: "free",
-          avatarUrl: user.avatarUrl || "",
-          consultantProfileType:
-            form.role === "consultant" ? form.consultantProfileType : undefined
+          avatarUrl: user.avatarUrl || ""
         });
         clearPendingBootstrap();
         navigate(resolvedRedirect);
@@ -2477,9 +2484,7 @@ export function AuthPage() {
         name: form.name.trim(),
         email: form.email.trim(),
         role: form.role,
-        plan: "free",
-        consultantProfileType:
-          form.role === "consultant" ? form.consultantProfileType : undefined
+        plan: "free"
       });
 
       switchScreen("confirm");
@@ -2536,20 +2541,14 @@ export function AuthPage() {
   async function handleResendCode() {
     clearFeedback();
 
-    if (!form.email.trim() || !form.password.trim()) {
-      setError("За да изпратим нов код, върни се в Регистрация и започни отново.");
+    if (!emailValid) {
+      setError("Въведи валиден имейл, за да изпратим нов код.");
       return;
     }
 
     setSubmitting(true);
     try {
-      await registerWithAuth({
-        name: form.name.trim() || form.email.trim(),
-        email: form.email.trim(),
-        password: form.password.trim(),
-        role: form.role,
-        plan: "free"
-      });
+      await resendConfirmationCode(form.email.trim());
       setMessage("Изпратихме нов код на " + form.email.trim() + ".");
     } catch (value) {
       setError(
@@ -2636,7 +2635,7 @@ export function AuthPage() {
       <div className="container auth-layout auth-layout--single">
         <div className="panel auth-card">
           <header className="auth-card__header">
-            <p className="eyebrow">CareerLane</p>
+            <p className="eyebrow">GrowPoint</p>
             <h1>{headerLabel}</h1>
             <p className="auth-card__subtitle">{headerSubtitle}</p>
           </header>
@@ -2809,9 +2808,7 @@ export function AuthPage() {
                         clearFeedback();
                         setForm((current) => ({
                           ...current,
-                          role,
-                          consultantProfileType:
-                            role === "consultant" ? current.consultantProfileType : "consultant"
+                          role
                         }));
                       }}
                     >
@@ -2822,45 +2819,6 @@ export function AuthPage() {
                   ))}
                 </div>
               </fieldset>
-
-              {form.role === "consultant" ? (
-                <fieldset className="auth-onboarding-section">
-                  <legend>Тип публичен профил</legend>
-                  <div className="auth-choice-grid auth-choice-grid--compact">
-                    {(Object.entries(consultantProfileTypeChoices) as Array<
-                      [
-                        ConsultantProfileType,
-                        (typeof consultantProfileTypeChoices)[ConsultantProfileType]
-                      ]
-                    >).map(([profileType, choice]) => (
-                      <button
-                        key={profileType}
-                        type="button"
-                        aria-pressed={form.consultantProfileType === profileType}
-                        className={`auth-choice-card${
-                          form.consultantProfileType === profileType
-                            ? " auth-choice-card--active"
-                            : ""
-                        }`}
-                        onClick={() => {
-                          clearFeedback();
-                          setForm((current) => ({
-                            ...current,
-                            consultantProfileType: profileType
-                          }));
-                        }}
-                      >
-                        <strong>{choice.title}</strong>
-                        <p>{choice.text}</p>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="form-note">
-                    Профилите на консултанти и ментори се преглеждат ръчно преди да станат
-                    публични в каталога.
-                  </p>
-                </fieldset>
-              ) : null}
 
               {!isSocialOnboarding ? (
                 <>
@@ -3480,7 +3438,7 @@ export function DashboardPage() {
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
-      a.download = `careerlane-${bookingId}.ics`;
+      a.download = `growpoint-${bookingId}.ics`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -3501,7 +3459,7 @@ export function DashboardPage() {
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
-      a.download = `careerlane-export.json`;
+      a.download = `growpoint-export.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -5901,8 +5859,9 @@ function ProfileSnapshotCard({ consultant }: { consultant: ConsultantProfile }) 
   if (languages.length) {
     stats.push({ label: "Езици", value: languages.join(" · ") });
   }
-  if (Number(consultant.priceBgn) > 0) {
-    stats.push({ label: "Цена", value: `от ${consultant.priceBgn} лв` });
+  const priceEur = getConsultantPriceEur(consultant);
+  if (priceEur > 0) {
+    stats.push({ label: "Цена", value: `от ${formatEuroPrice(priceEur)}` });
   }
   if (sessionModes.length) {
     stats.push({ label: "Формат", value: sessionModes.join(" · ") });

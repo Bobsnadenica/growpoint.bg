@@ -1,14 +1,15 @@
-# CareerLane Production Readiness Memory
+# GrowPoint Production Readiness Memory
 
 Review date: 2026-05-06
 Domain migration review: 2026-06-04
+Production-readiness follow-up: 2026-06-04
 Workspace: `/Users/privileged/Projects/growpoint.bg/growpoint.bg`
 
-This file is the working memory for taking CareerLane from early-stage prototype to a professional, production-ready user test. It should be used as the execution plan in future implementation sessions.
+This file is the working memory for taking GrowPoint from early-stage prototype to a professional, production-ready user test. It should be used as the execution plan in future implementation sessions.
 
 ## Product Intent
 
-CareerLane is a two-sided career platform:
+GrowPoint is a two-sided career platform:
 
 - Clients/professionals create a profile, upload a CV, browse consultants or mentors, and request a session.
 - Consultants/mentors create a public profile, manage presentation/media/availability, and receive booking requests.
@@ -20,6 +21,19 @@ Current deployment model:
 - AWS HTTP API Gateway + Lambda + DynamoDB + S3 for backend.
 - Terraform for AWS infrastructure.
 - GitHub Pages root `index.html`, generated route copies, `sitemap.xml`, `robots.txt`, and `assets/` are deployment artifacts.
+
+Latest production decisions:
+
+- Brand is GrowPoint everywhere user-facing; old CareerLane references should remain only in archival notes or stale-cache cleanup.
+- Public/contact email channels are `contactus@growpoint.bg` and `partners@growpoint.bg`.
+- Pricing is EUR-only in the UI/API contract (`priceEur`). Legacy `priceBgn` records are converted at read time and removed on the next consultant save.
+- Registration has two roles only: user/professional or expert profile. Consultant vs mentor is chosen later in the profile editor.
+- Confirmation-code resend must use Cognito `resendSignUpCode`; do not call `signUp` again from "Изпрати нов код".
+- Cognito signup verification currently uses the built-in Cognito sender so code delivery is not blocked by an unverified SES identity. Set `cognito_ses_from_email` only after `contactus@growpoint.bg` or the GrowPoint domain is verified in SES `eu-west-1`.
+- Users can choose light/dark site theme through `growpoint.theme` in local storage.
+- Backend emails use direct BrowserRouter URLs such as `/dashboard/` and `/users/`, not old hash routes.
+- DynamoDB now has point-in-time recovery enabled in Terraform, and public consultant listing can use `profile-status-index` with bounded-scan fallback during rollout.
+- `www.growpoint.bg` is the canonical GitHub Pages domain. Direct `https://growpoint.bg/` currently fails TLS before redirect; fix the apex GitHub Pages certificate/DNS setup before public launch.
 
 Important user preference from the review:
 
@@ -39,15 +53,8 @@ Commands run:
 - `terraform fmt -check -diff` - failed because `infra/terraform/main.tf` needs formatting alignment only.
 - `npm --prefix backend/api ls --depth=0` - backend dependencies resolved.
 
-Rendered checks performed in the in-app browser against the old nested test path:
-
-- `http://127.0.0.1:5173/career/#/`
-- `http://127.0.0.1:5173/career/#/consultants`
-- `http://127.0.0.1:5173/career/#/consultants/ana-petrova`
-- `http://127.0.0.1:5173/career/#/auth?tab=register&role=consultant`
-- `http://127.0.0.1:5173/career/#/users`
-
-Current root-domain smoke checks now use:
+Legacy nested test paths were retired when the app moved to `www.growpoint.bg`.
+Current root-domain smoke checks use:
 
 - `http://127.0.0.1:8000/`
 - `http://127.0.0.1:8000/users/`
@@ -362,7 +369,7 @@ Acceptance:
 
 ### Phase 1 - Product UX And Information Architecture
 
-Goal: make first-time users understand CareerLane immediately.
+Goal: make first-time users understand GrowPoint immediately.
 
 Tasks:
 

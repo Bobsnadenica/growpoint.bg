@@ -20,7 +20,7 @@ output "cv_bucket_name" {
 
 output "frontend_env_snippet" {
   value = <<-EOT
-VITE_APP_NAME=CareerLane
+VITE_APP_NAME=GrowPoint
 VITE_AWS_REGION=${var.aws_region}
 VITE_API_BASE_URL=${aws_apigatewayv2_api.http.api_endpoint}
 VITE_COGNITO_USER_POOL_ID=${aws_cognito_user_pool.main.id}

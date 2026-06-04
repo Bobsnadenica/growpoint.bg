@@ -33,6 +33,24 @@ const env = {
   appUrl: process.env.APP_URL || "https://www.growpoint.bg/"
 };
 
+function appUrl(path = "") {
+  const rawBase = String(env.appUrl || "https://www.growpoint.bg/").trim();
+  const base = rawBase.endsWith("/") ? rawBase : `${rawBase}/`;
+  const normalizedPath = String(path || "").replace(/^\/+/, "");
+
+  try {
+    return new URL(normalizedPath, base).toString();
+  } catch {
+    return `${base}${normalizedPath}`;
+  }
+}
+
+const APP_DASHBOARD_URL = appUrl("dashboard/");
+const APP_USERS_URL = appUrl("users/");
+const CONTACT_EMAIL = "contactus@growpoint.bg";
+const BGN_PER_EUR = 1.95583;
+const CONSULTANT_STATUS_INDEX = "profile-status-index";
+
 const CONSULTANT_PROFILE_THEMES = new Set(["violet", "sky", "rose", "mint", "amber"]);
 const USER_ROLES = new Set(["client", "consultant"]);
 const CONSULTANT_PROFILE_TYPES = new Set(["consultant", "mentor"]);
@@ -355,6 +373,28 @@ function normalizeBoundedNumber(value, fallback, { min = 0, max = 1000, integer 
   return integer ? Math.round(bounded) : Math.round(bounded * 100) / 100;
 }
 
+function normalizeConsultantPriceEur(consultantOrValue, fallback = 0) {
+  if (
+    consultantOrValue &&
+    typeof consultantOrValue === "object" &&
+    !Array.isArray(consultantOrValue)
+  ) {
+    const explicit = normalizeBoundedNumber(consultantOrValue.priceEur, null, {
+      min: 0,
+      max: 2500
+    });
+    if (explicit !== null) return explicit;
+
+    const legacyBgn = normalizeBoundedNumber(consultantOrValue.priceBgn, null, {
+      min: 0,
+      max: 5000
+    });
+    return legacyBgn === null ? fallback : Math.round((legacyBgn / BGN_PER_EUR) * 100) / 100;
+  }
+
+  return normalizeBoundedNumber(consultantOrValue, fallback, { min: 0, max: 2500 });
+}
+
 function normalizeUserRole(value, fallback = "client") {
   const role = String(value || "").trim().toLowerCase();
   return USER_ROLES.has(role) ? role : fallback;
@@ -429,7 +469,31 @@ function formatBookingDateTimeBg(value) {
   }
 }
 
-async function sendEmail({ to, subject, text }) {
+function appendEmailFooter(text) {
+  return `${String(text || "").trim()}\n\nС уважение,\nЕкипът на GrowPoint\n${appUrl()}\n${CONTACT_EMAIL}`;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function textToEmailHtml(text) {
+  return `<html><body style="margin:0;padding:0;background:#eef2ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1b2722;">
+  <div style="max-width:560px;margin:0 auto;padding:28px 22px;">
+    <div style="background:#ffffff;border:1px solid #d7ddd9;border-radius:18px;padding:24px;box-shadow:0 16px 36px rgba(15,23,42,0.08);">
+      <p style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#56695f;margin:0 0 16px;">GrowPoint</p>
+      <p style="font-size:15px;line-height:1.65;color:#1b2722;margin:0;">${escapeHtml(text).replace(/\n/g, "<br>")}</p>
+    </div>
+  </div>
+</body></html>`;
+}
+
+async function sendEmail({ to, subject, text, html }) {
   if (!env.sesFromEmail) {
     console.log("[email] skipped (SES_FROM_EMAIL not set)", { to, subject });
     return;
@@ -437,15 +501,27 @@ async function sendEmail({ to, subject, text }) {
   if (!to) {
     return;
   }
+  const textBody = appendEmailFooter(text);
   try {
+    const body = {
+      Text: { Data: textBody, Charset: "UTF-8" }
+    };
+
+    if (html) {
+      body.Html = { Data: html, Charset: "UTF-8" };
+    } else {
+      body.Html = { Data: textToEmailHtml(textBody), Charset: "UTF-8" };
+    }
+
     await ses.send(
       new SendEmailCommand({
         FromEmailAddress: env.sesFromEmail,
+        ReplyToAddresses: [CONTACT_EMAIL],
         Destination: { ToAddresses: [to] },
         Content: {
           Simple: {
             Subject: { Data: subject, Charset: "UTF-8" },
-            Body: { Text: { Data: text, Charset: "UTF-8" } }
+            Body: body
           }
         }
       })
@@ -473,7 +549,7 @@ async function sendBookingRequestedEmails({ consultantOwner, consultant, client,
           `Продължителност: ${consultant.sessionLengthMinutes || 60} минути\n` +
           `Статус: чака потвърждение${noteLine}\n\n` +
           `Отвори таблото си, за да приемеш или откажеш заявката:\n` +
-          `${env.appUrl}#/dashboard`
+          `${APP_DASHBOARD_URL}`
       })
     );
   }
@@ -490,7 +566,7 @@ async function sendBookingRequestedEmails({ consultantOwner, consultant, client,
           `Продължителност: ${consultant.sessionLengthMinutes || 60} минути\n` +
           `Формат: ${(consultant.sessionModes || []).join(", ") || "Онлайн"}\n\n` +
           `Ще получиш отделно известие, когато консултантът приеме или откаже заявката.\n\n` +
-          `Виж заявките си в таблото: ${env.appUrl}#/dashboard`
+          `Виж заявките си в таблото: ${APP_DASHBOARD_URL}`
       })
     );
   }
@@ -515,7 +591,7 @@ async function sendBookingAcceptedEmails({ consultantOwner, consultant, client, 
           `Продължителност: ${consultant.sessionLengthMinutes || 60} минути\n` +
           `Формат: ${(consultant.sessionModes || []).join(", ") || "Онлайн"}\n\n` +
           `Ще получиш напомняне 24 часа преди срещата.\n\n` +
-          `Табло: ${env.appUrl}#/dashboard`
+          `Табло: ${APP_DASHBOARD_URL}`
       })
     );
   }
@@ -532,7 +608,7 @@ async function sendBookingAcceptedEmails({ consultantOwner, consultant, client, 
           `Потребител: ${booking.clientName || ""} (${booking.clientEmail || ""})\n` +
           (booking.note ? `Бележка: ${booking.note}\n` : "") +
           `\nЩе получиш напомняне 24 часа преди срещата.\n\n` +
-          `Табло: ${env.appUrl}#/dashboard`
+          `Табло: ${APP_DASHBOARD_URL}`
       })
     );
   }
@@ -567,7 +643,7 @@ async function sendBookingRescheduledEmails({
       (needsReConfirmation
         ? `Тъй като часът беше потвърден преди, ${consultant.name} ще трябва да приеме новия час. Ще получиш отделно известие при потвърждение.\n\n`
         : `Резервацията остава с актуален статус.\n\n`) +
-      `Табло: ${env.appUrl}#/dashboard`;
+      `Табло: ${APP_DASHBOARD_URL}`;
     tasks.push(sendEmail({ to: client.email, subject: clientSubject, text: clientBody }));
   }
 
@@ -584,7 +660,7 @@ async function sendBookingRescheduledEmails({
       (needsReConfirmation
         ? `Новият час чака твоето потвърждение. Отвори таблото си, за да приемеш или откажеш.\n\n`
         : `Резервацията е актуализирана.\n\n`) +
-      `Табло: ${env.appUrl}#/dashboard`;
+      `Табло: ${APP_DASHBOARD_URL}`;
     tasks.push(
       sendEmail({ to: consultantOwner.email, subject: consultantSubject, text: consultantBody })
     );
@@ -604,7 +680,7 @@ async function sendBookingDeclinedEmail({ recipient, consultant, booking, reason
       `Здравей, ${recipient.name || ""},\n\n` +
       `${consultant.name} не може да поеме заявката ти за консултация на ${when}.${reasonLine}\n\n` +
       `Часът отново е свободен в системата и може да избереш друг подходящ слот или друг консултант:\n` +
-      `${env.appUrl}#/consultants`
+      `${APP_USERS_URL}`
   });
 }
 
@@ -626,7 +702,7 @@ async function sendBookingReminderEmails({ consultantOwner, consultant, client, 
             ? `Формат: ${consultant.sessionModes.join(", ")}\n`
             : "") +
           `\nАко не можеш да присъстваш, моля откажи резервацията от таблото:\n` +
-          `${env.appUrl}#/dashboard`
+          `${APP_DASHBOARD_URL}`
       })
     );
   }
@@ -642,7 +718,7 @@ async function sendBookingReminderEmails({ consultantOwner, consultant, client, 
           `Час: ${when}\n` +
           `Потребител: ${booking.clientName || ""} (${booking.clientEmail || ""})\n` +
           (booking.note ? `\nБележка: ${booking.note}\n` : "") +
-          `\nТабло: ${env.appUrl}#/dashboard`
+          `\nТабло: ${APP_DASHBOARD_URL}`
       })
     );
   }
@@ -745,11 +821,11 @@ async function sendBookingCancelledEmail({ recipient, consultantName, scheduledA
       ? `Здравей, ${recipient.name || ""},\n\n` +
         `${consultantName} не може да поеме резервацията за ${when}.\n\n` +
         `Можеш да избереш друг свободен час от профила или да опиташ с друг консултант.\n\n` +
-        `Каталог: ${env.appUrl}#/consultants`
+        `Каталог: ${APP_USERS_URL}`
       : `Здравей, ${recipient.name || ""},\n\n` +
         `Потребителят отказа резервацията за ${when}.\n\n` +
         `Часът е свободен отново и може да бъде резервиран от друг потребител.\n\n` +
-        `Табло: ${env.appUrl}#/dashboard`;
+        `Табло: ${APP_DASHBOARD_URL}`;
 
   await sendEmail({ to: recipient.email, subject, text });
 }
@@ -1041,7 +1117,8 @@ const PUBLIC_CONSULTANT_HIDDEN_FIELDS = [
   "statusSelfApproved",
   "deletionScheduledAt",
   "avatarStorageKey",
-  "heroStorageKey"
+  "heroStorageKey",
+  "priceBgn"
 ];
 
 function stripSensitiveConsultantFields(consultant) {
@@ -1123,6 +1200,7 @@ async function decorateConsultantMedia(consultant) {
     experienceSummary: consultant.experienceSummary || "",
     experienceHighlights,
     educationHighlights,
+    priceEur: normalizeConsultantPriceEur(consultant),
     theme: normalizeConsultantTheme(consultant.theme),
     languages,
     specializations,
@@ -1255,7 +1333,7 @@ function isVisibleConsultant(consultant) {
   if (!hasValidPublicMediaUrl(consultant.avatarUrl)) return false;
   if (!hasValidPublicMediaUrl(consultant.heroUrl)) return false;
   if (!isReasonablePublicNumber(consultant.experienceYears || 0, 0, 70)) return false;
-  if (!isReasonablePublicNumber(consultant.priceBgn || 0, 0, 5000)) return false;
+  if (!isReasonablePublicNumber(normalizeConsultantPriceEur(consultant), 0, 2500)) return false;
   if (!isReasonablePublicNumber(consultant.sessionLengthMinutes || 60, 15, 240)) return false;
   return true;
 }
@@ -1361,6 +1439,80 @@ async function scanWithFilter({ tableName, filter, pageSize, startKey }) {
   return { items: collected, lastEvaluatedKey: exclusiveStartKey };
 }
 
+function isMissingIndexError(error) {
+  const name = String(error?.name || "");
+  const message = String(error?.message || "");
+  return (
+    name === "ResourceNotFoundException" ||
+    name === "ValidationException" ||
+    message.includes(CONSULTANT_STATUS_INDEX)
+  );
+}
+
+async function queryConsultantsByStatus({ status, filter, pageSize, startKey }) {
+  const collected = [];
+  let exclusiveStartKey = startKey;
+  let lastEvaluatedKey = null;
+  let scanned = 0;
+
+  while (scanned < LIST_MAX_SCAN_PAGES) {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: env.consultantsTable,
+        IndexName: CONSULTANT_STATUS_INDEX,
+        KeyConditionExpression: "#profileStatus = :status",
+        ExpressionAttributeNames: { "#profileStatus": "profileStatus" },
+        ExpressionAttributeValues: { ":status": status },
+        Limit: LIST_SCAN_PAGE_LIMIT,
+        ExclusiveStartKey: exclusiveStartKey
+      })
+    );
+    scanned += 1;
+
+    for (const item of result.Items || []) {
+      if (filter(item)) {
+        collected.push(item);
+        if (collected.length >= pageSize) {
+          lastEvaluatedKey = result.LastEvaluatedKey || null;
+          return { items: collected, lastEvaluatedKey };
+        }
+      }
+    }
+
+    exclusiveStartKey = result.LastEvaluatedKey;
+    if (!exclusiveStartKey) {
+      return { items: collected, lastEvaluatedKey: null };
+    }
+  }
+
+  return { items: collected, lastEvaluatedKey: exclusiveStartKey };
+}
+
+async function listApprovedConsultantsWithFallback({ filter, pageSize, startKey }) {
+  try {
+    return await queryConsultantsByStatus({
+      status: "approved",
+      filter,
+      pageSize,
+      startKey
+    });
+  } catch (error) {
+    if (!isMissingIndexError(error)) {
+      throw error;
+    }
+
+    console.warn("[consultants] profile-status-index unavailable, falling back to scan", {
+      error: error?.message || error
+    });
+    return scanWithFilter({
+      tableName: env.consultantsTable,
+      filter,
+      pageSize,
+      startKey
+    });
+  }
+}
+
 function normalizeConsultantStatus(value) {
   const status = String(value || "").trim().toLowerCase();
   return CONSULTANT_PROFILE_STATUSES.has(status) ? status : null;
@@ -1394,7 +1546,7 @@ function createConsultantDraft({
     languages: [],
     specializations: [],
     experienceYears: 0,
-    priceBgn: 0,
+    priceEur: 0,
     sessionModes: ["Онлайн"],
     featured: false,
     rating: 0,
@@ -1424,8 +1576,7 @@ async function listConsultants(event) {
   const pageSize = parsePageSize(event.queryStringParameters?.limit);
   const startKey = decodeCursor(event.queryStringParameters?.cursor);
 
-  const { items, lastEvaluatedKey } = await scanWithFilter({
-    tableName: env.consultantsTable,
+  const { items, lastEvaluatedKey } = await listApprovedConsultantsWithFallback({
     pageSize,
     startKey,
     filter: (item) => {
@@ -1636,7 +1787,7 @@ async function exportMyData(event) {
     bookingsAsClient: clientBookings.Items || [],
     bookingsAsConsultant: consultantBookings.Items || [],
     notes: [
-      "Този файл съдържа цялата информация, която CareerLane съхранява за теб.",
+      "Този файл съдържа цялата информация, която GrowPoint съхранява за теб.",
       "Документите (CV, сертификати) се пазят в S3 и се свалят чрез временни линкове, генерирани при поискване.",
       "За искане за пълно изтриване използвай функцията 'Изтрий профила' в таблото. Тя насрочва автоматично изтриване след 7 дни."
     ]
@@ -1646,7 +1797,7 @@ async function exportMyData(event) {
     statusCode: 200,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Content-Disposition": `attachment; filename="careerlane-export-${claims.sub}.json"`,
+      "Content-Disposition": `attachment; filename="growpoint-export-${claims.sub}.json"`,
       "Access-Control-Allow-Origin": env.allowedOrigin,
       "Cache-Control": "no-store"
     },
@@ -2038,10 +2189,10 @@ async function updateMyConsultant(event) {
       baseConsultant.experienceYears ?? 0,
       { min: 0, max: 70, integer: true }
     ),
-    priceBgn: normalizeBoundedNumber(body.priceBgn, baseConsultant.priceBgn ?? 0, {
-      min: 0,
-      max: 5000
-    }),
+    priceEur: normalizeConsultantPriceEur(
+      typeof body.priceEur === "undefined" ? baseConsultant : body.priceEur,
+      normalizeConsultantPriceEur(baseConsultant)
+    ),
     featured: baseConsultant.featured ?? false,
     rating: baseConsultant.rating ?? 0,
     reviewCount: baseConsultant.reviewCount ?? 0,
@@ -2097,6 +2248,7 @@ async function updateMyConsultant(event) {
     nextConsultant.availability,
     baseConsultant.nextAvailable || ""
   );
+  delete nextConsultant.priceBgn;
 
   // Silent auto-approve: a fully-fleshed-out profile becomes public without
   // waiting for explicit admin action. We only promote upward — pending →
@@ -2920,19 +3072,19 @@ function buildIcsForBooking({ booking, consultant }) {
   const sessionMs = (Number(consultant.sessionLengthMinutes) || 60) * 60 * 1000;
   const end = new Date(start.getTime() + sessionMs);
   const now = new Date();
-  const uid = `${booking.bookingId}@careerlane`;
+  const uid = `${booking.bookingId}@growpoint`;
 
   const description =
-    `Резервация през CareerLane.\n` +
+    `Резервация през GrowPoint.\n` +
     `Консултант: ${consultant.name}\n` +
     `Формат: ${(consultant.sessionModes || []).join(", ") || "Онлайн"}\n` +
     (booking.note ? `Бележка: ${booking.note}\n` : "") +
-    `Табло: ${env.appUrl}#/dashboard`;
+    `Табло: ${APP_DASHBOARD_URL}`;
 
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//CareerLane//Booking//BG",
+    "PRODID:-//GrowPoint//Booking//BG",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
@@ -2967,7 +3119,7 @@ async function downloadBookingIcs(event) {
     statusCode: 200,
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
-      "Content-Disposition": `attachment; filename="careerlane-${bookingId}.ics"`,
+      "Content-Disposition": `attachment; filename="growpoint-${bookingId}.ics"`,
       "Access-Control-Allow-Origin": env.allowedOrigin,
       "Cache-Control": "no-store"
     },
@@ -3445,7 +3597,7 @@ async function setConsultantStatus(event) {
 }
 
 function health() {
-  return response(200, { ok: true, service: "careerlane-api" }, {
+  return response(200, { ok: true, service: "growpoint-api" }, {
     "Cache-Control": "no-store"
   });
 }

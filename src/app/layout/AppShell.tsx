@@ -50,6 +50,25 @@ const footerLinks = [
   { to: "/privacy", label: "Политика за поверителност" }
 ] as const;
 
+type ThemePreference = "light" | "dark";
+
+const THEME_STORAGE_KEY = "growpoint.theme";
+
+function readInitialTheme(): ThemePreference {
+  if (typeof window === "undefined") return "light";
+
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "dark") {
+      return stored;
+    }
+  } catch {
+    // Storage may be unavailable; fall through to the browser preference.
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+}
+
 function RouteExperience() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -75,6 +94,18 @@ export default function AppShell() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isRouteTransitioning, setIsRouteTransitioning] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // localStorage may be disabled.
+    }
+  }, [theme]);
 
   useEffect(() => {
     setIsMenuOpen(false);
@@ -197,6 +228,12 @@ export default function AppShell() {
     }
   }
 
+  const nextThemeLabel = theme === "dark" ? "Светла" : "Тъмна";
+
+  function toggleTheme() {
+    setTheme((value) => (value === "dark" ? "light" : "dark"));
+  }
+
   return (
     <div className={`site-shell ${isLoggingOut ? "site-shell--signing-out" : ""}`}>
       <RouteExperience />
@@ -223,6 +260,14 @@ export default function AppShell() {
           </nav>
 
           <div className="site-header__actions">
+            <button
+              className="ghost-button theme-toggle"
+              type="button"
+              aria-label={`Включи ${nextThemeLabel.toLowerCase()} тема`}
+              onClick={toggleTheme}
+            >
+              {nextThemeLabel}
+            </button>
             {user ? (
               <>
                 {isAdmin ? (
@@ -293,6 +338,16 @@ export default function AppShell() {
                   {item.label}
                 </NavLink>
               ))}
+            </div>
+            <div className="mobile-menu__group">
+              <span className="mobile-menu__label">Изглед</span>
+              <button
+                type="button"
+                className="mobile-menu__link mobile-menu__link--button"
+                onClick={toggleTheme}
+              >
+                {nextThemeLabel} тема
+              </button>
             </div>
             <div className="mobile-menu__group">
               <span className="mobile-menu__label">Профил</span>
@@ -387,7 +442,7 @@ export default function AppShell() {
   );
 }
 
-const COOKIE_CONSENT_KEY = "careerlane.cookieConsent";
+const COOKIE_CONSENT_KEY = "growpoint.cookieConsent";
 
 function CookieConsentBanner() {
   const [visible, setVisible] = useState(false);

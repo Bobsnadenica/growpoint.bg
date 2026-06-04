@@ -33,8 +33,8 @@ locals {
     local.apple_enabled ? ["Apple"] : [],
     local.linkedin_enabled ? ["LinkedIn"] : []
   )
-  ses_identity_arn = var.ses_from_email != "" ? "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.ses_from_email}" : ""
-  cognito_uses_ses = local.ses_identity_arn != ""
+  cognito_ses_identity_arn = var.cognito_ses_from_email != "" ? "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.cognito_ses_from_email}" : ""
+  cognito_uses_ses         = local.cognito_ses_identity_arn != ""
 }
 
 data "aws_caller_identity" "current" {}
@@ -77,18 +77,18 @@ resource "aws_cognito_user_pool" "main" {
 
   verification_message_template {
     default_email_option = "CONFIRM_WITH_CODE"
-    email_subject        = "Потвърди регистрацията си в CareerLane"
+    email_subject        = "Потвърди регистрацията си в GrowPoint"
     email_message        = <<-EOT
       <html><body style="margin:0;padding:0;background:#eef2ef;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Manrope',Helvetica,Arial,sans-serif;color:#1b2722;">
         <div style="max-width:480px;margin:0 auto;padding:32px 24px;">
-          <p style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#56695f;margin:0 0 8px;">CareerLane</p>
+          <p style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#56695f;margin:0 0 8px;">GrowPoint</p>
           <h1 style="font-size:24px;line-height:1.25;margin:0 0 16px;letter-spacing:-0.01em;">Потвърди регистрацията си</h1>
           <p style="font-size:15px;line-height:1.6;color:#3f534a;margin:0 0 20px;">Здравей,</p>
-          <p style="font-size:15px;line-height:1.6;color:#3f534a;margin:0 0 24px;">За да активираш профила си в CareerLane, въведи следния код в страницата за потвърждение:</p>
+          <p style="font-size:15px;line-height:1.6;color:#3f534a;margin:0 0 24px;">За да активираш профила си в GrowPoint, въведи следния код в страницата за потвърждение:</p>
           <div style="font-size:32px;font-weight:800;letter-spacing:0.18em;padding:18px 24px;border-radius:16px;background:#dfe7e1;text-align:center;color:#324840;margin:0 0 24px;">{####}</div>
-          <p style="font-size:13px;line-height:1.6;color:#56695f;margin:0 0 8px;">Кодът е валиден за ограничен период от време. Ако не си се регистрирал/а в CareerLane, можеш да игнорираш това съобщение.</p>
+          <p style="font-size:13px;line-height:1.6;color:#56695f;margin:0 0 8px;">Кодът е валиден за ограничен период от време. Ако не си се регистрирал/а в GrowPoint, можеш да игнорираш това съобщение.</p>
           <hr style="border:none;border-top:1px solid #d7ddd9;margin:24px 0;">
-          <p style="font-size:12px;color:#74867d;margin:0;">CareerLane · Платформа за кариерни консултации и менторство</p>
+          <p style="font-size:12px;color:#74867d;margin:0;">GrowPoint · Платформа за кариерни консултации и менторство</p>
         </div>
       </body></html>
     EOT
@@ -97,9 +97,10 @@ resource "aws_cognito_user_pool" "main" {
   dynamic "email_configuration" {
     for_each = local.cognito_uses_ses ? [1] : []
     content {
-      email_sending_account = "DEVELOPER"
-      from_email_address    = "CareerLane <${var.ses_from_email}>"
-      source_arn            = local.ses_identity_arn
+      email_sending_account  = "DEVELOPER"
+      from_email_address     = "GrowPoint <${var.cognito_ses_from_email}>"
+      reply_to_email_address = "contactus@growpoint.bg"
+      source_arn             = local.cognito_ses_identity_arn
     }
   }
 
@@ -114,11 +115,11 @@ resource "aws_cognito_user_pool" "main" {
 }
 
 # Authorise Cognito to send emails through the configured SES identity.
-# Only created when ses_from_email is set (otherwise Cognito falls back to
+# Only created when cognito_ses_from_email is set (otherwise Cognito falls back to
 # its built-in COGNITO_DEFAULT sender, which uses no-reply@verificationemail.com).
 resource "aws_ses_identity_policy" "cognito_sender" {
   count    = local.cognito_uses_ses ? 1 : 0
-  identity = var.ses_from_email
+  identity = var.cognito_ses_from_email
   name     = "${local.name_prefix}-cognito-sender"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -132,7 +133,7 @@ resource "aws_ses_identity_policy" "cognito_sender" {
         "ses:SendEmail",
         "ses:SendRawEmail"
       ]
-      Resource = local.ses_identity_arn
+      Resource = local.cognito_ses_identity_arn
     }]
   })
 }
@@ -282,6 +283,10 @@ resource "aws_dynamodb_table" "users" {
     type = "S"
   }
 
+  point_in_time_recovery {
+    enabled = true
+  }
+
   tags = local.common_tags
 }
 
@@ -305,6 +310,11 @@ resource "aws_dynamodb_table" "consultants" {
     type = "S"
   }
 
+  attribute {
+    name = "profileStatus"
+    type = "S"
+  }
+
   global_secondary_index {
     name            = "slug-index"
     hash_key        = "slug"
@@ -315,6 +325,16 @@ resource "aws_dynamodb_table" "consultants" {
     name            = "owner-index"
     hash_key        = "ownerUserId"
     projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "profile-status-index"
+    hash_key        = "profileStatus"
+    projection_type = "ALL"
+  }
+
+  point_in_time_recovery {
+    enabled = true
   }
 
   tags = local.common_tags
@@ -350,6 +370,10 @@ resource "aws_dynamodb_table" "bookings" {
     name            = "consultant-index"
     hash_key        = "consultantId"
     projection_type = "ALL"
+  }
+
+  point_in_time_recovery {
+    enabled = true
   }
 
   tags = local.common_tags

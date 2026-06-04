@@ -65,9 +65,9 @@ export function resolveSeo(pathname: string): SeoResolvedRoute {
     normalized.startsWith("/consultants/")
       ? {
           path: normalized,
-          title: "Кариерен консултант или ментор | CareerLane",
+          title: "Кариерен консултант или ментор | GrowPoint",
           description:
-            "Публичен профил на кариерен консултант или ментор в CareerLane.",
+            "Публичен профил на кариерен консултант или ментор в GrowPoint.",
           schemaType: "ProfilePage",
           index: true
         }
@@ -212,11 +212,11 @@ export function applyConsultantProfileSeo(consultant: ConsultantSeoProfile) {
   const headline = consultant.headline?.trim();
   const summary = consultant.bio?.trim() || consultant.experienceSummary?.trim() || headline;
   const title = consultant.name
-    ? `${consultant.name} - ${headline || "кариерен консултант"} | CareerLane`
-    : "Кариерен консултант или ментор | CareerLane";
+    ? `${consultant.name} - ${headline || "кариерен консултант"} | GrowPoint`
+    : "Кариерен консултант или ментор | GrowPoint";
   const description = summary
     ? summary.slice(0, 170)
-    : "Публичен профил на кариерен консултант или ментор в CareerLane.";
+    : "Публичен профил на кариерен консултант или ментор в GrowPoint.";
   const image = consultant.heroUrl || consultant.avatarUrl || seoData.defaultImage;
   const route: SeoResolvedRoute = {
     path: canonicalPath,

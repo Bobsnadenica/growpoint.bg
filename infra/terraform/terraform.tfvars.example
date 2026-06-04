@@ -18,7 +18,7 @@ frontend_origins = [
 
 # Optional: set a stable Cognito Hosted UI domain prefix once before connecting
 # Google / Apple / LinkedIn. If omitted, Terraform derives one automatically.
-# cognito_domain_prefix = "careerlane-auth"
+# cognito_domain_prefix = "growpoint-auth"
 
 # Optional: override the exact callback/logout URLs. By default Terraform derives
 # the origin, /, and /index.html from frontend_origins.
@@ -50,3 +50,12 @@ tags = {
   Project = "CareerDoc"
   Owner   = "BobSNadenica"
 }
+
+# Optional email senders.
+# Cognito can send signup verification codes with its default AWS sender when
+# cognito_ses_from_email is empty. Set this only after the address/domain is
+# verified in SES in eu-west-1.
+# cognito_ses_from_email = "contactus@growpoint.bg"
+#
+# Platform booking/notification emails still need a verified SES sender.
+# ses_from_email = "contactus@growpoint.bg"

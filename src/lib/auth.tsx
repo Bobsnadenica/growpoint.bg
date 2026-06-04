@@ -4,6 +4,7 @@ import {
   confirmSignUp,
   fetchAuthSession,
   getCurrentUser,
+  resendSignUpCode,
   resetPassword,
   signIn,
   signInWithRedirect,
@@ -47,6 +48,7 @@ type AuthContextValue = {
   availableSocialProviders: SocialAuthProviderKey[];
   register: (input: RegisterInput) => Promise<{ needsConfirmation: boolean }>;
   confirm: (email: string, code: string) => Promise<void>;
+  resendConfirmationCode: (email: string) => Promise<void>;
   login: (email: string, password: string) => Promise<string>;
   loginWithProvider: (provider: SocialAuthProviderKey) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
@@ -250,6 +252,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username: email,
           confirmationCode: code
         });
+      },
+      async resendConfirmationCode(email) {
+        if (!isCognitoConfigured) {
+          throw new Error(AUTH_NOT_READY_MESSAGE);
+        }
+
+        await resendSignUpCode({ username: email });
       },
       async login(email, password) {
         if (!isCognitoConfigured) {

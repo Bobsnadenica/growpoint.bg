@@ -5,17 +5,17 @@ const contactChannels = [
   {
     title: "Общи въпроси и поддръжка",
     description: "За въпроси по профила, достъпа, регистрацията и използването на платформата.",
-    email: "support@careerlane.eu"
+    email: "contactus@growpoint.bg"
   },
   {
     title: "Партньорства и реклама",
     description: "За рекламни позиции, работодателски брандове, академии и други партньорски формати.",
-    email: "partners@careerlane.eu"
+    email: "partners@growpoint.bg"
   },
   {
     title: "Правни и данни",
     description: "За правни запитвания, privacy заявки и административни въпроси, свързани с данни.",
-    email: "legal@careerlane.eu"
+    email: "contactus@growpoint.bg"
   }
 ] as const;
 
@@ -33,11 +33,11 @@ export default function ContactPage() {
 
     const recipient =
       form.topic === "partnerships"
-        ? "partners@careerlane.eu"
+        ? "partners@growpoint.bg"
         : form.topic === "legal"
-          ? "legal@careerlane.eu"
-          : "support@careerlane.eu";
-    const subject = `[CareerLane] ${
+          ? "contactus@growpoint.bg"
+          : "contactus@growpoint.bg";
+    const subject = `[GrowPoint] ${
       form.topic === "partnerships"
         ? "Партньорско запитване"
         : form.topic === "legal"
@@ -73,7 +73,7 @@ export default function ContactPage() {
       <section className="section">
         <div className="container contact-grid">
           {contactChannels.map((channel) => (
-            <article className="info-card" key={channel.email}>
+            <article className="info-card" key={`${channel.title}-${channel.email}`}>
               <p className="eyebrow">Контактен канал</p>
               <h3>{channel.title}</h3>
               <p>{channel.description}</p>

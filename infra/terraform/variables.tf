@@ -100,7 +100,13 @@ variable "tags" {
 variable "ses_from_email" {
   type        = string
   default     = ""
-  description = "Verified SES sender address for booking notifications. If empty, the Lambda logs emails instead of sending."
+  description = "Verified SES sender address for platform booking/notification emails. If empty, the Lambda logs emails instead of sending."
+}
+
+variable "cognito_ses_from_email" {
+  type        = string
+  default     = ""
+  description = "Optional verified SES sender address for Cognito verification emails. Leave empty to use Cognito's default sender."
 }
 
 variable "app_url" {

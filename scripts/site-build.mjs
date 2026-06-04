@@ -245,7 +245,7 @@ async function writeSeoFiles(baseHtml, seoData) {
     path: "/404",
     canonicalPath: "/",
     title: `Страницата не е намерена | ${seoData.siteName}`,
-    description: "Тази страница не беше намерена. Върни се към CareerLane.",
+    description: "Тази страница не беше намерена. Върни се към GrowPoint.",
     schemaType: "WebPage",
     index: false
   };

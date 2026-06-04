@@ -13,7 +13,7 @@ Cognito hosted UI runs at `https://<prefix>.auth.<region>.amazoncognito.com`. Th
 In `infra/terraform/terraform.tfvars`:
 
 ```hcl
-cognito_domain_prefix = "careerlane-auth"   # or whatever's available
+cognito_domain_prefix = "growpoint-auth"   # or whatever's available
 ```
 
 Leave blank to get a random suffix appended (handy for first deploy).
