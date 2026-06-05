@@ -442,18 +442,20 @@ main {
 }
 
 .beta-notice {
-  position: sticky;
-  top: 72px;
+  --beta-rotation: 7deg;
+  position: fixed;
+  top: clamp(96px, 13vh, 152px);
+  left: 50%;
   z-index: 29;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 16px;
+  width: max(920px, 145vw);
+  min-height: 44px;
+  padding: 9px 18px;
   border: 0;
-  border-bottom: 1px solid rgba(120, 79, 0, 0.26);
+  border-block: 1px solid rgba(17, 25, 22, 0.38);
   background:
     repeating-linear-gradient(
       135deg,
@@ -462,7 +464,16 @@ main {
     );
   color: #111916;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 18px 34px rgba(15, 23, 42, 0.16),
+    inset 0 1px rgba(255, 255, 255, 0.22),
+    inset 0 -1px rgba(0, 0, 0, 0.16);
+  transform: translateX(-50%) rotate(var(--beta-rotation));
+  transform-origin: center;
+  transition:
+    filter 0.18s ease,
+    opacity 0.18s ease,
+    transform 0.2s ease;
 }
 
 .beta-notice span {
@@ -495,6 +506,12 @@ main {
 .beta-notice:hover span,
 .beta-notice:focus-visible span {
   background: white;
+}
+
+.beta-notice:hover,
+.beta-notice:focus-visible {
+  filter: saturate(1.08);
+  transform: translateX(-50%) rotate(var(--beta-rotation)) scale(1.01);
 }
 
 .site-nav a,
@@ -8288,7 +8305,10 @@ textarea {
   }
 
   .beta-notice {
-    top: 0;
+    --beta-rotation: 8deg;
+    top: 92px;
+    width: max(720px, 158vw);
+    min-height: 42px;
   }
 
   .consultant-grid,
@@ -8575,7 +8595,10 @@ textarea {
 
   .beta-notice {
     flex-direction: column;
-    gap: 5px;
+    gap: 4px;
+    top: 52px;
+    width: max(500px, 150vw);
+    min-height: 52px;
     padding: 8px 12px;
   }
 
