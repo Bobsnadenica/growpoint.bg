@@ -322,20 +322,114 @@ async function putConsultantDraftWithUniqueSlug(draft) {
   throw new SlugConflictError(draft.slug);
 }
 
-async function getConsultantByOwner(ownerUserId) {
-  const result = await dynamo.send(
-    new QueryCommand({
-      TableName: env.consultantsTable,
-      IndexName: "owner-index",
-      KeyConditionExpression: "ownerUserId = :ownerUserId",
-      ExpressionAttributeValues: {
-        ":ownerUserId": ownerUserId
-      },
-      Limit: 1
-    })
-  );
+function getConsultantTimestamp(consultant) {
+  const updatedAt = new Date(consultant?.updatedAt || consultant?.createdAt || 0).getTime();
+  return Number.isFinite(updatedAt) ? updatedAt : 0;
+}
 
-  return result.Items?.[0] || null;
+function getCanonicalConsultantScore(consultant) {
+  if (!isConsultantRecord(consultant)) return -1;
+
+  let score = 0;
+  const textFields = [
+    consultant.name,
+    consultant.headline,
+    consultant.bio,
+    consultant.experienceSummary,
+    consultant.city,
+    consultant.workApproach
+  ];
+  const listFields = [
+    consultant.experienceHighlights,
+    consultant.educationHighlights,
+    consultant.languages,
+    consultant.specializations,
+    consultant.sessionModes,
+    consultant.tags,
+    consultant.idealFor,
+    consultant.consultationTopics,
+    consultant.availability
+  ];
+
+  for (const value of textFields) {
+    if (String(value || "").trim()) score += 10;
+  }
+
+  for (const value of listFields) {
+    if (Array.isArray(value) && value.some((item) => String(item || "").trim())) score += 12;
+  }
+
+  if (consultant.avatarUrl || consultant.avatarStorageKey) score += 8;
+  if (consultant.heroUrl || consultant.heroStorageKey) score += 4;
+  if (normalizeConsultantPriceEur(consultant) > 0) score += 6;
+  if (Number(consultant.experienceYears) > 0) score += 4;
+  if (consultant.profileStatus === "approved") score += 90;
+  if (consultant.isPublic === true) score += 30;
+  if (isConsultantProfileReadyForAutoApprove(consultant)) score += 140;
+  if (isVisibleConsultant(consultant)) score += 220;
+
+  return score;
+}
+
+function chooseCanonicalConsultant(consultants) {
+  return [...(consultants || [])]
+    .filter(isConsultantRecord)
+    .sort((left, right) => {
+      const scoreDelta = getCanonicalConsultantScore(right) - getCanonicalConsultantScore(left);
+      if (scoreDelta !== 0) return scoreDelta;
+      return getConsultantTimestamp(right) - getConsultantTimestamp(left);
+    })[0] || null;
+}
+
+async function listConsultantsByOwner(ownerUserId) {
+  const items = [];
+  let exclusiveStartKey;
+  let pages = 0;
+
+  do {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: env.consultantsTable,
+        IndexName: "owner-index",
+        KeyConditionExpression: "ownerUserId = :ownerUserId",
+        ExpressionAttributeValues: {
+          ":ownerUserId": ownerUserId
+        },
+        Limit: 100,
+        ExclusiveStartKey: exclusiveStartKey
+      })
+    );
+
+    items.push(...(result.Items || []).filter(isConsultantRecord));
+    exclusiveStartKey = result.LastEvaluatedKey;
+    pages += 1;
+  } while (exclusiveStartKey && pages < 10);
+
+  return items;
+}
+
+async function getConsultantByOwner(ownerUserId) {
+  return chooseCanonicalConsultant(await listConsultantsByOwner(ownerUserId));
+}
+
+function dedupeConsultantsByOwner(consultants) {
+  const byOwner = new Map();
+  const withoutOwner = [];
+
+  for (const consultant of consultants || []) {
+    if (!isConsultantRecord(consultant)) continue;
+
+    const ownerUserId = String(consultant.ownerUserId || "").trim();
+    if (!ownerUserId) {
+      withoutOwner.push(consultant);
+      continue;
+    }
+
+    const current = byOwner.get(ownerUserId);
+    byOwner.set(ownerUserId, chooseCanonicalConsultant([current, consultant]));
+  }
+
+  return [...byOwner.values(), ...withoutOwner].filter(Boolean);
 }
 
 function normalizeStringList(value, fallback = [], limit = 24, maxLength = 120) {
@@ -2163,6 +2257,7 @@ async function updateMyConsultant(event) {
       baseConsultant.profileStatus || INITIAL_CONSULTANT_VISIBILITY.profileStatus
   };
   const requestedTheme = normalizeConsultantTheme(body.theme, baseConsultant.theme || "");
+  const now = new Date().toISOString();
 
   const normalizedSlug = body.slug ? normalizeSlug(body.slug, baseConsultant.slug) : null;
   const previousSlug = current?.slug || null;
@@ -2249,6 +2344,8 @@ async function updateMyConsultant(event) {
       body.availability ?? baseConsultant.availability ?? [],
       []
     ),
+    createdAt: baseConsultant.createdAt || now,
+    updatedAt: now,
     ...preservedVisibility,
     ...planFields
   };
@@ -3424,12 +3521,13 @@ async function listConsultantsForAdmin(event) {
   const pageSize = parsePageSize(event.queryStringParameters?.limit);
   const startKey = decodeCursor(event.queryStringParameters?.cursor);
 
-  const { items: consultants, lastEvaluatedKey } = await scanWithFilter({
+  const { items: scannedConsultants, lastEvaluatedKey } = await scanWithFilter({
     tableName: env.consultantsTable,
     pageSize,
     startKey,
     filter: isConsultantRecord
   });
+  const consultants = dedupeConsultantsByOwner(scannedConsultants);
 
   const ownerIds = Array.from(
     new Set(consultants.map((item) => item.ownerUserId).filter(Boolean))
@@ -3521,7 +3619,15 @@ async function getConsultantForAdmin(event) {
     return notFound("Consultant not found.");
   }
 
-  const consultant = result.Item;
+  let consultant = result.Item;
+
+  if (consultant.ownerUserId) {
+    const canonical = await getConsultantByOwner(consultant.ownerUserId);
+    if (canonical) {
+      consultant = canonical;
+    }
+  }
+
   const decorated = await decorateConsultantMedia(consultant);
 
   // Owner info + audit metadata — surface what the list endpoint shows so

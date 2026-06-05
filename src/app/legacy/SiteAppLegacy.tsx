@@ -18,7 +18,7 @@ import {
   useSearchParams
 } from "react-router-dom";
 import { api } from "../../lib/api";
-import { useAuth } from "../../lib/auth";
+import { NewPasswordRequiredError, useAuth } from "../../lib/auth";
 import advertisementOneVideoUrl from "../../../assets/advertisement/1.mp4";
 import advertisementTwoVideoUrl from "../../../assets/advertisement/2.mp4";
 import advertisementThreeImageUrl from "../../../assets/advertisement/3.jpg";
@@ -99,6 +99,7 @@ type AuthScreen =
   | "login"
   | "register"
   | "confirm"
+  | "new-password"
   | "forgot-request"
   | "forgot-confirm";
 
@@ -804,14 +805,80 @@ function getNameInitials(name: string) {
   return tokens.map((item) => item.charAt(0).toUpperCase()).join("") || "CL";
 }
 
+type LightboxImage = {
+  src: string;
+  alt: string;
+};
+
+function ImageLightbox({
+  image,
+  onClose
+}: {
+  image: LightboxImage;
+  onClose: () => void;
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKey);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKey);
+      previouslyFocusedRef.current?.focus?.();
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="image-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Преглед на снимка"
+      onClick={onClose}
+    >
+      <button
+        ref={closeButtonRef}
+        className="image-lightbox__close"
+        type="button"
+        aria-label="Затвори снимката"
+        onClick={onClose}
+      >
+        ×
+      </button>
+      <figure className="image-lightbox__figure" onClick={(event) => event.stopPropagation()}>
+        <img src={image.src} alt={image.alt} decoding="async" />
+        <figcaption>{image.alt}</figcaption>
+      </figure>
+    </div>
+  );
+}
+
 function AvatarMedia({
   src,
   name,
-  className
+  className,
+  openInLightbox = false,
+  onOpenImage
 }: {
   src?: string;
   name: string;
   className: string;
+  openInLightbox?: boolean;
+  onOpenImage?: (image: LightboxImage) => void;
 }) {
   const [failed, setFailed] = useState(false);
   const resolvedSrc = src && !failed ? resolvePublicUrl(src) : "";
@@ -821,6 +888,30 @@ function AvatarMedia({
   }, [src]);
 
   if (resolvedSrc) {
+    if (openInLightbox && onOpenImage) {
+      return (
+        <button
+          type="button"
+          className={`${className} avatar-media avatar-media--button`}
+          aria-label={`Отвори снимката на ${name} на цял екран`}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenImage({ src: resolvedSrc, alt: name });
+          }}
+        >
+          <img
+            className="avatar-media__image"
+            src={resolvedSrc}
+            alt={name}
+            decoding="async"
+            loading="lazy"
+            onError={() => setFailed(true)}
+          />
+        </button>
+      );
+    }
+
     return (
       <img
         className={`${className} avatar-media`}
@@ -1656,6 +1747,7 @@ export function ConsultantPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [shareMessage, setShareMessage] = useState("");
+  const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [confirmedBooking, setConfirmedBooking] = useState<{
     slot: string;
     sessionLength: string;
@@ -1837,6 +1929,8 @@ export function ConsultantPage() {
                 className="profile-stage__avatar"
                 src={consultant.avatarUrl}
                 name={consultant.name}
+                openInLightbox
+                onOpenImage={setLightboxImage}
               />
 
               <div className="profile-stage__body">
@@ -1873,6 +1967,9 @@ export function ConsultantPage() {
           </article>
         </div>
       </section>
+      {lightboxImage ? (
+        <ImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
+      ) : null}
 
       <section className="section section--tight">
         <div className="container consultant-detail-grid consultant-detail-grid--profile">
@@ -2252,6 +2349,7 @@ export function AuthPage() {
     confirm: confirmWithAuth,
     resendConfirmationCode,
     login: loginWithAuth,
+    completeNewPassword,
     loginWithProvider,
     requestPasswordReset,
     completePasswordReset
@@ -2325,9 +2423,11 @@ export function AuthPage() {
         : "Създай профил"
       : screen === "confirm"
         ? "Потвърди регистрацията"
-        : screen === "forgot-request"
-          ? "Възстанови достъпа"
-          : screen === "forgot-confirm"
+        : screen === "new-password"
+          ? "Задай нова парола"
+          : screen === "forgot-request"
+            ? "Възстанови достъпа"
+            : screen === "forgot-confirm"
             ? "Нова парола"
             : "Вход в GrowPoint";
 
@@ -2336,9 +2436,11 @@ export function AuthPage() {
       ? "Минута за регистрация. Профилът се довършва след вход."
       : screen === "confirm"
         ? "Изпратихме 6-значен код на имейла ти."
-        : screen === "forgot-request"
-          ? "Ще ти изпратим код за нова парола."
-          : screen === "forgot-confirm"
+        : screen === "new-password"
+          ? "Временната парола е приета. Избери постоянна парола, за да продължиш."
+          : screen === "forgot-request"
+            ? "Ще ти изпратим код за нова парола."
+            : screen === "forgot-confirm"
             ? "Въведи получения код и нова парола."
             : "Влез с имейл и парола или с външен профил.";
 
@@ -2419,6 +2521,18 @@ export function AuthPage() {
 
       navigate(resolvedRedirect);
     } catch (value) {
+      if (value instanceof NewPasswordRequiredError) {
+        setForm((current) => ({
+          ...current,
+          email: value.email || current.email,
+          newPassword: ""
+        }));
+        setShowPassword(false);
+        setScreen("new-password");
+        setMessage("За този акаунт трябва да зададеш нова постоянна парола.");
+        return;
+      }
+
       setError(
         value instanceof Error ? value.message : "Неуспешен вход. Провери имейла и паролата."
       );
@@ -2539,6 +2653,48 @@ export function AuthPage() {
       navigate(resolvedRedirect);
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно потвърждение.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleNewPasswordRequired(event: FormEvent) {
+    event.preventDefault();
+    clearFeedback();
+
+    const newPasswordChecks = scorePasswordStrength(form.newPassword);
+    if (
+      !newPasswordChecks.length ||
+      !newPasswordChecks.lower ||
+      !newPasswordChecks.upper ||
+      !newPasswordChecks.digit
+    ) {
+      setError("Новата парола трябва да съдържа минимум 8 символа, малка и главна буква и цифра.");
+      return;
+    }
+
+    if (!configured) {
+      setError("Системата за вход не е конфигурирана.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const idToken = await completeNewPassword(form.email.trim(), form.newPassword.trim());
+      const pendingBootstrap = readPendingBootstrap();
+
+      if (
+        pendingBootstrap &&
+        pendingBootstrap.email.toLowerCase() === form.email.trim().toLowerCase()
+      ) {
+        await api.bootstrapUser(idToken, pendingBootstrap);
+        clearPendingBootstrap();
+      }
+
+      setForm((current) => ({ ...current, password: "", newPassword: "" }));
+      navigate(resolvedRedirect);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно задаване на нова парола.");
     } finally {
       setSubmitting(false);
     }
@@ -3006,6 +3162,58 @@ export function AuthPage() {
             </form>
           ) : null}
 
+          {screen === "new-password" ? (
+            <form
+              className="form-stack auth-state-panel"
+              onSubmit={handleNewPasswordRequired}
+              noValidate
+            >
+              <div className="auth-state-header">
+                <h2>Нова постоянна парола</h2>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => switchScreen("login")}
+                >
+                  Назад към вход
+                </button>
+              </div>
+              <p className="form-note">
+                Акаунтът <strong>{form.email}</strong> изисква смяна на временната парола.
+              </p>
+              <label className="auth-password-field">
+                <span className="auth-password-field__label">
+                  Нова парола
+                  <button
+                    type="button"
+                    className="text-button auth-password-field__toggle"
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-pressed={showPassword}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? "Скрий" : "Покажи"}
+                  </button>
+                </span>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={form.newPassword}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, newPassword: event.target.value }))
+                  }
+                  autoComplete="new-password"
+                  placeholder="Минимум 8 символа"
+                  minLength={8}
+                  required
+                  disabled={submitting}
+                  autoFocus
+                />
+              </label>
+              <button className="primary-button" type="submit" disabled={submitting}>
+                {submitting ? "Запазваме..." : "Запази и влез"}
+              </button>
+            </form>
+          ) : null}
+
           {screen === "forgot-request" ? (
             <form
               className="form-stack auth-state-panel"
@@ -3163,6 +3371,7 @@ export function DashboardPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [accountActionLoading, setAccountActionLoading] = useState<
     "export" | "delete" | null
   >(null);
@@ -4024,6 +4233,8 @@ export function DashboardPage() {
               src={profile.avatarUrl}
               name={profile.name}
               className="dashboard-sidebar__avatar"
+              openInLightbox
+              onOpenImage={setLightboxImage}
             />
             <div className="dashboard-sidebar__identity">
               <p className="eyebrow">Табло</p>
@@ -4344,6 +4555,8 @@ export function DashboardPage() {
                         src={profile.avatarUrl}
                         name={profile.name}
                         className="media-preview-card__image"
+                        openInLightbox
+                        onOpenImage={setLightboxImage}
                       />
                     ) : (
                       <div className="media-preview-card__placeholder">
@@ -4870,6 +5083,8 @@ export function DashboardPage() {
                         src={consultantProfile?.avatarUrl}
                         name={consultantProfile?.name || profile.name}
                         className="media-preview-card__image"
+                        openInLightbox
+                        onOpenImage={setLightboxImage}
                       />
                     </article>
                     {consultantProfile?.heroUrl ? (
@@ -5668,6 +5883,9 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {lightboxImage ? (
+        <ImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
+      ) : null}
       {reviewModalBooking ? (
         <ReviewModal
           booking={reviewModalBooking}

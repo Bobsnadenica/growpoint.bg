@@ -51,6 +51,7 @@ const footerLinks = [
 type ThemePreference = "light" | "dark";
 
 const THEME_STORAGE_KEY = "growpoint.theme";
+const BETA_NOTICE_STORAGE_KEY = "growpoint.betaNoticeDismissed";
 
 function readInitialTheme(): ThemePreference {
   if (typeof window === "undefined") return "light";
@@ -114,6 +115,16 @@ function RouteExperience() {
   return null;
 }
 
+function readInitialBetaNoticeVisibility() {
+  if (typeof window === "undefined") return true;
+
+  try {
+    return window.localStorage.getItem(BETA_NOTICE_STORAGE_KEY) !== "true";
+  } catch {
+    return true;
+  }
+}
+
 export default function AppShell() {
   const { user, token, loading, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -123,6 +134,7 @@ export default function AppShell() {
   const [isRouteTransitioning, setIsRouteTransitioning] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
+  const [betaNoticeVisible, setBetaNoticeVisible] = useState(readInitialBetaNoticeVisibility);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -263,6 +275,16 @@ export default function AppShell() {
     setTheme((value) => (value === "dark" ? "light" : "dark"));
   }
 
+  function dismissBetaNotice() {
+    setBetaNoticeVisible(false);
+
+    try {
+      window.localStorage.setItem(BETA_NOTICE_STORAGE_KEY, "true");
+    } catch {
+      // localStorage may be disabled.
+    }
+  }
+
   return (
     <div className={`site-shell ${isLoggingOut ? "site-shell--signing-out" : ""}`}>
       <RouteExperience />
@@ -289,16 +311,6 @@ export default function AppShell() {
           </nav>
 
           <div className="site-header__actions">
-            <button
-              className={`theme-toggle theme-toggle--${theme}`}
-              type="button"
-              aria-label={`Включи ${nextThemeLabel} тема`}
-              title={`Включи ${nextThemeLabel} тема`}
-              onClick={toggleTheme}
-            >
-              <ThemeToggleArtwork theme={theme} />
-              <span className="visually-hidden">Текуща тема: {currentThemeLabel}</span>
-            </button>
             {user ? (
               <>
                 {isAdmin ? (
@@ -328,6 +340,16 @@ export default function AppShell() {
                 <span className="auth-label auth-label--short" aria-hidden="true">Вход</span>
               </Link>
             )}
+            <button
+              className={`theme-toggle theme-toggle--${theme}`}
+              type="button"
+              aria-label={`Включи ${nextThemeLabel} тема`}
+              title={`Включи ${nextThemeLabel} тема`}
+              onClick={toggleTheme}
+            >
+              <ThemeToggleArtwork theme={theme} />
+              <span className="visually-hidden">Текуща тема: {currentThemeLabel}</span>
+            </button>
           </div>
 
           <button
@@ -428,6 +450,18 @@ export default function AppShell() {
             </div>
           </nav>
         </>
+      ) : null}
+
+      {betaNoticeVisible ? (
+        <button
+          className="beta-notice"
+          type="button"
+          onClick={dismissBetaNotice}
+          aria-label="Скрий бета предупреждението"
+        >
+          <span>Все още работим над проекта, това е бета</span>
+          <small>Натисни, за да скриеш</small>
+        </button>
       ) : null}
 
       <main id="main-content" className="page-main">

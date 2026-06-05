@@ -3,6 +3,7 @@
 Review date: 2026-05-06
 Domain migration review: 2026-06-04
 Production-readiness follow-up: 2026-06-04
+Implementation pass: 2026-06-05
 Workspace: `/Users/privileged/Projects/growpoint.bg/growpoint.bg`
 
 This file is the working memory for taking GrowPoint from early-stage prototype to a professional, production-ready user test. It should be used as the execution plan in future implementation sessions.
@@ -32,6 +33,12 @@ Latest production decisions:
 - Cognito signup verification currently uses the built-in Cognito sender so code delivery is not blocked by an unverified SES identity. Set `cognito_ses_from_email` only after `contactus@growpoint.bg` or the GrowPoint domain is verified in SES `eu-west-1`.
 - Platform notification emails from the Lambda still require `ses_from_email` to be a verified SES identity in `eu-west-1`. The email templates are GrowPoint-branded, but delivery depends on SES verification.
 - Users can choose light/dark site theme through `growpoint.theme` in local storage.
+- White/light theme is the default for first-time visitors; dark mode is used only after the user explicitly saves that preference.
+- The desktop theme toggle belongs at the far right of the header, after `Изход` or `Вход / Регистрация`.
+- Uploaded profile photos should open in a full-screen, accessible lightbox from profile/dashboard/edit-preview surfaces. Directory cards remain navigation links unless their card structure is explicitly refactored.
+- Cognito login must handle the temporary-password/new-password-required challenge with a dedicated password-change screen, separate from forgotten-password email-code reset.
+- Consultant profile ownership is one-profile-per-consultant. If duplicate DynamoDB consultant rows exist for one owner, frontend/backend/admin should use the most complete, latest canonical profile and not an old empty draft.
+- Subtle animated particles may be used only as optimized public-page background polish. They must stay out of admin/dashboard work surfaces, pause in hidden tabs, and respect reduced-motion preferences.
 - Backend emails use direct BrowserRouter URLs such as `/dashboard/` and `/users/`, not old hash routes.
 - DynamoDB now has point-in-time recovery enabled in Terraform, and public consultant listing can use `profile-status-index` with bounded-scan fallback during rollout.
 - `www.growpoint.bg` is the canonical GitHub Pages domain. Direct `https://growpoint.bg/` currently fails TLS before redirect; fix the apex GitHub Pages certificate/DNS setup before public launch.

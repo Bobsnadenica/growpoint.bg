@@ -1,5 +1,6 @@
 import "aws-amplify/auth/enable-oauth-listener";
 import {
+  confirmSignIn,
   confirmResetPassword,
   confirmSignUp,
   fetchAuthSession,
@@ -50,6 +51,7 @@ type AuthContextValue = {
   confirm: (email: string, code: string) => Promise<void>;
   resendConfirmationCode: (email: string) => Promise<void>;
   login: (email: string, password: string) => Promise<string>;
+  completeNewPassword: (email: string, newPassword: string) => Promise<string>;
   loginWithProvider: (provider: SocialAuthProviderKey) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   completePasswordReset: (
@@ -77,6 +79,16 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_NOT_READY_MESSAGE = "Системата за вход все още не е конфигурирана.";
 const SOCIAL_AUTH_NOT_READY_MESSAGE =
   "Входът с външен профил още не е свързан за тази среда.";
+
+export class NewPasswordRequiredError extends Error {
+  email: string;
+
+  constructor(email: string) {
+    super("Трябва да зададеш нова парола, преди да продължиш.");
+    this.name = "NewPasswordRequiredError";
+    this.email = email;
+  }
+}
 
 function mapProvider(provider: SocialAuthProviderKey) {
   if (provider === "google") {
@@ -134,6 +146,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState("");
   const [groups, setGroups] = useState<string[]>([]);
+
+  async function refreshSignedInSession(userIdFallback: string) {
+    const session = await fetchAuthSession();
+    const idToken = session.tokens?.idToken?.toString() || "";
+    const claims = session.tokens?.idToken?.payload;
+
+    if (!idToken) {
+      throw new Error("Неуспешно зареждане на сесията след вход.");
+    }
+
+    setUser(mapAuthUserFromSession(userIdFallback, claims));
+    setToken(idToken);
+    setGroups(extractGroups(claims));
+    return idToken;
+  }
 
   useEffect(() => {
     let active = true;
@@ -265,14 +292,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error(AUTH_NOT_READY_MESSAGE);
         }
 
-        await signIn({ username: email, password });
-        const session = await fetchAuthSession();
-        const idToken = session.tokens?.idToken?.toString() || "";
-        const claims = session.tokens?.idToken?.payload;
-        setUser(mapAuthUserFromSession(email, claims));
-        setToken(idToken);
-        setGroups(extractGroups(claims));
-        return idToken;
+        const result = await signIn({ username: email, password });
+        const nextStep = result.nextStep?.signInStep;
+
+        if (nextStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
+          throw new NewPasswordRequiredError(email);
+        }
+
+        if (!result.isSignedIn) {
+          throw new Error("Входът изисква допълнителна стъпка, която още не е активирана.");
+        }
+
+        return refreshSignedInSession(email);
+      },
+      async completeNewPassword(email, newPassword) {
+        if (!isCognitoConfigured) {
+          throw new Error(AUTH_NOT_READY_MESSAGE);
+        }
+
+        const result = await confirmSignIn({ challengeResponse: newPassword });
+
+        if (!result.isSignedIn) {
+          throw new Error("Паролата беше приета, но входът изисква допълнителна стъпка.");
+        }
+
+        return refreshSignedInSession(email);
       },
       async loginWithProvider(provider) {
         if (!isCognitoHostedUiConfigured) {
