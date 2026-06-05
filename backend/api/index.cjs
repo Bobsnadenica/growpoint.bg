@@ -49,6 +49,7 @@ const APP_DASHBOARD_URL = appUrl("dashboard/");
 const APP_USERS_URL = appUrl("users/");
 const CONTACT_EMAIL = "contactus@growpoint.bg";
 const BGN_PER_EUR = 1.95583;
+const PRICE_TIER_STEP_EUR = 50;
 const CONSULTANT_STATUS_INDEX = "profile-status-index";
 
 const CONSULTANT_PROFILE_THEMES = new Set(["violet", "sky", "rose", "mint", "amber"]);
@@ -373,6 +374,12 @@ function normalizeBoundedNumber(value, fallback, { min = 0, max = 1000, integer 
   return integer ? Math.round(bounded) : Math.round(bounded * 100) / 100;
 }
 
+function roundUpPriceTierEur(value) {
+  const number = normalizeBoundedNumber(value, 0, { min: 0, max: 2500 });
+  if (!number) return 0;
+  return Math.min(2500, Math.ceil(number / PRICE_TIER_STEP_EUR) * PRICE_TIER_STEP_EUR);
+}
+
 function normalizeConsultantPriceEur(consultantOrValue, fallback = 0) {
   if (
     consultantOrValue &&
@@ -383,16 +390,18 @@ function normalizeConsultantPriceEur(consultantOrValue, fallback = 0) {
       min: 0,
       max: 2500
     });
-    if (explicit !== null) return explicit;
+    if (explicit !== null) return roundUpPriceTierEur(explicit);
 
     const legacyBgn = normalizeBoundedNumber(consultantOrValue.priceBgn, null, {
       min: 0,
       max: 5000
     });
-    return legacyBgn === null ? fallback : Math.round((legacyBgn / BGN_PER_EUR) * 100) / 100;
+    return legacyBgn === null ? roundUpPriceTierEur(fallback) : roundUpPriceTierEur(legacyBgn / BGN_PER_EUR);
   }
 
-  return normalizeBoundedNumber(consultantOrValue, fallback, { min: 0, max: 2500 });
+  return roundUpPriceTierEur(
+    normalizeBoundedNumber(consultantOrValue, fallback, { min: 0, max: 2500 })
+  );
 }
 
 function normalizeUserRole(value, fallback = "client") {

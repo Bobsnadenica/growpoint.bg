@@ -26,7 +26,7 @@ Latest production decisions:
 
 - Brand is GrowPoint everywhere user-facing; old CareerLane references should remain only in archival notes or stale-cache cleanup.
 - Public/contact email channels are `contactus@growpoint.bg` and `partners@growpoint.bg`.
-- Pricing is EUR-only in the UI/API contract (`priceEur`). Legacy `priceBgn` records are converted at read time and removed on the next consultant save.
+- Pricing is EUR-only in the UI/API contract (`priceEur`) and should display as clean 50 EUR tiers with no cents. Legacy `priceBgn` records are converted at read time, rounded up to the nearest 50 EUR, and removed on the next consultant save.
 - Registration has two roles only: user/professional or expert profile. Consultant vs mentor is chosen later in the profile editor.
 - Confirmation-code resend must use Cognito `resendSignUpCode`; do not call `signUp` again from "Изпрати нов код".
 - Cognito signup verification currently uses the built-in Cognito sender so code delivery is not blocked by an unverified SES identity. Set `cognito_ses_from_email` only after `contactus@growpoint.bg` or the GrowPoint domain is verified in SES `eu-west-1`.

@@ -177,6 +177,7 @@ const authRoleChoices: Record<
 };
 
 const BGN_PER_EUR = 1.95583;
+const PRICE_TIER_STEP_EUR = 50;
 
 type ConsultantThemeToken = NonNullable<ConsultantProfile["theme"]>;
 
@@ -764,22 +765,27 @@ function getConsultantPriceEur(consultant: ConsultantProfile) {
   const explicitPrice = Number(consultant.priceEur);
 
   if (Number.isFinite(explicitPrice) && explicitPrice > 0) {
-    return explicitPrice;
+    return roundUpPriceTierEur(explicitPrice);
   }
 
   const legacyBgn = Number(legacyPrice);
   if (Number.isFinite(legacyBgn) && legacyBgn > 0) {
-    return Math.round((legacyBgn / BGN_PER_EUR) * 100) / 100;
+    return roundUpPriceTierEur(legacyBgn / BGN_PER_EUR);
   }
 
   return 0;
+}
+
+function roundUpPriceTierEur(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.ceil(value / PRICE_TIER_STEP_EUR) * PRICE_TIER_STEP_EUR;
 }
 
 function formatEuroPrice(value: number) {
   return new Intl.NumberFormat("bg-BG", {
     style: "currency",
     currency: "EUR",
-    maximumFractionDigits: Number.isInteger(value) ? 0 : 2
+    maximumFractionDigits: 0
   }).format(value);
 }
 
