@@ -63,10 +63,40 @@ function readInitialTheme(): ThemePreference {
       return stored;
     }
   } catch {
-    // Storage may be unavailable; fall through to the browser preference.
+    // Storage may be unavailable.
   }
 
-  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+  return "light";
+}
+
+function ThemeToggleArtwork({ theme }: { theme: ThemePreference }) {
+  return (
+    <span className="theme-toggle__track" aria-hidden="true">
+      <span className="theme-toggle__sky theme-toggle__sky--sun">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <circle cx="12" cy="12" r="4.2" />
+          <path d="M12 3.3v2.4M12 18.3v2.4M5.6 5.6l1.7 1.7M16.7 16.7l1.7 1.7M3.3 12h2.4M18.3 12h2.4M5.6 18.4l1.7-1.7M16.7 7.3l1.7-1.7" />
+        </svg>
+      </span>
+      <span className="theme-toggle__sky theme-toggle__sky--moon">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path d="M18.1 15.5A7.6 7.6 0 0 1 8.5 5.9 7.6 7.6 0 1 0 18.1 15.5Z" />
+        </svg>
+      </span>
+      <span className="theme-toggle__thumb">
+        {theme === "dark" ? (
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M18.1 15.5A7.6 7.6 0 0 1 8.5 5.9 7.6 7.6 0 1 0 18.1 15.5Z" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" focusable="false">
+            <circle cx="12" cy="12" r="4.1" />
+            <path d="M12 3.2v2.1M12 18.7v2.1M5.8 5.8l1.5 1.5M16.7 16.7l1.5 1.5M3.2 12h2.1M18.7 12h2.1M5.8 18.2l1.5-1.5M16.7 7.3l1.5-1.5" />
+          </svg>
+        )}
+      </span>
+    </span>
+  );
 }
 
 function RouteExperience() {
@@ -228,7 +258,8 @@ export default function AppShell() {
     }
   }
 
-  const nextThemeLabel = theme === "dark" ? "Светла" : "Тъмна";
+  const nextThemeLabel = theme === "dark" ? "светла" : "тъмна";
+  const currentThemeLabel = theme === "dark" ? "Тъмна" : "Светла";
 
   function toggleTheme() {
     setTheme((value) => (value === "dark" ? "light" : "dark"));
@@ -261,12 +292,14 @@ export default function AppShell() {
 
           <div className="site-header__actions">
             <button
-              className="ghost-button theme-toggle"
+              className={`theme-toggle theme-toggle--${theme}`}
               type="button"
-              aria-label={`Включи ${nextThemeLabel.toLowerCase()} тема`}
+              aria-label={`Включи ${nextThemeLabel} тема`}
+              title={`Включи ${nextThemeLabel} тема`}
               onClick={toggleTheme}
             >
-              {nextThemeLabel}
+              <ThemeToggleArtwork theme={theme} />
+              <span className="visually-hidden">Текуща тема: {currentThemeLabel}</span>
             </button>
             {user ? (
               <>
@@ -346,7 +379,10 @@ export default function AppShell() {
                 className="mobile-menu__link mobile-menu__link--button"
                 onClick={toggleTheme}
               >
-                {nextThemeLabel} тема
+                <span className={`theme-toggle theme-toggle--mobile theme-toggle--${theme}`} aria-hidden="true">
+                  <ThemeToggleArtwork theme={theme} />
+                </span>
+                Включи {nextThemeLabel} тема
               </button>
             </div>
             <div className="mobile-menu__group">
