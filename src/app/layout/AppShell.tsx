@@ -41,8 +41,6 @@ const primaryNavigation = [
 ] as const;
 
 const footerLinks = [
-  { to: "/users", label: "За потребители" },
-  { to: "/auth", label: "Вход" },
   { to: "/about", label: "За нас" },
   { to: "/faq", label: "FAQ" },
   { to: "/contact", label: "Контакти" },
