@@ -8891,12 +8891,122 @@ textarea {
   background: rgba(0, 0, 0, 0.58);
 }
 
+:root[data-theme="dark"] .skip-link {
+  background: #111916;
+  color: var(--text);
+}
+
 :root[data-theme="dark"] .cookie-banner__copy p,
 :root[data-theme="dark"] .panel p,
 :root[data-theme="dark"] .panel li,
 :root[data-theme="dark"] .section-caption,
 :root[data-theme="dark"] .form-note {
   color: var(--text-soft);
+}
+
+:root[data-theme="dark"] .directory-controls,
+:root[data-theme="dark"] .filter-bar {
+  background:
+    linear-gradient(180deg, rgba(27, 38, 33, 0.98), rgba(21, 30, 26, 0.98)),
+    var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    var(--shadow-soft);
+}
+
+:root[data-theme="dark"] .directory-filter-bar {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .search-card label,
+:root[data-theme="dark"] .filter-bar label,
+:root[data-theme="dark"] .form-stack label {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .search-shortcuts__label,
+:root[data-theme="dark"] .directory-hero__next span,
+:root[data-theme="dark"] .consultant-card__fact-grid span,
+:root[data-theme="dark"] .profile-stage__facts span,
+:root[data-theme="dark"] .consultant-card__slots-label {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .shortcut-chip {
+  background: rgba(23, 32, 28, 0.94);
+  border-color: var(--border);
+  color: var(--text-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+:root[data-theme="dark"] .shortcut-chip:hover,
+:root[data-theme="dark"] .shortcut-chip--active {
+  background: rgba(34, 53, 46, 0.98);
+  border-color: rgba(143, 181, 168, 0.62);
+  color: var(--text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 14px 28px rgba(0, 0, 0, 0.24);
+}
+
+:root[data-theme="dark"] .directory-filter-chip {
+  background: rgba(34, 53, 46, 0.96);
+  border-color: rgba(143, 181, 168, 0.46);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .directory-filter-chip--muted {
+  background: rgba(23, 32, 28, 0.9);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .persona-card__code {
+  color: #0f1412;
+}
+
+:root[data-theme="dark"] .example-badge {
+  color: #f7d08a;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(247, 208, 138, 0.38);
+}
+
+:root[data-theme="dark"] .directory-hero__next,
+:root[data-theme="dark"] .consultant-card__fact-grid article,
+:root[data-theme="dark"] .profile-stage__facts article {
+  background: rgba(23, 32, 28, 0.92);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+:root[data-theme="dark"] .consultant-card__fact-grid strong,
+:root[data-theme="dark"] .profile-stage__facts strong,
+:root[data-theme="dark"] .directory-hero__next strong {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .consultant-card__meta {
+  border-color: var(--border);
+  color: var(--text-soft);
+}
+
+:root[data-theme="dark"] .consultant-card__meta li + li::before {
+  color: var(--border-strong);
+}
+
+:root[data-theme="dark"] .skeleton-block,
+:root[data-theme="dark"] .skeleton-line {
+  background: rgba(71, 89, 79, 0.62);
+}
+
+:root[data-theme="dark"] .skeleton-block::after,
+:root[data-theme="dark"] .skeleton-line::after {
+  background: linear-gradient(90deg, transparent, rgba(200, 214, 206, 0.22), transparent);
 }
 
 :root[data-theme="dark"] .primary-button {
