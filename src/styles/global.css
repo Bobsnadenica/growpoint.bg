@@ -4323,8 +4323,7 @@ textarea {
 }
 
 .directory-hero__next span,
-.consultant-card__fact-grid span,
-.profile-stage__facts span {
+.consultant-card__fact-grid span {
   color: var(--muted);
   font-size: 0.7rem;
   font-weight: 800;
@@ -4489,8 +4488,7 @@ textarea {
   font-weight: 700;
 }
 
-.consultant-card__fact-grid,
-.profile-stage__facts {
+.consultant-card__fact-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -4500,8 +4498,7 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.consultant-card__fact-grid article,
-.profile-stage__facts article {
+.consultant-card__fact-grid article {
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -4511,8 +4508,7 @@ textarea {
   background: rgba(248, 251, 254, 0.96);
 }
 
-.consultant-card__fact-grid strong,
-.profile-stage__facts strong {
+.consultant-card__fact-grid strong {
   min-width: 0;
   overflow-wrap: anywhere;
   letter-spacing: 0;
@@ -4800,10 +4796,6 @@ textarea {
 
 .profile-stage__summary {
   max-width: 72ch;
-}
-
-.profile-stage__facts {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .profile-stage__aside {
@@ -8472,7 +8464,6 @@ textarea {
   .consultant-card__fact-grid,
   .auth-progress-list,
   .auth-choice-grid,
-  .profile-stage__facts,
   .persona-grid,
   .journey-grid,
   .pricing-grid,
@@ -9158,8 +9149,7 @@ textarea {
     padding: 18px;
   }
 
-  .consultant-card__fact-grid article,
-  .profile-stage__facts article {
+  .consultant-card__fact-grid article {
     padding: 14px;
   }
 }
@@ -9410,7 +9400,6 @@ textarea {
 :root[data-theme="dark"] .search-shortcuts__label,
 :root[data-theme="dark"] .directory-hero__next span,
 :root[data-theme="dark"] .consultant-card__fact-grid span,
-:root[data-theme="dark"] .profile-stage__facts span,
 :root[data-theme="dark"] .consultant-card__slots-label,
 :root[data-theme="dark"] .admin-card__owner span {
   color: var(--text-soft);
@@ -9456,8 +9445,7 @@ textarea {
 }
 
 :root[data-theme="dark"] .directory-hero__next,
-:root[data-theme="dark"] .consultant-card__fact-grid article,
-:root[data-theme="dark"] .profile-stage__facts article {
+:root[data-theme="dark"] .consultant-card__fact-grid article {
   background: rgba(23, 32, 28, 0.92);
   border-color: var(--border);
   color: var(--text);
@@ -9465,7 +9453,6 @@ textarea {
 }
 
 :root[data-theme="dark"] .consultant-card__fact-grid strong,
-:root[data-theme="dark"] .profile-stage__facts strong,
 :root[data-theme="dark"] .directory-hero__next strong,
 :root[data-theme="dark"] .admin-card__meta dd {
   color: var(--text);

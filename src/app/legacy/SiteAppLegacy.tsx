@@ -1820,12 +1820,6 @@ export function ConsultantPage() {
     consultant.bio ||
     consultant.experienceSummary ||
     "Профилът все още няма описание на работата.";
-  const profileFacts = [
-    { label: "Локация", value: getConsultantLocationLabel(consultant) },
-    { label: "Формат", value: (consultant.sessionModes || []).join(" · ") },
-    { label: "Продължителност", value: getSessionLengthLabel(consultant) },
-    { label: "Цена", value: getConsultantPriceLabel(consultant) }
-  ].filter((fact) => String(fact.value || "").trim());
   const shareUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}${import.meta.env.BASE_URL}consultants/${consultant.slug}/`
@@ -1944,15 +1938,6 @@ export function ConsultantPage() {
                 </div>
 
                 <p className="profile-stage__summary">{profileSummary}</p>
-
-                <div className="profile-stage__facts">
-                  {profileFacts.map((item) => (
-                    <article key={item.label}>
-                      <span>{item.label}</span>
-                      <strong>{item.value}</strong>
-                    </article>
-                  ))}
-                </div>
 
                 <div className="profile-actions">
                   <Link className="ghost-button" to="/users">
@@ -6389,7 +6374,6 @@ function ProfileSnapshotCard({ consultant }: { consultant: ConsultantProfile }) 
   return (
     <section className="panel profile-snapshot" aria-label="Преглед">
       <header className="profile-snapshot__head">
-        <span className="eyebrow">Бърз профил</span>
         {ratingValue ? (
           <span className="profile-snapshot__rating">
             <span aria-hidden="true">★</span> {ratingValue}
