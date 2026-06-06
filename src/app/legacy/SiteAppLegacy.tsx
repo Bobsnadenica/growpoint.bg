@@ -53,6 +53,7 @@ import type {
 } from "../../lib/types";
 
 const HeroAnimation = lazy(() => import("./HeroAnimation"));
+const NOTIFICATIONS_MARKED_READ_EVENT = "growpoint:notifications-marked-read";
 
 async function uploadFileToSignedUrl(
   uploadUrl: string,
@@ -3417,6 +3418,26 @@ export function DashboardPage() {
   >(null);
 
   useEffect(() => {
+    function handleNotificationsMarkedRead(event: Event) {
+      const readAt =
+        event instanceof CustomEvent && typeof event.detail?.readAt === "string"
+          ? event.detail.readAt
+          : new Date().toISOString();
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.readAt ? notification : { ...notification, readAt }
+        )
+      );
+    }
+
+    window.addEventListener(NOTIFICATIONS_MARKED_READ_EVENT, handleNotificationsMarkedRead);
+
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_MARKED_READ_EVENT, handleNotificationsMarkedRead);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!loading && !user) {
       navigate("/auth?redirect=/dashboard");
     }
@@ -3802,8 +3823,12 @@ export function DashboardPage() {
     setNotificationsBusy(true);
     try {
       await api.markMyNotificationsRead(token);
+      const readAt = new Date().toISOString();
       setNotifications((current) =>
-        current.map((n) => (n.readAt ? n : { ...n, readAt: new Date().toISOString() }))
+        current.map((n) => (n.readAt ? n : { ...n, readAt }))
+      );
+      window.dispatchEvent(
+        new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, { detail: { readAt } })
       );
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно маркиране на известията.");

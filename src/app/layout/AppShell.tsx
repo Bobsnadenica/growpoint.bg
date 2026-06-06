@@ -53,6 +53,7 @@ type ThemePreference = "light" | "dark";
 
 const THEME_STORAGE_KEY = "growpoint.theme";
 const BETA_NOTICE_STORAGE_KEY = "growpoint.betaNoticeDismissed";
+const NOTIFICATIONS_MARKED_READ_EVENT = "growpoint:notifications-marked-read";
 
 function readInitialTheme(): ThemePreference {
   if (typeof window === "undefined") return "light";
@@ -422,6 +423,24 @@ export default function AppShell() {
   }, [isAdmin, loading, location.pathname, token, user]);
 
   useEffect(() => {
+    function handleNotificationsMarkedRead(event: Event) {
+      const readAt =
+        event instanceof CustomEvent && typeof event.detail?.readAt === "string"
+          ? event.detail.readAt
+          : new Date().toISOString();
+      setHeaderNotifications((items) =>
+        items.map((item) => (item.readAt ? item : { ...item, readAt }))
+      );
+    }
+
+    window.addEventListener(NOTIFICATIONS_MARKED_READ_EVENT, handleNotificationsMarkedRead);
+
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_MARKED_READ_EVENT, handleNotificationsMarkedRead);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!activeHeaderPanel) return;
 
     function handlePointer(event: MouseEvent) {
@@ -506,6 +525,9 @@ export default function AppShell() {
       const readAt = new Date().toISOString();
       setHeaderNotifications((items) =>
         items.map((item) => (item.readAt ? item : { ...item, readAt }))
+      );
+      window.dispatchEvent(
+        new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, { detail: { readAt } })
       );
     } finally {
       setHeaderNotificationsBusy(false);
