@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -117,6 +117,119 @@ function HeaderIcon({ type }: { type: "notifications" | "messages" }) {
   );
 }
 
+type HeaderPanel = "notifications" | "messages";
+
+function notificationHref(item: NotificationItem) {
+  if (item.href) return item.href;
+  return item.type === "message_received" ? "/dashboard#sessions" : "/dashboard#notifications";
+}
+
+function formatHeaderNotificationTime(iso: string) {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "";
+  const diffSec = Math.round((Date.now() - then) / 1000);
+  if (diffSec < 60) return "току-що";
+  if (diffSec < 3600) return `преди ${Math.round(diffSec / 60)} мин`;
+  if (diffSec < 86400) return `преди ${Math.round(diffSec / 3600)} ч`;
+  if (diffSec < 7 * 86400) return `преди ${Math.round(diffSec / 86400)} дни`;
+  return new Intl.DateTimeFormat("bg-BG", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(iso));
+}
+
+function HeaderNotificationPopover({
+  activePanel,
+  items,
+  unreadCount,
+  busy,
+  onClose,
+  onMarkAllRead
+}: {
+  activePanel: HeaderPanel;
+  items: NotificationItem[];
+  unreadCount: number;
+  busy: boolean;
+  onClose: () => void;
+  onMarkAllRead: () => void | Promise<void>;
+}) {
+  const isMessages = activePanel === "messages";
+  const title = isMessages ? "Съобщения" : "Известия";
+  const fullHref = isMessages ? "/dashboard#sessions" : "/dashboard#notifications";
+  const visibleItems = items.slice(0, 8);
+
+  return (
+    <section
+      id="topbar-notification-popover"
+      className="topbar-popover"
+      role="dialog"
+      aria-label={title}
+    >
+      <header className="topbar-popover__header">
+        <div>
+          <span className="topbar-popover__eyebrow">{title}</span>
+          <strong>
+            {unreadCount ? `${unreadCount} непрочетени` : "Няма непрочетени"}
+          </strong>
+        </div>
+        <button
+          type="button"
+          className="topbar-popover__close"
+          onClick={onClose}
+          aria-label="Затвори"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </header>
+
+      {visibleItems.length ? (
+        <ul className="topbar-popover__list" aria-label={`${title} в горната лента`}>
+          {visibleItems.map((item) => (
+            <li key={item.id}>
+              <Link
+                className={`topbar-popover__item ${item.readAt ? "" : "topbar-popover__item--unread"}`}
+                to={notificationHref(item)}
+                onClick={onClose}
+              >
+                <span className="topbar-popover__dot" aria-hidden="true" />
+                <span className="topbar-popover__copy">
+                  <strong>{item.title}</strong>
+                  <span>{item.body}</span>
+                  <time dateTime={item.createdAt}>{formatHeaderNotificationTime(item.createdAt)}</time>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="topbar-popover__empty">
+          {isMessages
+            ? "Няма нови съобщения. След потвърдена среща разговорите ще се появяват тук."
+            : "Няма нови известия. Резервации, админ съобщения и отзиви ще се появяват тук."}
+        </p>
+      )}
+
+      <footer className="topbar-popover__footer">
+        <Link className="topbar-popover__link" to={fullHref} onClick={onClose}>
+          Виж всички
+        </Link>
+        {unreadCount ? (
+          <button
+            type="button"
+            className="topbar-popover__mark-read"
+            onClick={() => onMarkAllRead()}
+            disabled={busy}
+          >
+            {busy ? "Маркираме..." : "Маркирай прочетени"}
+          </button>
+        ) : null}
+      </footer>
+    </section>
+  );
+}
+
 function RouteExperience() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -155,6 +268,9 @@ export default function AppShell() {
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const [betaNoticeVisible, setBetaNoticeVisible] = useState(readInitialBetaNoticeVisibility);
   const [headerNotifications, setHeaderNotifications] = useState<NotificationItem[]>([]);
+  const [activeHeaderPanel, setActiveHeaderPanel] = useState<HeaderPanel | null>(null);
+  const [headerNotificationsBusy, setHeaderNotificationsBusy] = useState(false);
+  const topbarPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -169,6 +285,7 @@ export default function AppShell() {
 
   useEffect(() => {
     setIsMenuOpen(false);
+    setActiveHeaderPanel(null);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -304,6 +421,34 @@ export default function AppShell() {
     };
   }, [isAdmin, loading, location.pathname, token, user]);
 
+  useEffect(() => {
+    if (!activeHeaderPanel) return;
+
+    function handlePointer(event: MouseEvent) {
+      if (
+        topbarPanelRef.current &&
+        event.target instanceof Node &&
+        !topbarPanelRef.current.contains(event.target)
+      ) {
+        setActiveHeaderPanel(null);
+      }
+    }
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setActiveHeaderPanel(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointer);
+    window.addEventListener("keydown", handleKey);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [activeHeaderPanel]);
+
   async function handleLogout() {
     if (isLoggingOut) {
       return;
@@ -325,6 +470,15 @@ export default function AppShell() {
   const unreadMessages = headerNotifications.filter(
     (item) => !item.readAt && item.type === "message_received"
   ).length;
+  const sortedHeaderNotifications = [...headerNotifications].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  const sortedHeaderMessages = sortedHeaderNotifications.filter(
+    (item) => item.type === "message_received"
+  );
+  const activeHeaderItems =
+    activeHeaderPanel === "messages" ? sortedHeaderMessages : sortedHeaderNotifications;
+  const activeUnreadCount = activeHeaderItems.filter((item) => !item.readAt).length;
 
   function toggleTheme() {
     setTheme((value) => (value === "dark" ? "light" : "dark"));
@@ -337,6 +491,24 @@ export default function AppShell() {
       window.localStorage.setItem(BETA_NOTICE_STORAGE_KEY, "true");
     } catch {
       // localStorage may be disabled.
+    }
+  }
+
+  async function markHeaderNotificationsRead() {
+    if (!token || !user || isAdmin || headerNotificationsBusy) {
+      return;
+    }
+
+    setHeaderNotificationsBusy(true);
+
+    try {
+      await api.markMyNotificationsRead(token);
+      const readAt = new Date().toISOString();
+      setHeaderNotifications((items) =>
+        items.map((item) => (item.readAt ? item : { ...item, readAt }))
+      );
+    } finally {
+      setHeaderNotificationsBusy(false);
     }
   }
 
@@ -386,38 +558,64 @@ export default function AppShell() {
                   </Link>
                 )}
                 {!isAdmin ? (
-                  <>
-                    <Link
+                  <div className="topbar-alert-group" ref={topbarPanelRef}>
+                    <button
                       className="topbar-alert"
-                      to="/dashboard#notifications"
+                      type="button"
                       aria-label={
                         unreadNotifications
                           ? `${unreadNotifications} непрочетени известия`
                           : "Известия"
                       }
+                      aria-haspopup="dialog"
+                      aria-expanded={activeHeaderPanel === "notifications"}
+                      aria-controls="topbar-notification-popover"
                       title="Известия"
+                      onClick={() =>
+                        setActiveHeaderPanel((panel) =>
+                          panel === "notifications" ? null : "notifications"
+                        )
+                      }
                     >
                       <HeaderIcon type="notifications" />
                       {unreadNotifications ? (
                         <span className="topbar-alert__badge">{unreadNotifications}</span>
                       ) : null}
-                    </Link>
-                    <Link
+                    </button>
+                    <button
                       className="topbar-alert"
-                      to="/dashboard#sessions"
+                      type="button"
                       aria-label={
                         unreadMessages
                           ? `${unreadMessages} непрочетени съобщения`
                           : "Съобщения"
                       }
+                      aria-haspopup="dialog"
+                      aria-expanded={activeHeaderPanel === "messages"}
+                      aria-controls="topbar-notification-popover"
                       title="Съобщения"
+                      onClick={() =>
+                        setActiveHeaderPanel((panel) =>
+                          panel === "messages" ? null : "messages"
+                        )
+                      }
                     >
                       <HeaderIcon type="messages" />
                       {unreadMessages ? (
                         <span className="topbar-alert__badge">{unreadMessages}</span>
                       ) : null}
-                    </Link>
-                  </>
+                    </button>
+                    {activeHeaderPanel ? (
+                      <HeaderNotificationPopover
+                        activePanel={activeHeaderPanel}
+                        items={activeHeaderItems}
+                        unreadCount={activeUnreadCount}
+                        busy={headerNotificationsBusy}
+                        onClose={() => setActiveHeaderPanel(null)}
+                        onMarkAllRead={markHeaderNotificationsRead}
+                      />
+                    ) : null}
+                  </div>
                 ) : null}
                 <button
                   className="ghost-button"

@@ -12,6 +12,7 @@ const rootAssetsDir = path.join(projectDir, "assets");
 const rootAdvertisementDir = path.join(rootAssetsDir, "advertisement");
 const deployIndexPath = path.join(projectDir, "index.html");
 const seoDataPath = path.join(projectDir, "src/lib/seo-data.json");
+const envFiles = [".env", ".env.production", ".env.local"];
 
 async function cleanDir(dirPath) {
   await rm(dirPath, { recursive: true, force: true });
@@ -51,8 +52,15 @@ function publicPath(pathname) {
   return normalized === "/" ? "/" : `${normalized}/`;
 }
 
+function encodedPublicPath(pathname) {
+  return publicPath(pathname)
+    .split("/")
+    .map((segment) => (segment ? encodeURIComponent(segment) : ""))
+    .join("/");
+}
+
 function absoluteUrl(siteUrl, pathname) {
-  return `${siteUrl.replace(/\/+$/, "")}${publicPath(pathname)}`;
+  return `${siteUrl.replace(/\/+$/, "")}${encodedPublicPath(pathname)}`;
 }
 
 function routeCanonicalPath(route) {
@@ -61,6 +69,157 @@ function routeCanonicalPath(route) {
 
 function routeRobots(route) {
   return route.index === false ? "noindex,nofollow" : "index,follow,max-image-preview:large";
+}
+
+function stripEnvQuotes(value) {
+  const trimmed = String(value || "").trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+async function readEnvFile(fileName) {
+  try {
+    const contents = await readFile(path.join(projectDir, fileName), "utf8");
+    return contents.split(/\r?\n/).reduce((acc, line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) return acc;
+      const index = trimmed.indexOf("=");
+      const key = trimmed.slice(0, index).trim();
+      const value = stripEnvQuotes(trimmed.slice(index + 1));
+      if (key) acc[key] = value;
+      return acc;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
+async function loadBuildEnv() {
+  const fromFiles = {};
+  for (const fileName of envFiles) {
+    Object.assign(fromFiles, await readEnvFile(fileName));
+  }
+  return { ...fromFiles, ...process.env };
+}
+
+function clipText(value, maxLength = 155) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1).trim()}…`;
+}
+
+function consultantRoleLabel(profileType) {
+  return profileType === "mentor" ? "ментор" : "кариерен консултант";
+}
+
+function consultantDescription(item, seoData) {
+  const primary = clipText(item.headline || item.bio || "", 155);
+  if (primary) return primary;
+
+  const role = consultantRoleLabel(item.profileType);
+  const city = item.city ? ` в ${item.city}` : "";
+  return `Резервирай среща с ${item.name || "експерт"} - ${role}${city} в GrowPoint.`;
+}
+
+function isStablePublicImageUrl(value) {
+  if (!value) return false;
+
+  try {
+    const url = new URL(String(value));
+    return !(
+      url.searchParams.has("X-Amz-Algorithm") ||
+      url.searchParams.has("X-Amz-Signature") ||
+      url.searchParams.has("X-Amz-Expires") ||
+      url.searchParams.has("X-Amz-Security-Token")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function consultantSeoImage(item, seoData) {
+  const candidates = [item.heroUrl, item.avatarUrl];
+  return candidates.find(isStablePublicImageUrl) || seoData.defaultImage;
+}
+
+function consultantRoute(item, seoData) {
+  if (!item || !item.slug || !item.name) return null;
+  const slug = String(item.slug).trim().replace(/^\/+|\/+$/g, "");
+  if (!slug) return null;
+
+  const role = consultantRoleLabel(item.profileType);
+  const updatedAt = item.updatedAt || item.statusUpdatedAt || item.createdAt;
+  const lastmod = updatedAt ? String(updatedAt).slice(0, 10) : new Date().toISOString().slice(0, 10);
+
+  return {
+    path: `/consultants/${slug}`,
+    title: `${item.name} - ${role} | ${seoData.siteName}`,
+    description: consultantDescription(item, seoData),
+    image: consultantSeoImage(item, seoData),
+    schemaType: "ProfilePage",
+    changefreq: "weekly",
+    priority: "0.7",
+    lastmod,
+    index: true,
+    sitemap: true,
+    renderStatic: true
+  };
+}
+
+function mergeRoutes(staticRoutes, dynamicRoutes) {
+  const byPath = new Map();
+
+  for (const route of staticRoutes) {
+    byPath.set(normalizePathname(route.path), route);
+  }
+
+  for (const route of dynamicRoutes) {
+    const key = normalizePathname(route.path);
+    byPath.set(key, { ...(byPath.get(key) || {}), ...route });
+  }
+
+  return Array.from(byPath.values());
+}
+
+async function fetchApprovedConsultantRoutes(seoData) {
+  const env = await loadBuildEnv();
+  const apiBase = String(env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+
+  if (!apiBase) {
+    console.warn("[seo] VITE_API_BASE_URL is not set; using static profile routes only.");
+    return [];
+  }
+
+  try {
+    const response = await fetch(`${apiBase}/consultants`, {
+      headers: { Accept: "application/json" }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GET /consultants returned ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const items = Array.isArray(payload) ? payload : payload.items || [];
+    const routes = items
+      .map((item) => consultantRoute(item, seoData))
+      .filter(Boolean);
+
+    console.log(`[seo] Added ${routes.length} public consultant routes from API.`);
+    return routes;
+  } catch (error) {
+    console.warn(
+      `[seo] Could not load public consultants for static routes: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return [];
+  }
 }
 
 function safeJson(value) {
@@ -255,6 +414,11 @@ async function writeSeoFiles(baseHtml, seoData) {
 
 async function copyBuildOutput({ keepDist }) {
   const seoData = JSON.parse(await readFile(seoDataPath, "utf8"));
+  const dynamicRoutes = await fetchApprovedConsultantRoutes(seoData);
+  const effectiveSeoData = {
+    ...seoData,
+    routes: mergeRoutes(seoData.routes, dynamicRoutes)
+  };
   const preservedAdvertisementDir = path.join(distDir, "__advertisement-preserve");
 
   if (existsSync(rootAdvertisementDir)) {
@@ -276,7 +440,7 @@ async function copyBuildOutput({ keepDist }) {
     await copyIfExists(path.join(distDir, file), path.join(projectDir, file));
   }
 
-  await writeSeoFiles(await readFile(deployIndexPath, "utf8"), seoData);
+  await writeSeoFiles(await readFile(deployIndexPath, "utf8"), effectiveSeoData);
 
   if (!keepDist) {
     await rm(distDir, { recursive: true, force: true });

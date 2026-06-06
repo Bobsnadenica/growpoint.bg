@@ -1491,6 +1491,13 @@ function hasValidPublicMediaUrl(value) {
   }
 }
 
+function hasFutureAvailability(value) {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  return normalizeAvailabilitySlots(value || [], []).some(
+    (item) => new Date(item).getTime() >= cutoff
+  );
+}
+
 function isReasonablePublicNumber(value, min, max) {
   const number = Number(value);
   return Number.isFinite(number) && number >= min && number <= max;
@@ -1519,7 +1526,11 @@ function isVisibleConsultant(consultant) {
   // approved the profile, the public page should not be hidden by automated
   // completeness heuristics. Auto-approved profiles still pass the stricter
   // quality bar below before appearing in the catalog.
-  if (consultant.statusUpdatedAt || consultant.statusUpdatedBy) {
+  if (
+    consultant.profileStatus === "approved" &&
+    consultant.statusSelfApproved !== true &&
+    (consultant.statusUpdatedAt || consultant.statusUpdatedBy)
+  ) {
     return true;
   }
 
@@ -1547,31 +1558,23 @@ function isConsultantProfileReadyForAutoApprove(consultant) {
   const headline = String(consultant.headline || "").trim();
   const bio = String(consultant.bio || "").trim();
   const experienceSummary = String(consultant.experienceSummary || "").trim();
-  const highlights = Array.isArray(consultant.experienceHighlights)
-    ? consultant.experienceHighlights.filter((x) => String(x || "").trim()).length
-    : 0;
-  const specializations = Array.isArray(consultant.specializations)
-    ? consultant.specializations.filter((x) => String(x || "").trim()).length
-    : 0;
-  const languages = Array.isArray(consultant.languages)
-    ? consultant.languages.filter((x) => String(x || "").trim()).length
-    : 0;
-  const availability = Array.isArray(consultant.availability)
-    ? consultant.availability.length
-    : 0;
   const sessionLength = Number(consultant.sessionLengthMinutes);
 
   return (
     name.length >= 2 &&
+    !isPlaceholderPublicText(name) &&
     headline.length >= 10 &&
+    !isPlaceholderPublicText(headline) &&
     bio.length >= 80 &&
+    !isPlaceholderPublicText(bio) &&
     experienceSummary.length >= 20 &&
-    highlights >= 1 &&
-    specializations >= 1 &&
-    languages >= 1 &&
+    !isPlaceholderPublicText(experienceSummary) &&
+    hasUsefulPublicList(consultant.experienceHighlights) &&
+    hasUsefulPublicList(consultant.specializations) &&
+    hasUsefulPublicList(consultant.languages) &&
     Number.isFinite(sessionLength) &&
     sessionLength > 0 &&
-    availability >= 1
+    hasFutureAvailability(consultant.availability)
   );
 }
 
