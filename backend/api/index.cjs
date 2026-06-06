@@ -166,14 +166,18 @@ const NOTIFICATION_TYPES = new Set([
   "booking_cancelled",
   "booking_rescheduled",
   "booking_reminder",
+  "session_confirmed",
+  "message_received",
+  "admin_message",
   "review_received"
 ]);
 
 const NOTIFICATION_KEEP = 50;
+const BOOKING_MESSAGE_KEEP = 200;
 
 async function appendUserNotification(userId, notification) {
-  if (!userId || !notification) return;
-  if (!NOTIFICATION_TYPES.has(notification.type)) return;
+  if (!userId || !notification) return null;
+  if (!NOTIFICATION_TYPES.has(notification.type)) return null;
 
   const payload = {
     id: `n-${randomUUID()}`,
@@ -200,12 +204,14 @@ async function appendUserNotification(userId, notification) {
         }
       })
     );
+    return payload;
   } catch (error) {
     console.error("[notify] append failed", {
       userId,
       type: notification.type,
       error: error?.message || error
     });
+    return null;
   }
 }
 
@@ -1010,6 +1016,73 @@ function normalizeSharedConsultantIds(value, fallback = []) {
   }
 
   return ids;
+}
+
+function collectSharedConsultantIdsFromDocuments(user) {
+  const ids = new Set();
+  const documents = [
+    user?.cvDocument,
+    ...(Array.isArray(user?.documents) ? user.documents : [])
+  ].filter(Boolean);
+
+  for (const doc of documents) {
+    for (const consultantId of normalizeSharedConsultantIds(doc.sharedWithConsultantIds)) {
+      ids.add(consultantId);
+    }
+  }
+
+  return ids;
+}
+
+async function getConfirmedConsultantIdsForClient(clientId) {
+  if (!clientId) return new Set();
+
+  const result = await dynamo.send(
+    new QueryCommand({
+      TableName: env.bookingsTable,
+      IndexName: "client-index",
+      KeyConditionExpression: "clientId = :clientId",
+      ExpressionAttributeValues: {
+        ":clientId": clientId
+      }
+    })
+  );
+
+  return new Set(
+    (result.Items || [])
+      .filter((booking) => booking.status === "confirmed")
+      .map((booking) => booking.consultantId)
+      .filter(Boolean)
+  );
+}
+
+async function assertDocumentSharingAllowed(userId, nextUser, body) {
+  const sharingMayHaveChanged =
+    typeof body.cvDocument !== "undefined" || typeof body.documents !== "undefined";
+
+  if (!sharingMayHaveChanged) {
+    return;
+  }
+
+  const requestedIds = collectSharedConsultantIdsFromDocuments(nextUser);
+
+  if (!requestedIds.size) {
+    return;
+  }
+
+  const allowedIds = await getConfirmedConsultantIdsForClient(userId);
+  const invalid = Array.from(requestedIds).filter(
+    (consultantId) => !allowedIds.has(consultantId)
+  );
+
+  if (invalid.length) {
+    throw Object.assign(
+      new Error(
+        "Можеш да споделяш документи само с консултанти или ментори от потвърдени сесии."
+      ),
+      { statusCode: 403 }
+    );
+  }
 }
 
 function normalizeCvDocument(value, fallback, userId) {
@@ -2193,6 +2266,8 @@ async function updateMeProfile(event) {
     updatedAt: new Date().toISOString()
   };
 
+  await assertDocumentSharingAllowed(claims.sub, nextUser, body);
+
   await dynamo.send(
     new PutCommand({
       TableName: env.usersTable,
@@ -2689,6 +2764,245 @@ async function loadBookingAndConsultant(bookingId) {
     })
   );
   return { booking, consultant: consultantResult.Item || null };
+}
+
+function getBookingSessionEndMs(booking, consultant) {
+  const sessionLengthMinutes =
+    Number(booking?.sessionLengthMinutes) > 0
+      ? Number(booking.sessionLengthMinutes)
+      : Number(consultant?.sessionLengthMinutes) > 0
+        ? Number(consultant.sessionLengthMinutes)
+        : 60;
+  const sessionStartMs = new Date(booking?.scheduledAt || 0).getTime();
+  return sessionStartMs + sessionLengthMinutes * 60 * 1000;
+}
+
+function getBookingParticipantRole({ claims, booking, consultant }) {
+  if (!claims || !booking || !consultant) return null;
+  if (booking.clientId === claims.sub) return "client";
+  if (consultant.ownerUserId === claims.sub) return "consultant";
+  return null;
+}
+
+function normalizeBookingMessages(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item) => item && typeof item === "object" && item.body)
+    .map((item) => ({
+      id: String(item.id || `message-${randomUUID()}`),
+      senderUserId: String(item.senderUserId || ""),
+      senderName: String(item.senderName || "GrowPoint").slice(0, 120),
+      senderRole:
+        item.senderRole === "consultant" || item.senderRole === "admin"
+          ? item.senderRole
+          : "client",
+      body: String(item.body || "").trim().slice(0, 1200),
+      createdAt: String(item.createdAt || new Date().toISOString())
+    }))
+    .filter((item) => item.body)
+    .sort(
+      (left, right) =>
+        new Date(left.createdAt || 0).getTime() -
+        new Date(right.createdAt || 0).getTime()
+    )
+    .slice(-BOOKING_MESSAGE_KEEP);
+}
+
+function getBookingSessionConfirmation(booking) {
+  const stored =
+    booking && typeof booking.sessionConfirmation === "object" && !Array.isArray(booking.sessionConfirmation)
+      ? booking.sessionConfirmation
+      : {};
+
+  return {
+    clientConfirmedAt: String(stored.clientConfirmedAt || ""),
+    consultantConfirmedAt: String(stored.consultantConfirmedAt || "")
+  };
+}
+
+function isBookingSessionConfirmedByBoth(booking) {
+  const confirmation = getBookingSessionConfirmation(booking);
+  return Boolean(confirmation.clientConfirmedAt && confirmation.consultantConfirmedAt);
+}
+
+async function confirmBookingSession(event) {
+  const claims = requireAuth(event);
+  const bookingId = event.pathParameters?.bookingId;
+
+  if (!bookingId) return badRequest("bookingId is required.");
+
+  const { booking, consultant } = await loadBookingAndConsultant(bookingId);
+  if (!booking) return notFound("Booking not found.");
+  if (!consultant) return notFound("Consultant not found.");
+
+  const participantRole = getBookingParticipantRole({ claims, booking, consultant });
+  if (!participantRole) {
+    return forbidden("Not allowed to confirm this session.");
+  }
+
+  if (booking.status !== "confirmed") {
+    return badRequest("Само потвърдени резервации могат да бъдат маркирани като проведени.");
+  }
+
+  const sessionEndMs = getBookingSessionEndMs(booking, consultant);
+  if (sessionEndMs > Date.now()) {
+    return badRequest("Сесията още не е приключила.");
+  }
+
+  const confirmation = getBookingSessionConfirmation(booking);
+  const field =
+    participantRole === "client"
+      ? "clientConfirmedAt"
+      : "consultantConfirmedAt";
+
+  if (confirmation[field]) {
+    return response(200, {
+      ...booking,
+      sessionConfirmation: confirmation
+    });
+  }
+
+  const now = new Date().toISOString();
+  const nextConfirmation = {
+    ...confirmation,
+    [field]: now
+  };
+
+  await dynamo.send(
+    new UpdateCommand({
+      TableName: env.bookingsTable,
+      Key: { bookingId },
+      UpdateExpression: "SET sessionConfirmation = :confirmation",
+      ConditionExpression: "#s = :confirmed",
+      ExpressionAttributeNames: { "#s": "status" },
+      ExpressionAttributeValues: {
+        ":confirmation": nextConfirmation,
+        ":confirmed": "confirmed"
+      }
+    })
+  );
+
+  const updated = {
+    ...booking,
+    sessionConfirmation: nextConfirmation
+  };
+  const otherUserId =
+    participantRole === "client" ? consultant.ownerUserId : booking.clientId;
+  await appendUserNotification(otherUserId, {
+    type: "session_confirmed",
+    title:
+      participantRole === "client"
+        ? `${booking.clientName || "Потребител"} потвърди проведената сесия`
+        : `${consultant.name || booking.consultantName || "Консултант"} потвърди проведената сесия`,
+    body: isBookingSessionConfirmedByBoth(updated)
+      ? "И двете страни потвърдиха срещата. Отзивът вече може да бъде оставен от потребителя."
+      : "Очаква се потвърждение и от другата страна."
+  });
+
+  return response(200, updated);
+}
+
+function assertConfirmedBookingThread({ booking, participantRole }) {
+  if (!participantRole) {
+    throw Object.assign(new Error("Not allowed to access this booking thread."), {
+      statusCode: 403
+    });
+  }
+  if (booking.status !== "confirmed") {
+    throw Object.assign(
+      new Error("Съобщенията са достъпни само за потвърдени сесии."),
+      { statusCode: 400 }
+    );
+  }
+}
+
+async function listBookingMessages(event) {
+  const claims = requireAuth(event);
+  const bookingId = event.pathParameters?.bookingId;
+
+  if (!bookingId) return badRequest("bookingId is required.");
+
+  const { booking, consultant } = await loadBookingAndConsultant(bookingId);
+  if (!booking) return notFound("Booking not found.");
+  if (!consultant) return notFound("Consultant not found.");
+
+  const participantRole = getBookingParticipantRole({ claims, booking, consultant });
+  assertConfirmedBookingThread({ booking, participantRole });
+
+  return response(200, { items: normalizeBookingMessages(booking.messages) });
+}
+
+async function sendBookingMessage(event) {
+  const claims = requireAuth(event);
+  const bookingId = event.pathParameters?.bookingId;
+  const body = parseBody(event);
+
+  if (!bookingId) return badRequest("bookingId is required.");
+
+  const messageBody = String(body.body || "").trim().slice(0, 1200);
+  if (messageBody.length < 1) {
+    return badRequest("Съобщението не може да бъде празно.");
+  }
+
+  const { booking, consultant } = await loadBookingAndConsultant(bookingId);
+  if (!booking) return notFound("Booking not found.");
+  if (!consultant) return notFound("Consultant not found.");
+
+  const participantRole = getBookingParticipantRole({ claims, booking, consultant });
+  assertConfirmedBookingThread({ booking, participantRole });
+
+  const senderUser = await getUserBySub(claims.sub);
+  const message = {
+    id: `message-${randomUUID()}`,
+    senderUserId: claims.sub,
+    senderName:
+      senderUser?.name ||
+      (participantRole === "consultant"
+        ? consultant.name || booking.consultantName
+        : booking.clientName) ||
+      claims.email ||
+      "GrowPoint",
+    senderRole: participantRole,
+    body: messageBody,
+    createdAt: new Date().toISOString()
+  };
+  const nextMessages = normalizeBookingMessages([...(booking.messages || []), message]);
+
+  await dynamo.send(
+    new UpdateCommand({
+      TableName: env.bookingsTable,
+      Key: { bookingId },
+      UpdateExpression: "SET messages = :messages",
+      ConditionExpression: "#s = :confirmed",
+      ExpressionAttributeNames: { "#s": "status" },
+      ExpressionAttributeValues: {
+        ":messages": nextMessages,
+        ":confirmed": "confirmed"
+      }
+    })
+  );
+
+  const otherUserId =
+    participantRole === "client" ? consultant.ownerUserId : booking.clientId;
+  await appendUserNotification(otherUserId, {
+    type: "message_received",
+    title:
+      participantRole === "client"
+        ? `Ново съобщение от ${booking.clientName || "потребител"}`
+        : `Ново съобщение от ${consultant.name || booking.consultantName || "консултант"}`,
+    body: `${messageBody.slice(0, 160)}${messageBody.length > 160 ? "..." : ""}`
+  });
+
+  return response(201, {
+    booking: {
+      ...booking,
+      messages: nextMessages
+    },
+    message
+  });
 }
 
 async function acceptBooking({ claims, bookingId }) {
@@ -3283,19 +3597,18 @@ async function submitReview(event) {
   // created, so the eligibility window can't shift if the consultant edits
   // their session length later. Fall back to the consultant's current value
   // for legacy bookings created before the snapshot was introduced.
-  const sessionLengthMinutes =
-    Number(booking.sessionLengthMinutes) > 0
-      ? Number(booking.sessionLengthMinutes)
-      : Number(consultant.sessionLengthMinutes) > 0
-        ? Number(consultant.sessionLengthMinutes)
-        : 60;
-  const sessionStartMs = new Date(booking.scheduledAt).getTime();
-  const sessionEndMs = sessionStartMs + sessionLengthMinutes * 60 * 1000;
+  const sessionEndMs = getBookingSessionEndMs(booking, consultant);
   const now = Date.now();
 
   if (sessionEndMs > now) {
     return badRequest(
       "Сесията още не е приключила. Можеш да оставиш отзив след края ѝ."
+    );
+  }
+
+  if (!isBookingSessionConfirmedByBoth(booking)) {
+    return badRequest(
+      "Отзив може да бъде оставен след като и потребителят, и консултантът потвърдят, че сесията е проведена."
     );
   }
 
@@ -3711,6 +4024,57 @@ async function setConsultantStatus(event) {
   });
 }
 
+async function adminMessageUser(event) {
+  const claims = requireAdmin(event);
+  const userId = event.pathParameters?.userId;
+  const body = parseBody(event);
+
+  if (!userId) {
+    return badRequest("userId is required.");
+  }
+
+  const subject = normalizeText(
+    body.subject,
+    "Съобщение от екипа на GrowPoint",
+    160
+  );
+  const message = normalizeText(body.message, "", 1200);
+
+  if (message.length < 2) {
+    return badRequest("message is required.");
+  }
+
+  const user = await getUserBySub(userId);
+  if (!user) {
+    return notFound("User not found.");
+  }
+
+  const notification = await appendUserNotification(userId, {
+    type: "admin_message",
+    title: subject,
+    body: message,
+    href: "/dashboard"
+  });
+
+  try {
+    await sendEmail({
+      to: user.email,
+      subject,
+      text:
+        `Здравей, ${user.name || ""},\n\n` +
+        `${message}\n\n` +
+        `Изпратено от администратор на GrowPoint (${claims.email || "админ"}).`
+    });
+  } catch (error) {
+    console.error("[admin] message email failure", error?.message || error);
+  }
+
+  return response(201, {
+    ok: true,
+    notificationId: notification?.id || ""
+  });
+}
+
 function health() {
   return response(200, { ok: true, service: "growpoint-api" }, {
     "Cache-Control": "no-store"
@@ -3764,6 +4128,25 @@ exports.handler = async (event) => {
       return submitReview(event);
     }
 
+    const bookingSessionConfirmMatch = /^\/bookings\/([^/]+)\/session-confirm$/.exec(path);
+    if (method === "POST" && bookingSessionConfirmMatch) {
+      event.pathParameters = {
+        ...(event.pathParameters || {}),
+        bookingId: bookingSessionConfirmMatch[1]
+      };
+      return confirmBookingSession(event);
+    }
+
+    const bookingMessagesMatch = /^\/bookings\/([^/]+)\/messages$/.exec(path);
+    if (bookingMessagesMatch) {
+      event.pathParameters = {
+        ...(event.pathParameters || {}),
+        bookingId: bookingMessagesMatch[1]
+      };
+      if (method === "GET") return listBookingMessages(event);
+      if (method === "POST") return sendBookingMessage(event);
+    }
+
     const bookingRescheduleMatch = /^\/bookings\/([^/]+)\/reschedule$/.exec(path);
     if (method === "PATCH" && bookingRescheduleMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), bookingId: bookingRescheduleMatch[1] };
@@ -3777,6 +4160,15 @@ exports.handler = async (event) => {
     }
 
     if (method === "GET" && path === "/admin/consultants") return listConsultantsForAdmin(event);
+
+    const adminUserMessageMatch = /^\/admin\/users\/([^/]+)\/message$/.exec(path);
+    if (method === "POST" && adminUserMessageMatch) {
+      event.pathParameters = {
+        ...(event.pathParameters || {}),
+        userId: adminUserMessageMatch[1]
+      };
+      return adminMessageUser(event);
+    }
 
     const adminStatusMatch = /^\/admin\/consultants\/([^/]+)\/status$/.exec(path);
     if (method === "PUT" && adminStatusMatch) {

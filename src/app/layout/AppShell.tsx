@@ -314,17 +314,22 @@ export default function AppShell() {
             {user ? (
               <>
                 {isAdmin ? (
-                  <Link className="ghost-button" to="/admin">
-                    Админ
+                  <Link
+                    className="ghost-button user-chip"
+                    to="/admin"
+                    aria-label="Отвори админ панела"
+                  >
+                    Админ панел
                   </Link>
-                ) : null}
-                <Link
-                  className="ghost-button user-chip"
-                  to="/dashboard"
-                  aria-label={`Отвори профила на ${user.name}`}
-                >
-                  {user.name}
-                </Link>
+                ) : (
+                  <Link
+                    className="ghost-button user-chip"
+                    to="/dashboard"
+                    aria-label={`Отвори профила на ${user.name}`}
+                  >
+                    {user.name}
+                  </Link>
+                )}
                 <button
                   className="ghost-button"
                   type="button"
@@ -416,16 +421,17 @@ export default function AppShell() {
                       className="mobile-menu__link"
                       onClick={() => setIsMenuOpen(false)}
                     >
-                      Админ
+                      Админ панел
                     </Link>
-                  ) : null}
-                  <Link
-                    to="/dashboard"
-                    className="mobile-menu__link"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Моят профил
-                  </Link>
+                  ) : (
+                    <Link
+                      to="/dashboard"
+                      className="mobile-menu__link"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Моят профил
+                    </Link>
+                  )}
                   <button
                     type="button"
                     className="mobile-menu__link mobile-menu__link--button"

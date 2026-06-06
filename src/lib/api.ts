@@ -4,6 +4,7 @@ import type {
   AdminConsultantDetail,
   AdminConsultantSummary,
   Booking,
+  BookingMessage,
   ConsultantMediaKind,
   ConsultantProfile,
   ConsultantProfileStatus,
@@ -278,6 +279,30 @@ export const api = {
     );
   },
 
+  async confirmBookingSession(token: string, bookingId: string) {
+    return request<Booking>(
+      `/bookings/${encodeURIComponent(bookingId)}/session-confirm`,
+      { method: "POST" },
+      token
+    );
+  },
+
+  async listBookingMessages(token: string, bookingId: string) {
+    return request<{ items: BookingMessage[] }>(
+      `/bookings/${encodeURIComponent(bookingId)}/messages`,
+      undefined,
+      token
+    );
+  },
+
+  async sendBookingMessage(token: string, bookingId: string, body: string) {
+    return request<{ booking: Booking; message: BookingMessage }>(
+      `/bookings/${encodeURIComponent(bookingId)}/messages`,
+      { method: "POST", body: JSON.stringify({ body }) },
+      token
+    );
+  },
+
   bookingIcsUrl(bookingId: string) {
     return `${config.apiBaseUrl}/bookings/${encodeURIComponent(bookingId)}/ics`;
   },
@@ -444,6 +469,18 @@ export const api = {
     }>(
       `/admin/consultants/${encodeURIComponent(consultantId)}/status`,
       { method: "PUT", body: JSON.stringify({ status }) },
+      token
+    );
+  },
+
+  async adminMessageUser(
+    token: string,
+    userId: string,
+    input: { subject?: string; message: string }
+  ) {
+    return request<{ ok: boolean; notificationId?: string }>(
+      `/admin/users/${encodeURIComponent(userId)}/message`,
+      { method: "POST", body: JSON.stringify(input) },
       token
     );
   }

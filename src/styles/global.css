@@ -1296,6 +1296,32 @@ main {
   flex-wrap: wrap;
 }
 
+.admin-message-form {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+
+.admin-message-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.admin-message-form textarea {
+  min-height: 96px;
+}
+
+.admin-message-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 640px) {
   .admin-stats {
     grid-auto-flow: row;
@@ -7529,6 +7555,63 @@ textarea {
   gap: 8px;
 }
 
+.booking-messages {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+
+.booking-messages__list {
+  display: grid;
+  gap: 8px;
+}
+
+.booking-message {
+  max-width: min(100%, 520px);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.booking-message--own {
+  justify-self: end;
+  border-color: rgba(10, 102, 194, 0.28);
+  background: rgba(235, 244, 254, 0.72);
+}
+
+.booking-message__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.booking-message__meta strong {
+  color: var(--text);
+}
+
+.booking-message p {
+  margin: 4px 0 0;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.booking-messages__form {
+  display: grid;
+  gap: 10px;
+}
+
+.booking-messages__form label {
+  display: grid;
+  gap: 6px;
+}
+
 /* ─── Modals ────────────────────────────────────────────────────────── */
 .modal-backdrop {
   position: fixed;
@@ -7974,8 +8057,8 @@ textarea {
 }
 
 .site-footer {
-  margin-top: 56px;
-  padding: 32px 0 calc(32px + env(safe-area-inset-bottom, 0px));
+  margin-top: 36px;
+  padding: 14px 0 calc(14px + env(safe-area-inset-bottom, 0px));
   background:
     radial-gradient(circle at top left, rgba(37, 99, 235, 0.22), transparent 24%),
     radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.14), transparent 24%),
@@ -8033,10 +8116,11 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 32px;
-  padding-top: 24px;
+  margin-top: 0;
+  padding-top: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.66);
+  min-height: 36px;
 }
 
 .footer-bottom__links {
@@ -8296,8 +8380,8 @@ textarea {
   }
 
   .site-footer {
-    margin-top: 36px;
-    padding: 28px 0 calc(28px + env(safe-area-inset-bottom, 0px));
+    margin-top: 28px;
+    padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
   }
 
   .site-header {
@@ -9173,9 +9257,21 @@ textarea {
 :root[data-theme="dark"] .documents-upload,
 :root[data-theme="dark"] .dashboard-upload-field,
 :root[data-theme="dark"] .availability-composer,
-:root[data-theme="dark"] .availability-pattern {
+:root[data-theme="dark"] .availability-pattern,
+:root[data-theme="dark"] .booking-messages,
+:root[data-theme="dark"] .admin-message-form {
   background: var(--surface-alt);
   border-color: var(--border);
+}
+
+:root[data-theme="dark"] .booking-message {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+:root[data-theme="dark"] .booking-message--own {
+  background: rgba(52, 83, 71, 0.9);
+  border-color: rgba(154, 205, 180, 0.3);
 }
 
 :root[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),

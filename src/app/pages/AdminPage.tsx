@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -57,6 +57,10 @@ export default function AdminPage() {
   const [filter, setFilter] = useState<Filter>("pending");
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [messageTargetId, setMessageTargetId] = useState<string | null>(null);
+  const [adminMessageText, setAdminMessageText] = useState("");
+  const [adminMessageBusy, setAdminMessageBusy] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const reload = useCallback(async () => {
     if (!token) return;
@@ -152,6 +156,7 @@ export default function AdminPage() {
 
     setPendingActionId(item.consultantId);
     setError("");
+    setSuccessMessage("");
     try {
       await api.adminSetConsultantStatus(token, item.consultantId, nextStatus);
       await reload();
@@ -159,6 +164,37 @@ export default function AdminPage() {
       setError(value instanceof Error ? value.message : "Действието не успя.");
     } finally {
       setPendingActionId(null);
+    }
+  }
+
+  async function sendAdminMessage(
+    event: FormEvent<HTMLFormElement>,
+    item: AdminConsultantSummary
+  ) {
+    event.preventDefault();
+    if (!token || !item.ownerUserId || adminMessageBusy) return;
+
+    const message = adminMessageText.trim();
+    if (message.length < 2) {
+      setError("Напиши кратко съобщение до потребителя.");
+      return;
+    }
+
+    setAdminMessageBusy(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      await api.adminMessageUser(token, item.ownerUserId, {
+        subject: "Съобщение от GrowPoint",
+        message
+      });
+      setAdminMessageText("");
+      setMessageTargetId(null);
+      setSuccessMessage(`Съобщението до ${item.ownerEmail || item.name} е изпратено.`);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно изпращане на съобщение.");
+    } finally {
+      setAdminMessageBusy(false);
     }
   }
 
@@ -238,6 +274,9 @@ export default function AdminPage() {
 
           <div role="alert" aria-live="assertive">
             {error ? <div className="panel panel--error">{error}</div> : null}
+          </div>
+          <div role="status" aria-live="polite">
+            {successMessage ? <div className="panel panel--success">{successMessage}</div> : null}
           </div>
 
           {listLoading ? (
@@ -382,6 +421,24 @@ export default function AdminPage() {
                       >
                         Виж и провери
                       </Link>
+                      {item.ownerUserId ? (
+                        <button
+                          className="ghost-button"
+                          type="button"
+                          onClick={() => {
+                            setError("");
+                            setSuccessMessage("");
+                            setAdminMessageText("");
+                            setMessageTargetId((current) =>
+                              current === item.ownerUserId ? null : item.ownerUserId
+                            );
+                          }}
+                        >
+                          {messageTargetId === item.ownerUserId
+                            ? "Скрий съобщение"
+                            : "Съобщение"}
+                        </button>
+                      ) : null}
                       {!isApproved ? (
                         <button
                           className="ghost-button"
@@ -413,6 +470,44 @@ export default function AdminPage() {
                         </button>
                       ) : null}
                     </div>
+                    {messageTargetId === item.ownerUserId ? (
+                      <form
+                        className="admin-message-form"
+                        onSubmit={(event) => sendAdminMessage(event, item)}
+                      >
+                        <label>
+                          Съобщение до {item.ownerEmail || item.name}
+                          <textarea
+                            value={adminMessageText}
+                            rows={4}
+                            maxLength={1200}
+                            placeholder="Напиши ясно и професионално съобщение..."
+                            onChange={(event) => setAdminMessageText(event.target.value)}
+                            disabled={adminMessageBusy}
+                          />
+                        </label>
+                        <div className="admin-message-form__actions">
+                          <button
+                            className="primary-button"
+                            type="submit"
+                            disabled={adminMessageBusy || !adminMessageText.trim()}
+                          >
+                            {adminMessageBusy ? "Изпращаме..." : "Изпрати"}
+                          </button>
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            disabled={adminMessageBusy}
+                            onClick={() => {
+                              setMessageTargetId(null);
+                              setAdminMessageText("");
+                            }}
+                          >
+                            Отказ
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                   </article>
                 );
               })}

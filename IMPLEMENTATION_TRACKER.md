@@ -6,6 +6,38 @@ This file tracks active execution work so the project can be resumed cleanly aft
 
 Improve the public website from prototype UI toward user-test readiness.
 
+## Active Slice: Production Messaging And Review Readiness
+
+Started: 2026-06-06
+
+Status: Completed for this slice.
+
+Scope:
+
+- Keep admin accounts as management-only identities that route to `/admin`, not normal user dashboards.
+- Add confirmed-session booking messages between clients and consultants/mentors.
+- Add admin-to-user messaging from consultant/mentor moderation cards.
+- Restrict user document sharing to consultants/mentors with confirmed sessions.
+- Require both parties to confirm a session happened before the client can leave a review.
+- Add a confirmation field to the Cognito temporary-password/new-password-required flow.
+- Slim the footer row.
+
+Change log:
+
+- 2026-06-06: Added booking `messages` and `sessionConfirmation` contracts.
+- 2026-06-06: Added backend routes for booking messages and session confirmation.
+- 2026-06-06: Added admin `/admin/users/{userId}/message` endpoint with in-app notification plus optional SES email.
+- 2026-06-06: Tightened backend document-sharing validation to confirmed-session consultant IDs.
+- 2026-06-06: Updated dashboard booking cards with message threads, session confirmation actions, and review eligibility hints.
+- 2026-06-06: Updated admin panel cards with a message composer for profile owners.
+- 2026-06-06: Updated project memory with the new production rules.
+
+QA:
+
+- `node --check backend/api/index.cjs` passed.
+- `npm run build` passed.
+- In-app browser smoke passed for `/auth`, `/admin` unauthenticated redirect, home/footer layout, theme toggle, and console health.
+
 ## Active Slice
 
 Started: 2026-05-07

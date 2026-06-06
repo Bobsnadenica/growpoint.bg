@@ -147,7 +147,23 @@ export interface Booking {
   rescheduleCount?: number;
   rescheduledAt?: string;
   rescheduledBy?: "consultant" | "client";
+  sessionConfirmation?: BookingSessionConfirmation;
+  messages?: BookingMessage[];
   review?: BookingReview;
+}
+
+export interface BookingSessionConfirmation {
+  clientConfirmedAt?: string;
+  consultantConfirmedAt?: string;
+}
+
+export interface BookingMessage {
+  id: string;
+  senderUserId: string;
+  senderName: string;
+  senderRole: "client" | "consultant" | "admin";
+  body: string;
+  createdAt: string;
 }
 
 export interface BookingReview {
@@ -171,6 +187,9 @@ export type NotificationType =
   | "booking_cancelled"
   | "booking_rescheduled"
   | "booking_reminder"
+  | "session_confirmed"
+  | "message_received"
+  | "admin_message"
   | "review_received";
 
 export interface NotificationItem {

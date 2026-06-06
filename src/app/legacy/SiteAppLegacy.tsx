@@ -41,6 +41,7 @@ import {
 import { resolvePublicUrl } from "../../lib/url";
 import type {
   Booking,
+  BookingMessage,
   ConsultantMediaKind,
   ConsultantProfile,
   ConsultantProfileType,
@@ -2345,6 +2346,7 @@ export function AuthPage() {
     user,
     token,
     loading,
+    isAdmin,
     register: registerWithAuth,
     confirm: confirmWithAuth,
     resendConfirmationCode,
@@ -2374,6 +2376,7 @@ export function AuthPage() {
     password: "",
     code: "",
     newPassword: "",
+    confirmNewPassword: "",
     role: initialRole as UserRole
   });
 
@@ -2395,7 +2398,11 @@ export function AuthPage() {
   }, [isSocialOnboarding, user]);
 
   if (!loading && user && !isSocialOnboarding) {
-    return <Navigate to={resolvedRedirect} replace />;
+    const nextPath =
+      isAdmin && (resolvedRedirect === "/dashboard" || resolvedRedirect === "/account")
+        ? "/admin"
+        : resolvedRedirect;
+    return <Navigate to={nextPath} replace />;
   }
 
   const activeTab =
@@ -2452,6 +2459,7 @@ export function AuthPage() {
   function switchScreen(next: AuthScreen) {
     clearFeedback();
     setShowPassword(false);
+    setForm((current) => ({ ...current, confirmNewPassword: "" }));
     setScreen(next);
   }
 
@@ -2525,7 +2533,8 @@ export function AuthPage() {
         setForm((current) => ({
           ...current,
           email: value.email || current.email,
-          newPassword: ""
+          newPassword: "",
+          confirmNewPassword: ""
         }));
         setShowPassword(false);
         setScreen("new-password");
@@ -2582,6 +2591,16 @@ export function AuthPage() {
       } finally {
         setSubmitting(false);
       }
+      return;
+    }
+
+    if (!form.confirmNewPassword.trim()) {
+      setError("Повтори новата парола.");
+      return;
+    }
+
+    if (form.newPassword.trim() !== form.confirmNewPassword.trim()) {
+      setError("Двете пароли не съвпадат.");
       return;
     }
 
@@ -2691,7 +2710,12 @@ export function AuthPage() {
         clearPendingBootstrap();
       }
 
-      setForm((current) => ({ ...current, password: "", newPassword: "" }));
+      setForm((current) => ({
+        ...current,
+        password: "",
+        newPassword: "",
+        confirmNewPassword: ""
+      }));
       navigate(resolvedRedirect);
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно задаване на нова парола.");
@@ -2780,7 +2804,13 @@ export function AuthPage() {
         form.newPassword.trim()
       );
       switchScreen("login");
-      setForm((current) => ({ ...current, code: "", newPassword: "", password: "" }));
+      setForm((current) => ({
+        ...current,
+        code: "",
+        newPassword: "",
+        confirmNewPassword: "",
+        password: ""
+      }));
       setMessage("Паролата е обновена. Влез с новата парола.");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно обновяване на паролата.");
@@ -3208,6 +3238,26 @@ export function AuthPage() {
                   autoFocus
                 />
               </label>
+              <label className="auth-password-field">
+                <span className="auth-password-field__label">
+                  Повтори новата парола
+                </span>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={form.confirmNewPassword}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      confirmNewPassword: event.target.value
+                    }))
+                  }
+                  autoComplete="new-password"
+                  placeholder="Въведи паролата отново"
+                  minLength={8}
+                  required
+                  disabled={submitting}
+                />
+              </label>
               <button className="primary-button" type="submit" disabled={submitting}>
                 {submitting ? "Запазваме..." : "Запази и влез"}
               </button>
@@ -3344,7 +3394,7 @@ async function fetchProfileWithRetry(token: string) {
 }
 
 export function DashboardPage() {
-  const { user, token, loading, logout } = useAuth();
+  const { user, token, loading, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [consultantProfile, setConsultantProfile] = useState<ConsultantProfile | null>(null);
@@ -3370,6 +3420,10 @@ export function DashboardPage() {
   const [rescheduleModalBooking, setRescheduleModalBooking] = useState<Booking | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
+  const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
+  const [openMessageBookingId, setOpenMessageBookingId] = useState<string | null>(null);
+  const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
+  const [messageSendingId, setMessageSendingId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [accountActionLoading, setAccountActionLoading] = useState<
@@ -3383,7 +3437,13 @@ export function DashboardPage() {
   }, [loading, navigate, user]);
 
   useEffect(() => {
-    if (!token) {
+    if (!loading && user && isAdmin) {
+      navigate("/admin", { replace: true });
+    }
+  }, [isAdmin, loading, navigate, user]);
+
+  useEffect(() => {
+    if (!token || isAdmin) {
       return;
     }
 
@@ -3434,7 +3494,7 @@ export function DashboardPage() {
     return () => {
       mounted = false;
     };
-  }, [dashboardReloadKey, token]);
+  }, [dashboardReloadKey, isAdmin, token]);
 
   useEffect(() => {
     setConsultantAvailability(getUpcomingAvailabilitySlots(consultantProfile?.availability || []));
@@ -3471,6 +3531,10 @@ export function DashboardPage() {
         </div>
       </section>
     );
+  }
+
+  if (isAdmin) {
+    return <Navigate to="/admin" replace />;
   }
 
   if (dashboardLoading && !profile) {
@@ -3637,6 +3701,52 @@ export function DashboardPage() {
       setError(value instanceof Error ? value.message : "Неуспешно преместване.");
     } finally {
       setRescheduleSubmitting(false);
+    }
+  }
+
+  async function confirmSessionAction(bookingId: string) {
+    if (!token || confirmingSessionId) return;
+    setConfirmingSessionId(bookingId);
+    setError("");
+    setMessage("");
+    try {
+      const updated = await api.confirmBookingSession(token, bookingId);
+      setBookings((current) =>
+        current.map((item) => (item.bookingId === bookingId ? updated : item))
+      );
+      setMessage("Потвърждението за проведена сесия е записано.");
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно потвърждение на сесията.");
+    } finally {
+      setConfirmingSessionId(null);
+    }
+  }
+
+  async function sendBookingMessageAction(bookingId: string) {
+    if (!token || messageSendingId) return;
+    const body = (messageDrafts[bookingId] || "").trim();
+    if (!body) {
+      setError("Напиши съобщение преди изпращане.");
+      return;
+    }
+
+    setMessageSendingId(bookingId);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api.sendBookingMessage(token, bookingId, body);
+      setBookings((current) =>
+        current.map((item) =>
+          item.bookingId === bookingId ? result.booking : item
+        )
+      );
+      setMessageDrafts((current) => ({ ...current, [bookingId]: "" }));
+      setOpenMessageBookingId(bookingId);
+      setMessage("Съобщението е изпратено.");
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно изпращане на съобщение.");
+    } finally {
+      setMessageSendingId(null);
     }
   }
 
@@ -4017,6 +4127,18 @@ export function DashboardPage() {
           }))
           .sort((left, right) => (right.match?.score || 0) - (left.match?.score || 0))
           .slice(0, 3)
+      : [];
+  const confirmedSessionConsultantIds = new Set(
+    bookings
+      .filter((booking) => booking.status === "confirmed")
+      .map((booking) => booking.consultantId)
+      .filter(Boolean)
+  );
+  const confirmedSessionShareTargets =
+    profile.role === "client"
+      ? directoryConsultants.filter((consultant) =>
+          confirmedSessionConsultantIds.has(consultant.consultantId)
+        )
       : [];
   const availabilityPresetOptions = [
     buildAvailabilityPreset(1, 9),
@@ -4901,7 +5023,7 @@ export function DashboardPage() {
               <UserDocumentList
                 cvDocument={profile.cvDocument}
                 documents={profile.documents || []}
-                shareTargets={profile.role === "client" ? directoryConsultants : []}
+                shareTargets={confirmedSessionShareTargets}
                 onDownload={downloadDocument}
                 onRemove={removeDocument}
                 onShareChange={updateDocumentSharing}
@@ -5617,14 +5739,33 @@ export function DashboardPage() {
               const REVIEW_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
               const reviewWindowOpen =
                 isConfirmed && sessionEnded && now - sessionEndMs <= REVIEW_WINDOW_MS;
+              const sessionConfirmation = booking.sessionConfirmation || {};
+              const clientConfirmedSession = Boolean(sessionConfirmation.clientConfirmedAt);
+              const consultantConfirmedSession = Boolean(
+                sessionConfirmation.consultantConfirmedAt
+              );
+              const bothConfirmedSession =
+                clientConfirmedSession && consultantConfirmedSession;
+              const currentUserConfirmedSession = consultantView
+                ? consultantConfirmedSession
+                : clientConfirmedSession;
               const canCancel = (isPending || isConfirmed) && !isPast;
               const canReschedule = (isPending || isConfirmed) && !isPast;
               const canDecide = consultantView && isPending && !isPast;
               const canDownloadIcs = isConfirmed && !isPast;
+              const canConfirmSession =
+                isConfirmed && sessionEnded && !currentUserConfirmedSession;
+              const canMessage = isConfirmed;
               const canReview =
-                !consultantView && reviewWindowOpen && !booking.review;
+                !consultantView && reviewWindowOpen && bothConfirmedSession && !booking.review;
               const reviewPendingHint =
                 !consultantView && isConfirmed && !sessionEnded && !booking.review;
+              const reviewConfirmationHint =
+                !consultantView &&
+                isConfirmed &&
+                sessionEnded &&
+                !bothConfirmedSession &&
+                !booking.review;
               const reviewExpiredHint =
                 !consultantView &&
                 isConfirmed &&
@@ -5632,6 +5773,11 @@ export function DashboardPage() {
                 !booking.review &&
                 now - sessionEndMs > REVIEW_WINDOW_MS;
               const isDeciding = decidingBookingId === booking.bookingId;
+              const bookingMessages = Array.isArray(booking.messages)
+                ? (booking.messages as BookingMessage[])
+                : [];
+              const messageDraft = messageDrafts[booking.bookingId] || "";
+              const threadOpen = openMessageBookingId === booking.bookingId;
               return (
                 <article className="booking-item" key={booking.bookingId}>
                   <div className="booking-item__main">
@@ -5669,6 +5815,19 @@ export function DashboardPage() {
                         Възможност за отзив след {formatDate(new Date(sessionEndMs).toISOString())}.
                       </p>
                     ) : null}
+                    {isConfirmed && sessionEnded ? (
+                      <p className="form-note">
+                        Проведена сесия: потребител{" "}
+                        {clientConfirmedSession ? "потвърди" : "чака"} · консултант{" "}
+                        {consultantConfirmedSession ? "потвърди" : "чака"}
+                      </p>
+                    ) : null}
+                    {reviewConfirmationHint ? (
+                      <p className="form-note">
+                        Отзивът ще бъде активен след като и двете страни потвърдят, че
+                        срещата е проведена.
+                      </p>
+                    ) : null}
                     {reviewExpiredHint ? (
                       <p className="form-note">
                         Срокът за отзив е изтекъл (60 дни след сесията).
@@ -5691,6 +5850,21 @@ export function DashboardPage() {
                           ))}
                         </div>
                       </div>
+                    ) : null}
+                    {canMessage && threadOpen ? (
+                      <BookingMessages
+                        messages={bookingMessages}
+                        currentUserId={user.id}
+                        draft={messageDraft}
+                        sending={messageSendingId === booking.bookingId}
+                        onDraftChange={(value) =>
+                          setMessageDrafts((current) => ({
+                            ...current,
+                            [booking.bookingId]: value
+                          }))
+                        }
+                        onSend={() => sendBookingMessageAction(booking.bookingId)}
+                      />
                     ) : null}
                   </div>
                   <div className="booking-item__actions">
@@ -5733,6 +5907,33 @@ export function DashboardPage() {
                         onClick={() => downloadBookingIcs(booking.bookingId)}
                       >
                         Добави в календара
+                      </button>
+                    ) : null}
+                    {canMessage ? (
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() =>
+                          setOpenMessageBookingId((current) =>
+                            current === booking.bookingId ? null : booking.bookingId
+                          )
+                        }
+                      >
+                        {threadOpen
+                          ? "Скрий съобщения"
+                          : `Съобщения${bookingMessages.length ? ` (${bookingMessages.length})` : ""}`}
+                      </button>
+                    ) : null}
+                    {canConfirmSession ? (
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        disabled={confirmingSessionId === booking.bookingId}
+                        onClick={() => confirmSessionAction(booking.bookingId)}
+                      >
+                        {confirmingSessionId === booking.bookingId
+                          ? "Потвърждаваме..."
+                          : "Потвърди проведена сесия"}
                       </button>
                     ) : null}
                     {canReview ? (
@@ -5922,6 +6123,9 @@ const NOTIFICATION_ICONS: Record<NotificationItem["type"], string> = {
   booking_cancelled: "⛔",
   booking_rescheduled: "🔁",
   booking_reminder: "⏰",
+  session_confirmed: "✓",
+  message_received: "✉",
+  admin_message: "!",
   review_received: "⭐"
 };
 
@@ -5992,6 +6196,78 @@ function NotificationsPanel({
         ))}
       </ul>
     </section>
+  );
+}
+
+function BookingMessages({
+  messages,
+  currentUserId,
+  draft,
+  sending,
+  onDraftChange,
+  onSend
+}: {
+  messages: BookingMessage[];
+  currentUserId: string;
+  draft: string;
+  sending: boolean;
+  onDraftChange: (value: string) => void;
+  onSend: () => void | Promise<void>;
+}) {
+  const ordered = [...messages].sort(
+    (left, right) =>
+      new Date(left.createdAt || 0).getTime() -
+      new Date(right.createdAt || 0).getTime()
+  );
+
+  return (
+    <div className="booking-messages" aria-label="Съобщения за сесията">
+      <div className="booking-messages__list">
+        {ordered.length ? (
+          ordered.slice(-20).map((message) => {
+            const own = message.senderUserId === currentUserId;
+            return (
+              <div
+                className={`booking-message ${own ? "booking-message--own" : ""}`}
+                key={message.id}
+              >
+                <div className="booking-message__meta">
+                  <strong>{own ? "Ти" : message.senderName}</strong>
+                  <span>{formatRelativeBg(message.createdAt)}</span>
+                </div>
+                <p>{message.body}</p>
+              </div>
+            );
+          })
+        ) : (
+          <p className="form-note">
+            Все още няма съобщения. Пиши само конкретно за потвърдената сесия.
+          </p>
+        )}
+      </div>
+      <form
+        className="booking-messages__form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSend();
+        }}
+      >
+        <label>
+          <span className="visually-hidden">Ново съобщение</span>
+          <textarea
+            value={draft}
+            rows={3}
+            maxLength={1200}
+            placeholder="Напиши кратко съобщение..."
+            onChange={(event) => onDraftChange(event.target.value)}
+            disabled={sending}
+          />
+        </label>
+        <button className="primary-button" type="submit" disabled={sending || !draft.trim()}>
+          {sending ? "Изпращаме..." : "Изпрати"}
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -6628,7 +6904,7 @@ function UserDocumentList({
               {shareTargets.length || sharedIds.length ? (
                 <div className="profile-documents__sharing">
                   <div className="profile-documents__share-head">
-                    <span>Споделяне</span>
+                    <span>Споделяне с потвърдени сесии</span>
                     <strong>
                       {sharedIds.length
                         ? `${sharedIds.length} ${sharedIds.length === 1 ? "профил" : "профила"}`
@@ -6671,7 +6947,7 @@ function UserDocumentList({
                         }
                         aria-label={`Избери консултант за ${doc.fileName}`}
                       >
-                        <option value="">Избери консултант или ментор</option>
+                        <option value="">Избери от потвърдените сесии</option>
                         {availableShareTargets.map((consultant) => (
                           <option key={consultant.consultantId} value={consultant.consultantId}>
                             {consultant.name}

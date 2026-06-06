@@ -4,6 +4,7 @@ Review date: 2026-05-06
 Domain migration review: 2026-06-04
 Production-readiness follow-up: 2026-06-04
 Implementation pass: 2026-06-05
+Production collaboration pass: 2026-06-06
 Workspace: `/Users/privileged/Projects/growpoint.bg/growpoint.bg`
 
 This file is the working memory for taking GrowPoint from early-stage prototype to a professional, production-ready user test. It should be used as the execution plan in future implementation sessions.
@@ -37,7 +38,14 @@ Latest production decisions:
 - The desktop theme toggle belongs at the far right of the header, after `Изход` or `Вход / Регистрация`.
 - Uploaded profile photos should open in a full-screen, accessible lightbox from profile/dashboard/edit-preview surfaces. Directory cards remain navigation links unless their card structure is explicitly refactored.
 - Cognito login must handle the temporary-password/new-password-required challenge with a dedicated password-change screen, separate from forgotten-password email-code reset.
+- The temporary-password/new-password-required screen must collect the new password twice before submitting to Cognito.
+- Admin Cognito users are management-only accounts. They should use `/admin` for approval/deletion/messaging workflows and should not be forced through `/me/profile` or a normal user dashboard.
 - Consultant profile ownership is one-profile-per-consultant. If duplicate DynamoDB consultant rows exist for one owner, frontend/backend/admin should use the most complete, latest canonical profile and not an old empty draft.
+- In-app notifications now cover booking requests, status changes, reminders, session confirmations, booking-thread messages, admin messages, and received reviews. Notifications are stored on the user profile and capped to the latest 50.
+- Booking messages are scoped to the booking record, capped to the latest 200 messages, and are available only to the client and consultant owner after the booking is confirmed.
+- User document sharing is allowed only with consultants/mentors from confirmed sessions. The frontend only offers confirmed-session targets, and the backend rejects manual sharing to unrelated consultant IDs.
+- Reviews require a confirmed booking, the session time to have passed, and both the client and consultant to confirm that the session was held. The review window remains 60 days after session end.
+- Admins can message consultant/mentor profile owners from the admin panel. Messages are delivered as in-app notifications and mirrored by email when SES is configured.
 - Subtle animated particles may be used only as optimized public-page background polish. They must stay out of admin/dashboard work surfaces, pause in hidden tabs, and respect reduced-motion preferences.
 - Backend emails use direct BrowserRouter URLs such as `/dashboard/` and `/users/`, not old hash routes.
 - DynamoDB now has point-in-time recovery enabled in Terraform, and public consultant listing can use `profile-status-index` with bounded-scan fallback during rollout.
