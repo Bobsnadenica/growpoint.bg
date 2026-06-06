@@ -581,6 +581,46 @@ resource "aws_apigatewayv2_route" "me_profile_put" {
   authorization_type = "JWT"
 }
 
+resource "aws_apigatewayv2_route" "me_data_export" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /me/data-export"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "me_delete" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "DELETE /me"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "me_notifications_get" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /me/notifications"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "me_notifications_mark_read" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /me/notifications/mark-read"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "me_document_download_url" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /me/documents/download-url"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
 resource "aws_apigatewayv2_route" "upload_url" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "POST /me/cv/upload-url"
@@ -613,6 +653,54 @@ resource "aws_apigatewayv2_route" "bookings_cancel" {
   authorization_type = "JWT"
 }
 
+resource "aws_apigatewayv2_route" "bookings_reschedule" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "PATCH /bookings/{bookingId}/reschedule"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "bookings_review" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /bookings/{bookingId}/review"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "bookings_session_confirm" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /bookings/{bookingId}/session-confirm"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "bookings_messages_get" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /bookings/{bookingId}/messages"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "bookings_messages_post" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /bookings/{bookingId}/messages"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "bookings_ics" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /bookings/{bookingId}/ics"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
 resource "aws_apigatewayv2_route" "admin_consultants_list" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "GET /admin/consultants"
@@ -632,6 +720,14 @@ resource "aws_apigatewayv2_route" "admin_consultant_status" {
 resource "aws_apigatewayv2_route" "admin_consultant_get" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "GET /admin/consultants/{consultantId}"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "admin_user_message" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /admin/users/{userId}/message"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
   authorization_type = "JWT"

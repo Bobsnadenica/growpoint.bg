@@ -3396,6 +3396,7 @@ async function fetchProfileWithRetry(token: string) {
 export function DashboardPage() {
   const { user, token, loading, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const dashboardLocation = useLocation();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [consultantProfile, setConsultantProfile] = useState<ConsultantProfile | null>(null);
   const [directoryConsultants, setDirectoryConsultants] = useState<ConsultantProfile[]>([]);
@@ -3499,6 +3500,20 @@ export function DashboardPage() {
   useEffect(() => {
     setConsultantAvailability(getUpcomingAvailabilitySlots(consultantProfile?.availability || []));
   }, [consultantProfile]);
+
+  useEffect(() => {
+    if (!profile || !dashboardLocation.hash) {
+      return;
+    }
+
+    const targetId = dashboardLocation.hash.replace(/^#/, "");
+    if (!targetId) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => scrollToDashboardSection(targetId), 80);
+    return () => window.clearTimeout(timeout);
+  }, [bookings.length, dashboardLocation.hash, notifications.length, profile]);
 
   // NOTE: All hooks (useState/useEffect/useMemo) must live above the early
   // returns below. The Rules of Hooks require a consistent hook count on
@@ -4523,13 +4538,11 @@ export function DashboardPage() {
             </div>
           </section>
 
-          {notifications.length ? (
-            <NotificationsPanel
-              notifications={notifications}
-              busy={notificationsBusy}
-              onMarkAllRead={markNotificationsReadAction}
-            />
-          ) : null}
+          <NotificationsPanel
+            notifications={notifications}
+            busy={notificationsBusy}
+            onMarkAllRead={markNotificationsReadAction}
+          />
 
           {profile.role === "client" ? (
             <section className="panel" id="matches">
@@ -6178,8 +6191,9 @@ function NotificationsPanel({
           </button>
         ) : null}
       </header>
-      <ul className="notifications-list" aria-label="Списък с известия">
-        {visible.map((n) => (
+      {visible.length ? (
+        <ul className="notifications-list" aria-label="Списък с известия">
+          {visible.map((n) => (
           <li
             key={n.id}
             className={`notifications-item ${n.readAt ? "" : "notifications-item--unread"}`}
@@ -6193,8 +6207,13 @@ function NotificationsPanel({
               <span className="form-note">{formatRelativeBg(n.createdAt)}</span>
             </div>
           </li>
-        ))}
-      </ul>
+          ))}
+        </ul>
+      ) : (
+        <p className="form-note">
+          Все още няма известия. Нови резервации, съобщения и админ съобщения ще се показват тук.
+        </p>
+      )}
     </section>
   );
 }

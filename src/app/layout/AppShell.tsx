@@ -10,6 +10,7 @@ import {
 } from "../../lib/auth-flow";
 import { config } from "../../lib/config";
 import { applyRouteSeo } from "../../lib/seo";
+import type { NotificationItem } from "../../lib/types";
 import AboutPage from "../pages/AboutPage";
 import AccountPage from "../pages/AccountPage";
 import AdminConsultantPreviewPage from "../pages/AdminConsultantPreviewPage";
@@ -98,6 +99,24 @@ function ThemeToggleArtwork({ theme }: { theme: ThemePreference }) {
   );
 }
 
+function HeaderIcon({ type }: { type: "notifications" | "messages" }) {
+  if (type === "messages") {
+    return (
+      <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+        <path d="M4.5 6.5h15v11h-15z" />
+        <path d="m5.2 7.1 6.8 5.6 6.8-5.6" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      <path d="M18 9.8a6 6 0 0 0-12 0c0 4-1.8 5.2-2.3 5.8h16.6C19.8 15 18 13.8 18 9.8Z" />
+      <path d="M9.5 18.2a2.7 2.7 0 0 0 5 0" />
+    </svg>
+  );
+}
+
 function RouteExperience() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -135,6 +154,7 @@ export default function AppShell() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const [betaNoticeVisible, setBetaNoticeVisible] = useState(readInitialBetaNoticeVisibility);
+  const [headerNotifications, setHeaderNotifications] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -253,6 +273,37 @@ export default function AppShell() {
     };
   }, [loading, location.key, navigate, token, user]);
 
+  useEffect(() => {
+    if (loading || !user || !token || isAdmin) {
+      setHeaderNotifications([]);
+      return;
+    }
+
+    let cancelled = false;
+    let intervalId = 0;
+
+    async function loadHeaderNotifications() {
+      try {
+        const result = await api.listMyNotifications(token);
+        if (!cancelled) {
+          setHeaderNotifications(result.items || []);
+        }
+      } catch {
+        if (!cancelled) {
+          setHeaderNotifications([]);
+        }
+      }
+    }
+
+    void loadHeaderNotifications();
+    intervalId = window.setInterval(loadHeaderNotifications, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [isAdmin, loading, location.pathname, token, user]);
+
   async function handleLogout() {
     if (isLoggingOut) {
       return;
@@ -270,6 +321,10 @@ export default function AppShell() {
 
   const nextThemeLabel = theme === "dark" ? "светла" : "тъмна";
   const currentThemeLabel = theme === "dark" ? "Тъмна" : "Светла";
+  const unreadNotifications = headerNotifications.filter((item) => !item.readAt).length;
+  const unreadMessages = headerNotifications.filter(
+    (item) => !item.readAt && item.type === "message_received"
+  ).length;
 
   function toggleTheme() {
     setTheme((value) => (value === "dark" ? "light" : "dark"));
@@ -330,6 +385,40 @@ export default function AppShell() {
                     {user.name}
                   </Link>
                 )}
+                {!isAdmin ? (
+                  <>
+                    <Link
+                      className="topbar-alert"
+                      to="/dashboard#notifications"
+                      aria-label={
+                        unreadNotifications
+                          ? `${unreadNotifications} непрочетени известия`
+                          : "Известия"
+                      }
+                      title="Известия"
+                    >
+                      <HeaderIcon type="notifications" />
+                      {unreadNotifications ? (
+                        <span className="topbar-alert__badge">{unreadNotifications}</span>
+                      ) : null}
+                    </Link>
+                    <Link
+                      className="topbar-alert"
+                      to="/dashboard#sessions"
+                      aria-label={
+                        unreadMessages
+                          ? `${unreadMessages} непрочетени съобщения`
+                          : "Съобщения"
+                      }
+                      title="Съобщения"
+                    >
+                      <HeaderIcon type="messages" />
+                      {unreadMessages ? (
+                        <span className="topbar-alert__badge">{unreadMessages}</span>
+                      ) : null}
+                    </Link>
+                  </>
+                ) : null}
                 <button
                   className="ghost-button"
                   type="button"
@@ -432,6 +521,24 @@ export default function AppShell() {
                       Моят профил
                     </Link>
                   )}
+                  {!isAdmin ? (
+                    <>
+                      <Link
+                        to="/dashboard#notifications"
+                        className="mobile-menu__link"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        Известия{unreadNotifications ? ` (${unreadNotifications})` : ""}
+                      </Link>
+                      <Link
+                        to="/dashboard#sessions"
+                        className="mobile-menu__link"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        Съобщения{unreadMessages ? ` (${unreadMessages})` : ""}
+                      </Link>
+                    </>
+                  ) : null}
                   <button
                     type="button"
                     className="mobile-menu__link mobile-menu__link--button"

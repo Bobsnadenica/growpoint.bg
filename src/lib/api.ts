@@ -176,7 +176,7 @@ export const api = {
 
   async getConsultant(slug: string) {
     requireBackend();
-    return request<ConsultantProfile>(`/consultants/${slug}`);
+    return request<ConsultantProfile>(`/consultants/${encodeURIComponent(slug)}`);
   },
 
   async bootstrapUser(token: string, input: BootstrapInput) {

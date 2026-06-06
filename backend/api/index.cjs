@@ -228,13 +228,14 @@ async function getUserBySub(userId) {
 }
 
 async function getConsultantBySlug(slug) {
+  const normalizedSlug = normalizeSlug(decodePathSegment(slug), String(slug || ""));
   const result = await dynamo.send(
     new QueryCommand({
       TableName: env.consultantsTable,
       IndexName: "slug-index",
       KeyConditionExpression: "slug = :slug",
       ExpressionAttributeValues: {
-        ":slug": slug
+        ":slug": normalizedSlug
       },
       Limit: 5
     })
@@ -1199,6 +1200,14 @@ function normalizeSlug(value, fallback = "") {
   return normalized || fallback || "";
 }
 
+function decodePathSegment(value) {
+  try {
+    return decodeURIComponent(String(value || ""));
+  } catch {
+    return String(value || "");
+  }
+}
+
 function validateUploadRequest({ kind, contentType, fileSize }) {
   const safeContentType = String(contentType || "").trim().toLowerCase();
   const safeFileSize = Number(fileSize || 0);
@@ -1492,25 +1501,38 @@ function isVisibleConsultant(consultant) {
   if (consultant.isPublic === false) return false;
   const status = consultant.profileStatus || "pending";
   if (!VISIBLE_CONSULTANT_STATUSES.has(status)) return false;
-  // Minimum quality bar — empty or junk profiles never appear in the public
-  // catalog even when their flags read public+approved. Stops the catalog
-  // from leaking half-set-up accounts or stale legacy rows.
+  if (consultant.deletionScheduledAt || consultant.anonymizedAt) return false;
+
   const name = String(consultant.name || "").trim();
   const headline = String(consultant.headline || "").trim();
   const bio = String(consultant.bio || "").trim();
   const experienceSummary = String(consultant.experienceSummary || "").trim();
-  if (name.length < 2 || isPlaceholderPublicText(name)) return false;
+
+  if (name.length < 2) return false;
+  if (!normalizeSlug(consultant.slug, "")) return false;
+  if (!hasValidPublicMediaUrl(consultant.avatarUrl)) return false;
+  if (!hasValidPublicMediaUrl(consultant.heroUrl)) return false;
+  if (!isReasonablePublicNumber(normalizeConsultantPriceEur(consultant), 0, 2500)) return false;
+  if (!isReasonablePublicNumber(consultant.sessionLengthMinutes || 60, 15, 240)) return false;
+
+  // Manual admin approval is authoritative: if an admin has reviewed and
+  // approved the profile, the public page should not be hidden by automated
+  // completeness heuristics. Auto-approved profiles still pass the stricter
+  // quality bar below before appearing in the catalog.
+  if (consultant.statusUpdatedAt || consultant.statusUpdatedBy) {
+    return true;
+  }
+
+  // Minimum quality bar for auto-approved profiles — empty or junk profiles
+  // should not appear only because their flags read public+approved.
+  if (isPlaceholderPublicText(name)) return false;
   if (headline.length < 10 || isPlaceholderPublicText(headline)) return false;
   if (bio.length < 80 || isPlaceholderPublicText(bio)) return false;
   if (experienceSummary.length < 20 || isPlaceholderPublicText(experienceSummary)) return false;
   if (!hasUsefulPublicList(consultant.languages)) return false;
   if (!hasUsefulPublicList(consultant.specializations)) return false;
   if (!hasUsefulPublicList(consultant.sessionModes)) return false;
-  if (!hasValidPublicMediaUrl(consultant.avatarUrl)) return false;
-  if (!hasValidPublicMediaUrl(consultant.heroUrl)) return false;
   if (!isReasonablePublicNumber(consultant.experienceYears || 0, 0, 70)) return false;
-  if (!isReasonablePublicNumber(normalizeConsultantPriceEur(consultant), 0, 2500)) return false;
-  if (!isReasonablePublicNumber(consultant.sessionLengthMinutes || 60, 15, 240)) return false;
   return true;
 }
 

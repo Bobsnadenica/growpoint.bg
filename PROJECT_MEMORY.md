@@ -5,6 +5,7 @@ Domain migration review: 2026-06-04
 Production-readiness follow-up: 2026-06-04
 Implementation pass: 2026-06-05
 Production collaboration pass: 2026-06-06
+Production route/visibility fix pass: 2026-06-06
 Workspace: `/Users/privileged/Projects/growpoint.bg/growpoint.bg`
 
 This file is the working memory for taking GrowPoint from early-stage prototype to a professional, production-ready user test. It should be used as the execution plan in future implementation sessions.
@@ -46,6 +47,10 @@ Latest production decisions:
 - User document sharing is allowed only with consultants/mentors from confirmed sessions. The frontend only offers confirmed-session targets, and the backend rejects manual sharing to unrelated consultant IDs.
 - Reviews require a confirmed booking, the session time to have passed, and both the client and consultant to confirm that the session was held. The review window remains 60 days after session end.
 - Admins can message consultant/mentor profile owners from the admin panel. Messages are delivered as in-app notifications and mirrored by email when SES is configured.
+- Backend Lambda routes are not enough for production: every user-facing endpoint must also have a matching API Gateway route in `infra/terraform/main.tf`. Missing API Gateway routes caused production clicks for booking messages and "Потвърди проведена сесия" to fail before reaching Lambda.
+- Manual admin approval is authoritative for public visibility. Once an admin approves a consultant/mentor profile, the public profile should appear if the record is sane, even if automated profile-completeness heuristics would not auto-approve it.
+- Cyrillic consultant slugs must be URL-encoded by the frontend API client and decoded/normalized by the backend before DynamoDB slug lookup. This keeps routes like `/consultants/димитър-менторски` stable on `www.growpoint.bg`.
+- Logged-in non-admin users should see top-bar notification and message indicators. The notification bell links to `/dashboard#notifications`; the message indicator links to `/dashboard#sessions` and counts unread `message_received` notifications.
 - Subtle animated particles may be used only as optimized public-page background polish. They must stay out of admin/dashboard work surfaces, pause in hidden tabs, and respect reduced-motion preferences.
 - Backend emails use direct BrowserRouter URLs such as `/dashboard/` and `/users/`, not old hash routes.
 - DynamoDB now has point-in-time recovery enabled in Terraform, and public consultant listing can use `profile-status-index` with bounded-scan fallback during rollout.

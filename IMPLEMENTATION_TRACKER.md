@@ -1,10 +1,47 @@
-# CareerLane Implementation Tracker
+# GrowPoint Implementation Tracker
 
 This file tracks active execution work so the project can be resumed cleanly after interruption.
 
 ## Current Focus
 
-Improve the public website from prototype UI toward user-test readiness.
+Improve the public website from prototype UI toward GrowPoint user-test readiness.
+
+## Active Slice: Production Route And Visibility Fixes
+
+Started: 2026-06-06
+
+Status: Completed for local implementation; requires production deploy.
+
+Scope:
+
+- Fix production booking-thread messages and session-confirmation actions that failed for logged-in mentors/consultants.
+- Add top-bar notification/message indicators for logged-in non-admin users.
+- Fix admin-approved consultant/mentor profiles that still did not appear on public Cyrillic slug URLs.
+- Keep local UI render checks clean after the changes.
+
+Change log:
+
+- 2026-06-06: Added missing API Gateway routes for existing Lambda endpoints: notifications, document download URLs, booking messages, session confirmation, reviews, rescheduling, data export, account deletion, ICS, and admin user messages.
+- 2026-06-06: Encoded consultant slug API calls in the frontend and decoded/normalized slug lookups in the backend before querying DynamoDB.
+- 2026-06-06: Changed public consultant visibility so manual admin approval bypasses automated completeness heuristics while still rejecting unsafe/sane-invalid records.
+- 2026-06-06: Added header notification and message indicators for logged-in non-admin users, backed by `/me/notifications` and refreshed on route changes plus a 60-second interval.
+- 2026-06-06: Made the dashboard notifications panel render as a stable hash target even when empty.
+- 2026-06-06: Updated project memory with the API Gateway route-sync rule, admin approval visibility rule, Cyrillic slug handling, and top-bar notification/message behavior.
+
+QA:
+
+- `terraform fmt -check -diff` passed from `infra/terraform`.
+- `node --check backend/api/index.cjs` passed.
+- `npm run build` passed.
+- In-app browser local smoke passed for `/`: meaningful app screen rendered, no framework overlay, no console errors/warnings, cookie dismissal worked, beta warning dismissal worked, dark/light toggle worked.
+- Live read-only check confirmed the reported public URL still returns `Consultant profile not found` before deployment; deploy is required for the production fix to take effect.
+
+Deployment notes:
+
+- Apply Terraform so API Gateway exposes the new routes.
+- Deploy the updated Lambda package.
+- Publish the rebuilt static frontend artifacts.
+- Re-test the mentor account booking card actions and the admin-approved public profile after deploy.
 
 ## Active Slice: Production Messaging And Review Readiness
 
