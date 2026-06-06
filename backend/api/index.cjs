@@ -29,9 +29,34 @@ const env = {
   bookingsTable: process.env.BOOKINGS_TABLE,
   cvBucket: process.env.CV_BUCKET,
   allowedOrigin: process.env.ALLOWED_ORIGIN || "https://www.growpoint.bg",
+  allowedOrigins: String(
+    process.env.ALLOWED_ORIGINS ||
+      process.env.ALLOWED_ORIGIN ||
+      "https://www.growpoint.bg"
+  )
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   sesFromEmail: process.env.SES_FROM_EMAIL || "",
   appUrl: process.env.APP_URL || "https://www.growpoint.bg/"
 };
+
+let activeRequestOrigin = "";
+
+function headerValue(headers, name) {
+  const expected = String(name || "").toLowerCase();
+  const match = Object.entries(headers || {}).find(
+    ([key]) => String(key || "").toLowerCase() === expected
+  );
+  return match ? String(match[1] || "") : "";
+}
+
+function corsOrigin() {
+  if (activeRequestOrigin && env.allowedOrigins.includes(activeRequestOrigin)) {
+    return activeRequestOrigin;
+  }
+  return env.allowedOrigins[0] || env.allowedOrigin;
+}
 
 function appUrl(path = "") {
   const rawBase = String(env.appUrl || "https://www.growpoint.bg/").trim();
@@ -76,9 +101,10 @@ function response(statusCode, body, extraHeaders = {}) {
     statusCode,
     headers: {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": env.allowedOrigin,
+      "Access-Control-Allow-Origin": corsOrigin(),
       "Access-Control-Allow-Headers": "Content-Type,Authorization",
       "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+      "Vary": "Origin",
       // Defense-in-depth headers. Even though API responses are JSON consumed
       // by fetch(), an attacker who tricks a victim into pasting a URL into
       // the browser or who finds an HTML-injection sink would otherwise rely
@@ -1999,7 +2025,8 @@ async function exportMyData(event) {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Content-Disposition": `attachment; filename="growpoint-export-${claims.sub}.json"`,
-      "Access-Control-Allow-Origin": env.allowedOrigin,
+      "Access-Control-Allow-Origin": corsOrigin(),
+      "Vary": "Origin",
       "Cache-Control": "no-store"
     },
     body: JSON.stringify(exportPayload, null, 2)
@@ -3565,7 +3592,8 @@ async function downloadBookingIcs(event) {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": `attachment; filename="growpoint-${bookingId}.ics"`,
-      "Access-Control-Allow-Origin": env.allowedOrigin,
+      "Access-Control-Allow-Origin": corsOrigin(),
+      "Vary": "Origin",
       "Cache-Control": "no-store"
     },
     body: ics
@@ -4107,6 +4135,7 @@ function health() {
 }
 
 exports.handler = async (event) => {
+  activeRequestOrigin = headerValue(event?.headers, "origin");
   try {
     if (
       event?.source === "aws.events" ||
@@ -4219,5 +4248,7 @@ exports.handler = async (event) => {
           ? "Unexpected server error."
           : error.message || "Unexpected server error."
     });
+  } finally {
+    activeRequestOrigin = "";
   }
 };

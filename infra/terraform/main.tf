@@ -35,6 +35,9 @@ locals {
   )
   cognito_ses_identity_arn = var.cognito_ses_from_email != "" ? "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.cognito_ses_from_email}" : ""
   cognito_uses_ses         = local.cognito_ses_identity_arn != ""
+  frontend_bucket_name     = var.frontend_bucket_name != "" ? var.frontend_bucket_name : "${local.name_prefix}-frontend-${data.aws_caller_identity.current.account_id}"
+  frontend_origin_id       = "${local.name_prefix}-frontend-s3"
+  frontend_aliases         = var.frontend_acm_certificate_arn != "" ? var.frontend_domain_aliases : []
 }
 
 data "aws_caller_identity" "current" {}
@@ -273,6 +276,222 @@ resource "aws_s3_bucket_cors_configuration" "cv_documents" {
   }
 }
 
+resource "aws_s3_bucket" "frontend" {
+  count  = var.frontend_hosting_enabled ? 1 : 0
+  bucket = local.frontend_bucket_name
+
+  tags = merge(local.common_tags, {
+    Component = "frontend"
+  })
+}
+
+resource "aws_s3_bucket_public_access_block" "frontend" {
+  count  = var.frontend_hosting_enabled ? 1 : 0
+  bucket = aws_s3_bucket.frontend[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "frontend" {
+  count  = var.frontend_hosting_enabled ? 1 : 0
+  bucket = aws_s3_bucket.frontend[0].id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
+  count  = var.frontend_hosting_enabled ? 1 : 0
+  bucket = aws_s3_bucket.frontend[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "frontend" {
+  count  = var.frontend_hosting_enabled ? 1 : 0
+  bucket = aws_s3_bucket.frontend[0].id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
+}
+
+data "aws_cloudfront_cache_policy" "caching_optimized" {
+  name = "Managed-CachingOptimized"
+}
+
+resource "aws_cloudfront_origin_access_control" "frontend" {
+  count                             = var.frontend_hosting_enabled ? 1 : 0
+  name                              = "${local.name_prefix}-frontend-oac"
+  description                       = "Private S3 access for the GrowPoint frontend"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+resource "aws_cloudfront_response_headers_policy" "frontend_security" {
+  count   = var.frontend_hosting_enabled ? 1 : 0
+  name    = "${local.name_prefix}-frontend-security"
+  comment = "Security headers for the GrowPoint static frontend"
+
+  security_headers_config {
+    content_type_options {
+      override = true
+    }
+
+    frame_options {
+      frame_option = "SAMEORIGIN"
+      override     = true
+    }
+
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = true
+    }
+
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      include_subdomains         = true
+      preload                    = false
+      override                   = true
+    }
+
+    xss_protection {
+      mode_block = true
+      protection = true
+      override   = true
+    }
+  }
+}
+
+resource "aws_cloudfront_distribution" "frontend" {
+  count = var.frontend_hosting_enabled ? 1 : 0
+
+  enabled             = true
+  is_ipv6_enabled     = true
+  comment             = "${local.name_prefix} frontend"
+  default_root_object = "index.html"
+  price_class         = var.frontend_cloudfront_price_class
+  aliases             = local.frontend_aliases
+
+  origin {
+    domain_name              = aws_s3_bucket.frontend[0].bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.frontend[0].id
+    origin_id                = local.frontend_origin_id
+  }
+
+  default_cache_behavior {
+    target_origin_id           = local.frontend_origin_id
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend_security[0].id
+    compress                   = true
+  }
+
+  ordered_cache_behavior {
+    path_pattern               = "/assets/*"
+    target_origin_id           = local.frontend_origin_id
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend_security[0].id
+    compress                   = true
+  }
+
+  custom_error_response {
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
+
+  custom_error_response {
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 0
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    acm_certificate_arn            = var.frontend_acm_certificate_arn != "" ? var.frontend_acm_certificate_arn : null
+    cloudfront_default_certificate = var.frontend_acm_certificate_arn == ""
+    minimum_protocol_version       = var.frontend_acm_certificate_arn != "" ? "TLSv1.2_2021" : null
+    ssl_support_method             = var.frontend_acm_certificate_arn != "" ? "sni-only" : null
+  }
+
+  tags = merge(local.common_tags, {
+    Component = "frontend"
+  })
+}
+
+data "aws_iam_policy_document" "frontend_bucket" {
+  count = var.frontend_hosting_enabled ? 1 : 0
+
+  statement {
+    sid     = "AllowCloudFrontRead"
+    actions = ["s3:GetObject"]
+
+    resources = [
+      "${aws_s3_bucket.frontend[0].arn}/*"
+    ]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.frontend[0].arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "frontend" {
+  count  = var.frontend_hosting_enabled ? 1 : 0
+  bucket = aws_s3_bucket.frontend[0].id
+  policy = data.aws_iam_policy_document.frontend_bucket[0].json
+}
+
+resource "aws_acm_certificate" "frontend" {
+  count    = length(var.frontend_certificate_domains) > 0 ? 1 : 0
+  provider = aws.us_east_1
+
+  domain_name               = var.frontend_certificate_domains[0]
+  subject_alternative_names = slice(var.frontend_certificate_domains, 1, length(var.frontend_certificate_domains))
+  validation_method         = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = merge(local.common_tags, {
+    Component = "frontend"
+  })
+}
+
 resource "aws_dynamodb_table" "users" {
   name         = "${local.name_prefix}-users"
   billing_mode = "PAY_PER_REQUEST"
@@ -478,6 +697,7 @@ resource "aws_lambda_function" "api" {
       BOOKINGS_TABLE    = aws_dynamodb_table.bookings.name
       CV_BUCKET         = aws_s3_bucket.cv_documents.bucket
       ALLOWED_ORIGIN    = element(var.frontend_origins, 0)
+      ALLOWED_ORIGINS   = join(",", var.frontend_origins)
       SES_FROM_EMAIL    = var.ses_from_email
       APP_URL           = var.app_url
     }

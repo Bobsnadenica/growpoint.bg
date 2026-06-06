@@ -114,3 +114,39 @@ variable "app_url" {
   default     = "https://www.growpoint.bg/"
   description = "Public app URL used in email bodies."
 }
+
+variable "frontend_hosting_enabled" {
+  type        = bool
+  default     = false
+  description = "Create a private S3 bucket and CloudFront distribution for the frontend SPA."
+}
+
+variable "frontend_bucket_name" {
+  type        = string
+  default     = ""
+  description = "Optional globally unique S3 bucket name for frontend hosting. Defaults to a project/account based name."
+}
+
+variable "frontend_domain_aliases" {
+  type        = list(string)
+  default     = []
+  description = "Custom domain aliases to attach to the CloudFront frontend distribution after an ACM certificate is issued."
+}
+
+variable "frontend_acm_certificate_arn" {
+  type        = string
+  default     = ""
+  description = "ACM certificate ARN in us-east-1 for CloudFront custom aliases."
+}
+
+variable "frontend_certificate_domains" {
+  type        = list(string)
+  default     = []
+  description = "Optional domains for an ACM DNS-validated certificate request in us-east-1. Terraform outputs DNS records; Cloudflare must create them."
+}
+
+variable "frontend_cloudfront_price_class" {
+  type        = string
+  default     = "PriceClass_100"
+  description = "CloudFront price class for the frontend distribution."
+}

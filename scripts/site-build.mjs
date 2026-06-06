@@ -371,10 +371,10 @@ function sitemapXml(seoData) {
     .join("\n")}\n</urlset>\n`;
 }
 
-function routeTargetDir(route) {
+function routeTargetDir(route, targetRoot = projectDir) {
   const normalized = normalizePathname(route.path);
-  if (normalized === "/") return projectDir;
-  return path.join(projectDir, normalized.slice(1));
+  if (normalized === "/") return targetRoot;
+  return path.join(targetRoot, normalized.slice(1));
 }
 
 function generatedRouteRoots(seoData) {
@@ -388,16 +388,24 @@ function generatedRouteRoots(seoData) {
   );
 }
 
-async function writeSeoFiles(baseHtml, seoData) {
-  for (const root of generatedRouteRoots(seoData)) {
-    await rm(path.join(projectDir, root), { recursive: true, force: true });
+async function writeSeoFiles(
+  baseHtml,
+  seoData,
+  { targetRoot = projectDir, renderStaticRoutes = true } = {}
+) {
+  if (renderStaticRoutes) {
+    for (const root of generatedRouteRoots(seoData)) {
+      await rm(path.join(targetRoot, root), { recursive: true, force: true });
+    }
   }
-  await rm(path.join(projectDir, "404.html"), { force: true });
+  await rm(path.join(targetRoot, "404.html"), { force: true });
 
-  for (const route of seoData.routes.filter((item) => item.renderStatic)) {
-    const targetDir = routeTargetDir(route);
-    await mkdir(targetDir, { recursive: true });
-    await writeFile(path.join(targetDir, "index.html"), renderRouteHtml(baseHtml, seoData, route));
+  if (renderStaticRoutes) {
+    for (const route of seoData.routes.filter((item) => item.renderStatic)) {
+      const targetDir = routeTargetDir(route, targetRoot);
+      await mkdir(targetDir, { recursive: true });
+      await writeFile(path.join(targetDir, "index.html"), renderRouteHtml(baseHtml, seoData, route));
+    }
   }
 
   const notFoundRoute = {
@@ -408,17 +416,21 @@ async function writeSeoFiles(baseHtml, seoData) {
     schemaType: "WebPage",
     index: false
   };
-  await writeFile(path.join(projectDir, "404.html"), renderRouteHtml(baseHtml, seoData, notFoundRoute));
-  await writeFile(path.join(projectDir, "sitemap.xml"), sitemapXml(seoData));
+  await writeFile(path.join(targetRoot, "404.html"), renderRouteHtml(baseHtml, seoData, notFoundRoute));
+  await writeFile(path.join(targetRoot, "sitemap.xml"), sitemapXml(seoData));
 }
 
-async function copyBuildOutput({ keepDist }) {
+async function loadEffectiveSeoData() {
   const seoData = JSON.parse(await readFile(seoDataPath, "utf8"));
   const dynamicRoutes = await fetchApprovedConsultantRoutes(seoData);
-  const effectiveSeoData = {
+  return {
     ...seoData,
     routes: mergeRoutes(seoData.routes, dynamicRoutes)
   };
+}
+
+async function copyBuildOutput({ keepDist }) {
+  const effectiveSeoData = await loadEffectiveSeoData();
   const preservedAdvertisementDir = path.join(distDir, "__advertisement-preserve");
 
   if (existsSync(rootAdvertisementDir)) {
@@ -440,7 +452,10 @@ async function copyBuildOutput({ keepDist }) {
     await copyIfExists(path.join(distDir, file), path.join(projectDir, file));
   }
 
-  await writeSeoFiles(await readFile(deployIndexPath, "utf8"), effectiveSeoData);
+  await writeSeoFiles(await readFile(deployIndexPath, "utf8"), effectiveSeoData, {
+    targetRoot: projectDir,
+    renderStaticRoutes: true
+  });
 
   if (!keepDist) {
     await rm(distDir, { recursive: true, force: true });
@@ -453,6 +468,16 @@ async function runBuild({ keepDist = false } = {}) {
   await copyBuildOutput({ keepDist });
 }
 
+async function runCloudfrontBuild() {
+  process.chdir(projectDir);
+  await viteBuild();
+  const effectiveSeoData = await loadEffectiveSeoData();
+  await writeSeoFiles(await readFile(path.join(distDir, "index.html"), "utf8"), effectiveSeoData, {
+    targetRoot: distDir,
+    renderStaticRoutes: false
+  });
+}
+
 const mode = process.argv[2];
 
 if (mode === "prepare") {
@@ -461,6 +486,8 @@ if (mode === "prepare") {
   await runBuild();
 } else if (mode === "preview") {
   await runBuild({ keepDist: true });
+} else if (mode === "cloudfront") {
+  await runCloudfrontBuild();
 } else {
   throw new Error(`Unsupported mode: ${mode}`);
 }

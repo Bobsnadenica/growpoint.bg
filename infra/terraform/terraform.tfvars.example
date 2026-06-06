@@ -2,10 +2,32 @@ project_name     = "careerdoc"
 environment      = "dev"
 aws_region       = "eu-west-1"
 
-# Use the live site origin here so API Gateway and the S3 upload bucket both allow the browser.
+# Use the live site origin here so API Gateway, Lambda CORS, and the S3 upload
+# bucket all allow the browser. Add the temporary CloudFront domain while
+# testing before custom-domain DNS cutover.
 frontend_origins = [
   "https://www.growpoint.bg"
+  # "https://dxxxxxxxxxxxxx.cloudfront.net"
 ]
+
+# Optional S3 + CloudFront frontend hosting. When enabled, Terraform creates a
+# private S3 bucket and CloudFront distribution with SPA fallback to index.html.
+# frontend_hosting_enabled = true
+#
+# Optional custom-domain certificate request. CloudFront requires ACM
+# certificates in us-east-1; Terraform outputs DNS CNAME records that must be
+# added in Cloudflare before the certificate can be attached to the distribution.
+# frontend_certificate_domains = [
+#   "growpoint.bg",
+#   "www.growpoint.bg"
+# ]
+#
+# After the certificate is ISSUED, set these and apply again:
+# frontend_acm_certificate_arn = "arn:aws:acm:us-east-1:..."
+# frontend_domain_aliases = [
+#   "growpoint.bg",
+#   "www.growpoint.bg"
+# ]
 
 # Cost / protection defaults for a small production rollout.
 # Increase these only when real traffic requires it.

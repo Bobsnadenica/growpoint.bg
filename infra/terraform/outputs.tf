@@ -18,6 +18,45 @@ output "cv_bucket_name" {
   value = aws_s3_bucket.cv_documents.bucket
 }
 
+output "users_table_name" {
+  value = aws_dynamodb_table.users.name
+}
+
+output "consultants_table_name" {
+  value = aws_dynamodb_table.consultants.name
+}
+
+output "bookings_table_name" {
+  value = aws_dynamodb_table.bookings.name
+}
+
+output "frontend_bucket_name" {
+  value = var.frontend_hosting_enabled ? aws_s3_bucket.frontend[0].bucket : ""
+}
+
+output "frontend_cloudfront_distribution_id" {
+  value = var.frontend_hosting_enabled ? aws_cloudfront_distribution.frontend[0].id : ""
+}
+
+output "frontend_cloudfront_domain_name" {
+  value = var.frontend_hosting_enabled ? aws_cloudfront_distribution.frontend[0].domain_name : ""
+}
+
+output "frontend_certificate_arn" {
+  value = length(var.frontend_certificate_domains) > 0 ? aws_acm_certificate.frontend[0].arn : ""
+}
+
+output "frontend_certificate_validation_records" {
+  value = length(var.frontend_certificate_domains) > 0 ? [
+    for record in aws_acm_certificate.frontend[0].domain_validation_options : {
+      domain_name = record.domain_name
+      name        = record.resource_record_name
+      type        = record.resource_record_type
+      value       = record.resource_record_value
+    }
+  ] : []
+}
+
 output "frontend_env_snippet" {
   value = <<-EOT
 VITE_APP_NAME=GrowPoint
