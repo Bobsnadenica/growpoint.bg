@@ -75,7 +75,7 @@ This table is the current production-readiness map: what works, what still needs
 | Admin panel | Works for tested flows | Admin Cognito user can call protected admin APIs. Admin messaging was live-tested and created an in-app notification. Admin remains a management role and does not need a dashboard profile. | Approve/reject/delete buttons were not all re-tested in the browser during this pass. | Test approve, reject, preview, message, and deletion in the browser with one disposable consultant. |
 | Consultant profile editing | Verified for core save/public path | Live QA created a disposable consultant, saved text, price, profile type, city, languages, topics, availability, and auto-approved public visibility; the public route loaded successfully. Backend canonical ownership logic remains in place. | Media upload/save was not included in this live lifecycle test. | Re-test avatar and cover upload with a disposable consultant account. |
 | Booking requests | Verified live | Live QA created a disposable booking, confirmed it as the consultant, and verified in-app notifications. CORS preflight from `www.growpoint.bg` works. | Decline, cancel, reschedule, and ICS download were not all exercised in this latest lifecycle run. | Add an automated API smoke script for accept/decline/cancel/reschedule/ICS. |
-| Booking messages | Verified live | Live QA sent messages from client to consultant and consultant to client on a confirmed booking; notification counts updated. | Browser popover rendering still needs visual QA after the new top-bar popover UI. | Use browser QA with logged-in client/consultant users to verify the popover UX. |
+| Booking messages | Verified live | Live QA sent messages from client to consultant and consultant to client on a confirmed booking; notification counts updated. The top-bar messages popover was browser-tested after the latest frontend deploy. | Full mobile visual QA still needs a pass with logged-in client/consultant users. | Re-test the messages popover on mobile and during a real booked session. |
 | Session confirmation | Verified live | Live QA moved a disposable confirmed booking to a past session time and confirmed the session from both client and consultant. | Real-world reminder timing still needs monitoring around actual upcoming sessions. | Keep EventBridge reminder checks in production smoke tests. |
 | Notifications | Works with top-bar popover | Backend notifications exist, top-bar notification/message popovers are implemented for logged-in non-admin users, dashboard notification history remains available, and mark-read was live-tested. | Mobile still uses dashboard links from the menu rather than a dedicated notification sheet. | Add a mobile notification sheet if users report friction. |
 | Documents and sharing | Implemented, needs live scenario test | User documents, signed download URLs, and confirmed-session-only sharing rules are implemented. | Upload/download/share was not retested in this pass. | With a test booking, upload a file, share it with the consultant, verify consultant access and unrelated consultant rejection. |
@@ -95,6 +95,53 @@ Latest smoke evidence from 2026-06-06:
 - Admin Cognito auth succeeded in a read-only API smoke; admin list and Dimitar detail returned `200`.
 - Disposable live QA run `mq2teq4uxw3pz` passed: signup resend, new-password-required, login, bootstrap, consultant auto-approval, public profile route, booking create, booking accept, booking messages, session confirmation, review submit, admin message notification, notification list/mark-read, and forgot-password request.
 - Disposable QA records were cleaned up: no `codex-` Cognito users, no `codex-` DynamoDB users, and no disposable public consultant remained after the run.
+
+### Production Tracking Rules
+
+Keep this section current after every production QA pass. Each new pass should record:
+
+- date, environment, and whether the test used live production data
+- exact flows tested, including account roles used: guest, client, consultant, admin
+- what passed, what failed, and what was not tested
+- any production data created, changed, or cleaned up
+- remaining gaps, risk level, and next owner/action
+
+Do not mark a feature as production-ready unless it has either live browser evidence or live API evidence. If a feature only has code-level confidence, mark it as "Implemented, needs live test".
+
+### Current Test Ledger
+
+| Date | Scope | Evidence | Result | Follow-up |
+| --- | --- | --- | --- | --- |
+| 2026-06-06 | Live API lifecycle QA | Disposable Cognito users, consultant, and booking run `mq2teq4uxw3pz` | Passed and cleaned up | Convert the flow into a repeatable smoke script. |
+| 2026-06-06 | Live public profile QA | `/consultants`, `/consultants/димитър-менторски`, admin detail, public route generation | Passed | Refresh availability dates before larger public launch. |
+| 2026-06-06 | Live auth QA | Signup, resend confirmation, login, new-password-required, forgot-password request | Core flows passed | Complete reset-code flow with a real inbox. |
+| 2026-06-06 | Live notification/message browser QA | Logged-in dashboard, top-bar notification popover, messages popover, mark-read sync | Passed on desktop browser | Add mobile logged-in visual pass. |
+| 2026-06-06 | Production data cleanup | Cognito and DynamoDB scans for `codex-` test users | Passed | Repeat after each live QA run. |
+
+### Needs Testing Next
+
+| Priority | Area | Test Needed | Why It Matters |
+| --- | --- | --- | --- |
+| P0 | Apex domain | Verify `https://growpoint.bg` certificate/redirect to `https://www.growpoint.bg` | Users may type the apex domain directly. |
+| P0 | Email inbox content | Inspect real verification, reset, booking, admin message, and reminder emails | API acceptance does not prove the emails look professional in inboxes. |
+| P1 | Admin actions | Browser-test approve, reject, preview, message, and delete with a disposable consultant | Admin is the production safety gate for profile quality. |
+| P1 | Documents sharing | Upload a document, share after confirmed booking, verify consultant access and unrelated-user rejection | File privacy is high-risk and needs real scenario evidence. |
+| P1 | Mobile logged-in UX | Test dashboard, notifications, messages, booking actions, and profile pages on phone widths | Most real users may interact from phones. |
+| P2 | Booking edge cases | Decline, cancel, reschedule, ICS download, reminder timing | These are normal lifecycle paths once real users book sessions. |
+| P2 | Media upload | Consultant avatar/cover upload, public display, lightbox, admin preview | Profile trust depends heavily on real photos. |
+
+### Improvement Backlog
+
+| Priority | Improvement | Current Gap |
+| --- | --- | --- |
+| P0 | Fix apex `growpoint.bg` TLS and redirect | Only `www.growpoint.bg` is currently verified clean. |
+| P1 | Add CloudWatch alarms and API Gateway throttling | MVP infrastructure works, but production monitoring is thin. |
+| P1 | Add repeatable production smoke scripts | Live QA was successful but still partially manual. |
+| P1 | Add stable public profile image derivatives | SEO/social metadata avoids signed URLs by using a fallback image. |
+| P1 | Add admin quality checklist for publishing profiles | Incomplete/self-approved profiles are hidden, but admin needs stronger guidance. |
+| P2 | Add mobile notification sheet | Desktop top-bar popovers work; mobile still depends on dashboard navigation. |
+| P2 | Add pagination/search indexes for consultants | Current directory is fine for MVP volume, not for large-scale search. |
+| P2 | Implement real payments/subscriptions | Pricing UI exists, but charging users is not production-ready. |
 
 ## 2. Repository Structure
 
