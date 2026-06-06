@@ -229,6 +229,18 @@
       "renderStatic": true
     },
     {
+      "path": "/consultants/димитър-менторски",
+      "title": "Димитър Менторски - кариерен ментор | GrowPoint",
+      "description": "Публичен менторски профил в GrowPoint за кариерна консултация, професионално развитие и индивидуална сесия.",
+      "schemaType": "ProfilePage",
+      "changefreq": "weekly",
+      "priority": "0.7",
+      "lastmod": "2026-06-06",
+      "index": true,
+      "sitemap": true,
+      "renderStatic": true
+    },
+    {
       "path": "/auth",
       "title": "Вход и регистрация | GrowPoint",
       "description": "Влез или създай профил в GrowPoint.",
