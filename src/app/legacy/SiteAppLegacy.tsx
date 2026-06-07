@@ -19,10 +19,6 @@ import {
 } from "react-router-dom";
 import { api } from "../../lib/api";
 import { NewPasswordRequiredError, useAuth } from "../../lib/auth";
-import advertisementOneVideoUrl from "../../../assets/advertisement/1.mp4";
-import advertisementTwoVideoUrl from "../../../assets/advertisement/2.mp4";
-import advertisementThreeImageUrl from "../../../assets/advertisement/3.jpg";
-import advertisementFourImageUrl from "../../../assets/advertisement/4.jpg";
 import {
   clearPendingBootstrap,
   readPendingBootstrap,
@@ -130,36 +126,6 @@ const homeRoleChoices = [
     ctaTo: "/auth?tab=register&role=consultant"
   }
 ] as const;
-
-const profileAdvertisementAssets = [
-  {
-    type: "video",
-    src: advertisementOneVideoUrl,
-    poster: advertisementThreeImageUrl
-  },
-  {
-    type: "video",
-    src: advertisementTwoVideoUrl,
-    poster: advertisementFourImageUrl
-  },
-  {
-    type: "image",
-    src: advertisementThreeImageUrl
-  },
-  {
-    type: "image",
-    src: advertisementFourImageUrl
-  }
-] as const;
-
-function stableIndexFromText(value: string, length: number) {
-  if (!length) return 0;
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash % length;
-}
 
 const authRoleChoices: Record<
   UserRole,
@@ -2046,7 +2012,6 @@ export function ConsultantPage() {
 
           <aside className="profile-aside-stack" aria-label="Информация и резервация">
             <ProfileSnapshotCard consultant={consultant} />
-            <ConsultantAdvertisement consultant={consultant} />
 
           {confirmedBooking ? (
             <div className="panel booking-success" role="status" aria-live="polite">
@@ -2275,40 +2240,6 @@ function HowItWorksCard() {
         </li>
       </ol>
     </section>
-  );
-}
-
-function ConsultantAdvertisement({ consultant }: { consultant: ConsultantProfile }) {
-  const asset =
-    profileAdvertisementAssets[
-      stableIndexFromText(consultant.slug || consultant.consultantId, profileAdvertisementAssets.length)
-    ];
-
-  return (
-    <aside className="panel profile-ad-card" aria-label="Партньорско съдържание">
-      <div className="profile-ad-card__media">
-        {asset.type === "video" ? (
-          <video
-            src={asset.src}
-            poster={asset.poster}
-            autoPlay
-            muted
-            loop
-            playsInline
-          />
-        ) : (
-          <img src={asset.src} alt="" loading="lazy" decoding="async" />
-        )}
-      </div>
-      <div className="profile-ad-card__copy">
-        <p className="eyebrow">GrowPoint Select</p>
-        <strong>Подготви следващия си професионален ход.</strong>
-        <span>
-          Използвай сесията с {consultant.name} за CV, интервю или стратегическо
-          позициониране.
-        </span>
-      </div>
-    </aside>
   );
 }
 
