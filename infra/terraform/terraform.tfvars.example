@@ -81,3 +81,6 @@ tags = {
 #
 # Platform booking/notification emails still need a verified SES sender.
 # ses_from_email = "contactus@growpoint.bg"
+#
+# Optional: create SES domain verification + DKIM outputs for Cloudflare DNS.
+# ses_domain_identity = "growpoint.bg"

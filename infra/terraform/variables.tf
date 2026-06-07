@@ -109,6 +109,12 @@ variable "cognito_ses_from_email" {
   description = "Optional verified SES sender address for Cognito verification emails. Leave empty to use Cognito's default sender."
 }
 
+variable "ses_domain_identity" {
+  type        = string
+  default     = ""
+  description = "Optional domain to verify in SES for platform transactional email sending, for example growpoint.bg."
+}
+
 variable "app_url" {
   type        = string
   default     = "https://www.growpoint.bg/"

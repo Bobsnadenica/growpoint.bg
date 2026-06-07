@@ -16,7 +16,8 @@ const state = {
   client: null,
   consultant: null,
   consultantId: "",
-  bookingId: ""
+  bookingId: "",
+  storageKeys: []
 };
 
 function stripEnvQuotes(value) {
@@ -103,6 +104,7 @@ async function loadConfig() {
     usersTable: outputValue(outputs, "users_table_name", "careerdoc-dev-users"),
     consultantsTable: outputValue(outputs, "consultants_table_name", "careerdoc-dev-consultants"),
     bookingsTable: outputValue(outputs, "bookings_table_name", "careerdoc-dev-bookings"),
+    cvBucket: outputValue(outputs, "cv_bucket_name", ""),
     adminEmail: env.GROWPOINT_ADMIN_EMAIL || "",
     adminPassword: env.GROWPOINT_ADMIN_PASSWORD || ""
   };
@@ -311,6 +313,20 @@ async function deleteDynamoItem(config, tableName, key) {
   ], { allowFail: true });
 }
 
+async function deleteS3Object(config, storageKey) {
+  if (!config.cvBucket || !storageKey) return;
+  await awsJson([
+    "s3api",
+    "delete-object",
+    "--region",
+    config.region,
+    "--bucket",
+    config.cvBucket,
+    "--key",
+    storageKey
+  ], { allowFail: true });
+}
+
 async function scanDynamo(config, tableName, filterExpression, values, projectionExpression) {
   const args = [
     "dynamodb",
@@ -387,6 +403,47 @@ async function cleanup(config) {
       account.email
     ], { allowFail: true });
   }
+
+  for (const storageKey of state.storageKeys) {
+    await deleteS3Object(config, storageKey);
+  }
+}
+
+function futureIso(daysFromNow, hourOffset = 0) {
+  return new Date(
+    Date.now() + daysFromNow * 24 * 60 * 60 * 1000 + hourOffset * 60 * 60 * 1000
+  ).toISOString();
+}
+
+function tinyPngBytes() {
+  return Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64"
+  );
+}
+
+async function uploadViaSignedUrl({ uploadUrl, bytes, contentType }) {
+  const response = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: bytes
+  });
+  if (!response.ok) {
+    throw new Error(`S3 upload returned ${response.status}: ${(await response.text()).slice(0, 200)}`);
+  }
+}
+
+async function expectApiError(config, pathName, options, token, expectedStatus) {
+  const headers = new Headers(options.headers || {});
+  if (!headers.has("Content-Type") && options.body) headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const result = await httpJson(`${config.apiBaseUrl}${pathName}`, { ...options, headers });
+  if (result.response.status !== expectedStatus) {
+    throw new Error(
+      `Expected ${expectedStatus} from ${options.method || "GET"} ${pathName}, got ${result.response.status}: ${result.text.slice(0, 300)}`
+    );
+  }
+  return result.payload;
 }
 
 async function liveMutationChecks(config) {
@@ -406,7 +463,40 @@ async function liveMutationChecks(config) {
   const clientName = `Codex QA Client ${state.runId}`;
   const consultantName = `Codex QA Mentor ${state.runId}`;
   const slug = `codex-qa-${state.runId}`;
-  const futureSlot = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const futureSlot = futureIso(14, 0);
+  const declineSlot = futureIso(15, 0);
+  const cancelSlot = futureIso(16, 0);
+  const rescheduleOriginalSlot = futureIso(17, 0);
+  const rescheduleTargetSlot = futureIso(18, 0);
+  const availability = [
+    futureSlot,
+    declineSlot,
+    cancelSlot,
+    rescheduleOriginalSlot,
+    rescheduleTargetSlot
+  ];
+  const consultantProfileInput = {
+    slug,
+    name: consultantName,
+    headline: "Career mentor for production smoke testing",
+    bio: "This disposable production smoke profile verifies that GrowPoint consultant profile updates, public visibility, and bookings work end to end without affecting real users.",
+    experienceSummary: "Eight years of career coaching, interview preparation, and structured mentoring for professionals changing roles.",
+    experienceHighlights: ["Career transitions", "Interview preparation"],
+    educationHighlights: ["Certified coaching practice"],
+    city: "Sofia",
+    experienceYears: 8,
+    priceEur: 100,
+    profileType: "mentor",
+    languages: ["Bulgarian", "English"],
+    specializations: ["Career change", "CV and LinkedIn"],
+    sessionModes: ["Online"],
+    tags: ["smoke-test"],
+    idealFor: ["Professionals preparing for interviews"],
+    consultationTopics: ["CV review", "Interview strategy"],
+    workApproach: "Structured discovery, practical next steps, and follow-up actions after each session.",
+    sessionLengthMinutes: 60,
+    availability
+  };
 
   await check("Live signup + resend confirmation + admin confirm", async () => {
     const clientSub = await signUpUser(config, clientEmail, password, clientName);
@@ -454,28 +544,7 @@ async function liveMutationChecks(config) {
   await check("Live consultant profile save and public route", async () => {
     const consultant = await api(config, "/consultants/me", {
       method: "PUT",
-      body: JSON.stringify({
-        slug,
-        name: consultantName,
-        headline: "Career mentor for production smoke testing",
-        bio: "This disposable production smoke profile verifies that GrowPoint consultant profile updates, public visibility, and bookings work end to end without affecting real users.",
-        experienceSummary: "Eight years of career coaching, interview preparation, and structured mentoring for professionals changing roles.",
-        experienceHighlights: ["Career transitions", "Interview preparation"],
-        educationHighlights: ["Certified coaching practice"],
-        city: "Sofia",
-        experienceYears: 8,
-        priceEur: 100,
-        profileType: "mentor",
-        languages: ["Bulgarian", "English"],
-        specializations: ["Career change", "CV and LinkedIn"],
-        sessionModes: ["Online"],
-        tags: ["smoke-test"],
-        idealFor: ["Professionals preparing for interviews"],
-        consultationTopics: ["CV review", "Interview strategy"],
-        workApproach: "Structured discovery, practical next steps, and follow-up actions after each session.",
-        sessionLengthMinutes: 60,
-        availability: [futureSlot]
-      })
+      body: JSON.stringify(consultantProfileInput)
     }, consultantToken);
     state.consultantId = consultant.consultantId;
     const publicProfile = await api(config, `/consultants/${encodeURIComponent(slug)}`);
@@ -483,6 +552,67 @@ async function liveMutationChecks(config) {
       throw new Error("Public route did not return the saved consultant.");
     }
     return consultant.profileStatus || "saved";
+  });
+
+  await check("Live consultant avatar and cover upload", async () => {
+    const imageBytes = tinyPngBytes();
+    const [avatarUpload, heroUpload] = await Promise.all([
+      api(config, "/me/cv/upload-url", {
+        method: "POST",
+        body: JSON.stringify({
+          fileName: `avatar-${state.runId}.png`,
+          contentType: "image/png",
+          fileSize: imageBytes.length,
+          kind: "avatar"
+        })
+      }, consultantToken),
+      api(config, "/me/cv/upload-url", {
+        method: "POST",
+        body: JSON.stringify({
+          fileName: `hero-${state.runId}.png`,
+          contentType: "image/png",
+          fileSize: imageBytes.length,
+          kind: "hero"
+        })
+      }, consultantToken)
+    ]);
+
+    state.storageKeys.push(avatarUpload.storageKey, heroUpload.storageKey);
+    await Promise.all([
+      uploadViaSignedUrl({
+        uploadUrl: avatarUpload.uploadUrl,
+        bytes: imageBytes,
+        contentType: "image/png"
+      }),
+      uploadViaSignedUrl({
+        uploadUrl: heroUpload.uploadUrl,
+        bytes: imageBytes,
+        contentType: "image/png"
+      })
+    ]);
+
+    const updated = await api(config, "/consultants/me", {
+      method: "PUT",
+      body: JSON.stringify({
+        ...consultantProfileInput,
+        avatarStorageKey: avatarUpload.storageKey,
+        heroStorageKey: heroUpload.storageKey
+      })
+    }, consultantToken);
+    const publicProfile = await api(config, `/consultants/${encodeURIComponent(slug)}`);
+    if (updated.avatarStorageKey !== avatarUpload.storageKey) {
+      throw new Error("Avatar storage key was not saved.");
+    }
+    if (updated.heroStorageKey !== heroUpload.storageKey) {
+      throw new Error("Hero storage key was not saved.");
+    }
+    if (!String(publicProfile.avatarUrl || "").startsWith("https://")) {
+      throw new Error("Public avatar URL was not signed.");
+    }
+    if (!String(publicProfile.heroUrl || "").startsWith("https://")) {
+      throw new Error("Public hero URL was not signed.");
+    }
+    return "avatar + hero signed";
   });
 
   await check("Live booking create and accept", async () => {
@@ -501,6 +631,73 @@ async function liveMutationChecks(config) {
     }, consultantToken);
     if (accepted.status !== "confirmed") throw new Error("Booking did not become confirmed.");
     return state.bookingId;
+  });
+
+  await check("Live booking decline, cancel, and reschedule", async () => {
+    const declinedBooking = await api(config, "/bookings", {
+      method: "POST",
+      body: JSON.stringify({
+        consultantId: state.consultantId,
+        scheduledAt: declineSlot,
+        note: "Production smoke decline booking"
+      })
+    }, clientToken);
+    const declined = await api(config, `/bookings/${encodeURIComponent(declinedBooking.bookingId)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "declined",
+        reason: "Production smoke decline"
+      })
+    }, consultantToken);
+    if (declined.status !== "declined") throw new Error("Decline flow did not return declined status.");
+
+    const cancelBooking = await api(config, "/bookings", {
+      method: "POST",
+      body: JSON.stringify({
+        consultantId: state.consultantId,
+        scheduledAt: cancelSlot,
+        note: "Production smoke cancel booking"
+      })
+    }, clientToken);
+    await api(config, `/bookings/${encodeURIComponent(cancelBooking.bookingId)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "confirmed" })
+    }, consultantToken);
+    const cancelled = await api(config, `/bookings/${encodeURIComponent(cancelBooking.bookingId)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "cancelled" })
+    }, clientToken);
+    if (cancelled.status !== "cancelled") throw new Error("Cancel flow did not return cancelled status.");
+
+    const rescheduleBooking = await api(config, "/bookings", {
+      method: "POST",
+      body: JSON.stringify({
+        consultantId: state.consultantId,
+        scheduledAt: rescheduleOriginalSlot,
+        note: "Production smoke reschedule booking"
+      })
+    }, clientToken);
+    await api(config, `/bookings/${encodeURIComponent(rescheduleBooking.bookingId)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "confirmed" })
+    }, consultantToken);
+    const rescheduled = await api(config, `/bookings/${encodeURIComponent(rescheduleBooking.bookingId)}/reschedule`, {
+      method: "PATCH",
+      body: JSON.stringify({ scheduledAt: rescheduleTargetSlot })
+    }, clientToken);
+    if (rescheduled.status !== "pending") {
+      throw new Error("Client reschedule of confirmed booking should return to pending.");
+    }
+    if (rescheduled.rescheduledBy !== "client") {
+      throw new Error("Reschedule actor was not recorded as client.");
+    }
+    const reaccepted = await api(config, `/bookings/${encodeURIComponent(rescheduleBooking.bookingId)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "confirmed" })
+    }, consultantToken);
+    if (reaccepted.status !== "confirmed") throw new Error("Re-accept after reschedule failed.");
+
+    return "declined + cancelled + rescheduled";
   });
 
   await check("Live booking messages both directions", async () => {
@@ -524,6 +721,89 @@ async function liveMutationChecks(config) {
     if (!result.response.ok) throw new Error(`ICS returned ${result.response.status}.`);
     if (!result.text.includes("BEGIN:VCALENDAR")) throw new Error("ICS did not include VCALENDAR.");
     return "VCALENDAR";
+  });
+
+  await check("Live document upload, sharing, and privacy", async () => {
+    const documentBody = `GrowPoint production smoke document ${state.runId}`;
+    const upload = await api(config, "/me/cv/upload-url", {
+      method: "POST",
+      body: JSON.stringify({
+        fileName: `growpoint-smoke-${state.runId}.txt`,
+        contentType: "text/plain",
+        fileSize: Buffer.byteLength(documentBody),
+        kind: "document"
+      })
+    }, clientToken);
+    state.storageKeys.push(upload.storageKey);
+    await uploadViaSignedUrl({
+      uploadUrl: upload.uploadUrl,
+      bytes: Buffer.from(documentBody),
+      contentType: "text/plain"
+    });
+
+    const consultantsPayload = await api(config, "/consultants");
+    const publicConsultants = Array.isArray(consultantsPayload)
+      ? consultantsPayload
+      : consultantsPayload.items || [];
+    const unrelated = publicConsultants.find((item) => item.consultantId !== state.consultantId);
+    if (!unrelated?.consultantId) {
+      throw new Error("Could not find an unrelated consultant for privacy rejection test.");
+    }
+
+    await expectApiError(config, "/me/profile", {
+      method: "PUT",
+      body: JSON.stringify({
+        documents: [{
+          ...upload.document,
+          category: "portfolio",
+          sharedWithConsultantIds: [unrelated.consultantId]
+        }]
+      })
+    }, clientToken, 403);
+
+    const savedProfile = await api(config, "/me/profile", {
+      method: "PUT",
+      body: JSON.stringify({
+        documents: [{
+          ...upload.document,
+          category: "portfolio",
+          sharedWithConsultantIds: [state.consultantId]
+        }]
+      })
+    }, clientToken);
+    const savedDocument = (savedProfile.documents || []).find(
+      (item) => item.storageKey === upload.storageKey
+    );
+    if (!savedDocument) throw new Error("Uploaded document was not saved to the client profile.");
+    if (!savedDocument.sharedWithConsultantIds?.includes(state.consultantId)) {
+      throw new Error("Document was not shared with the confirmed consultant.");
+    }
+
+    const clientDownload = await api(config, "/me/documents/download-url", {
+      method: "POST",
+      body: JSON.stringify({ storageKey: upload.storageKey })
+    }, clientToken);
+    const clientDownloadResponse = await fetch(clientDownload.downloadUrl);
+    const clientDownloadText = await clientDownloadResponse.text();
+    if (clientDownloadText !== documentBody) {
+      throw new Error("Client document download did not return the uploaded contents.");
+    }
+
+    const consultantBookings = await api(config, "/bookings", {}, consultantToken);
+    const mainBooking = consultantBookings.find((item) => item.bookingId === state.bookingId);
+    const sharedDocument = mainBooking?.clientSharedDocuments?.find(
+      (item) => item.storageKey === upload.storageKey
+    );
+    if (!sharedDocument?.downloadUrl) {
+      throw new Error("Consultant booking did not include the shared document download URL.");
+    }
+    const consultantDownloadResponse = await fetch(sharedDocument.downloadUrl);
+    const consultantDownloadText = await consultantDownloadResponse.text();
+    if (consultantDownloadText !== documentBody) {
+      throw new Error("Consultant shared-document download did not return uploaded contents.");
+    }
+
+    return "upload + owner download + shared consultant download + unrelated rejection";
   });
 
   await check("Live past-session confirmation and review", async () => {

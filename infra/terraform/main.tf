@@ -141,6 +141,16 @@ resource "aws_ses_identity_policy" "cognito_sender" {
   })
 }
 
+resource "aws_ses_domain_identity" "platform" {
+  count  = var.ses_domain_identity != "" ? 1 : 0
+  domain = var.ses_domain_identity
+}
+
+resource "aws_ses_domain_dkim" "platform" {
+  count  = var.ses_domain_identity != "" ? 1 : 0
+  domain = aws_ses_domain_identity.platform[0].domain
+}
+
 resource "aws_cognito_user_pool_client" "frontend" {
   name         = "${local.name_prefix}-frontend"
   user_pool_id = aws_cognito_user_pool.main.id

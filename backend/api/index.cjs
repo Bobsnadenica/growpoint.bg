@@ -2706,7 +2706,7 @@ async function createBooking(event) {
   const last24h = Date.now() - 24 * 60 * 60 * 1000;
   const recentBookings = (existingBookings.Items || []).filter((item) => {
     if (item.clientId !== user.userId) return false;
-    if (item.status === "cancelled") return false;
+    if (item.status === "cancelled" || item.status === "declined") return false;
     const createdAt = new Date(item.createdAt || 0).getTime();
     return createdAt >= last24h;
   });
@@ -4153,33 +4153,33 @@ exports.handler = async (event) => {
     const method = event.requestContext?.http?.method;
     const path = event.rawPath;
 
-    if (method === "GET" && path === "/health") return health();
-    if (method === "GET" && path === "/consultants") return listConsultants(event);
-    if (method === "GET" && path === "/consultants/me") return getMyConsultant(event);
-    if (method === "PUT" && path === "/consultants/me") return updateMyConsultant(event);
-    if (method === "GET" && /^\/consultants\/[^/]+$/.test(path)) return getConsultant(event);
-    if (method === "POST" && path === "/auth/bootstrap") return bootstrapUser(event);
-    if (method === "GET" && path === "/me/profile") return getMeProfile(event);
-    if (method === "GET" && path === "/me/data-export") return exportMyData(event);
-    if (method === "DELETE" && path === "/me") return deleteMyAccount(event);
-    if (method === "GET" && path === "/me/notifications") return getMyNotifications(event);
-    if (method === "POST" && path === "/me/notifications/mark-read") return markMyNotificationsRead(event);
-    if (method === "PUT" && path === "/me/profile") return updateMeProfile(event);
-    if (method === "POST" && path === "/me/documents/download-url") return createMyDocumentDownloadUrl(event);
-    if (method === "POST" && path === "/me/cv/upload-url") return createUploadUrl(event);
-    if (method === "GET" && path === "/bookings") return listBookings(event);
-    if (method === "POST" && path === "/bookings") return createBooking(event);
+    if (method === "GET" && path === "/health") return await health();
+    if (method === "GET" && path === "/consultants") return await listConsultants(event);
+    if (method === "GET" && path === "/consultants/me") return await getMyConsultant(event);
+    if (method === "PUT" && path === "/consultants/me") return await updateMyConsultant(event);
+    if (method === "GET" && /^\/consultants\/[^/]+$/.test(path)) return await getConsultant(event);
+    if (method === "POST" && path === "/auth/bootstrap") return await bootstrapUser(event);
+    if (method === "GET" && path === "/me/profile") return await getMeProfile(event);
+    if (method === "GET" && path === "/me/data-export") return await exportMyData(event);
+    if (method === "DELETE" && path === "/me") return await deleteMyAccount(event);
+    if (method === "GET" && path === "/me/notifications") return await getMyNotifications(event);
+    if (method === "POST" && path === "/me/notifications/mark-read") return await markMyNotificationsRead(event);
+    if (method === "PUT" && path === "/me/profile") return await updateMeProfile(event);
+    if (method === "POST" && path === "/me/documents/download-url") return await createMyDocumentDownloadUrl(event);
+    if (method === "POST" && path === "/me/cv/upload-url") return await createUploadUrl(event);
+    if (method === "GET" && path === "/bookings") return await listBookings(event);
+    if (method === "POST" && path === "/bookings") return await createBooking(event);
 
     const bookingStatusMatch = /^\/bookings\/([^/]+)\/status$/.exec(path);
     if (method === "PATCH" && bookingStatusMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), bookingId: bookingStatusMatch[1] };
-      return updateBookingStatus(event);
+      return await updateBookingStatus(event);
     }
 
     const bookingReviewMatch = /^\/bookings\/([^/]+)\/review$/.exec(path);
     if (method === "POST" && bookingReviewMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), bookingId: bookingReviewMatch[1] };
-      return submitReview(event);
+      return await submitReview(event);
     }
 
     const bookingSessionConfirmMatch = /^\/bookings\/([^/]+)\/session-confirm$/.exec(path);
@@ -4188,7 +4188,7 @@ exports.handler = async (event) => {
         ...(event.pathParameters || {}),
         bookingId: bookingSessionConfirmMatch[1]
       };
-      return confirmBookingSession(event);
+      return await confirmBookingSession(event);
     }
 
     const bookingMessagesMatch = /^\/bookings\/([^/]+)\/messages$/.exec(path);
@@ -4197,23 +4197,23 @@ exports.handler = async (event) => {
         ...(event.pathParameters || {}),
         bookingId: bookingMessagesMatch[1]
       };
-      if (method === "GET") return listBookingMessages(event);
-      if (method === "POST") return sendBookingMessage(event);
+      if (method === "GET") return await listBookingMessages(event);
+      if (method === "POST") return await sendBookingMessage(event);
     }
 
     const bookingRescheduleMatch = /^\/bookings\/([^/]+)\/reschedule$/.exec(path);
     if (method === "PATCH" && bookingRescheduleMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), bookingId: bookingRescheduleMatch[1] };
-      return rescheduleBooking(event);
+      return await rescheduleBooking(event);
     }
 
     const bookingIcsMatch = /^\/bookings\/([^/]+)\/ics$/.exec(path);
     if (method === "GET" && bookingIcsMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), bookingId: bookingIcsMatch[1] };
-      return downloadBookingIcs(event);
+      return await downloadBookingIcs(event);
     }
 
-    if (method === "GET" && path === "/admin/consultants") return listConsultantsForAdmin(event);
+    if (method === "GET" && path === "/admin/consultants") return await listConsultantsForAdmin(event);
 
     const adminUserMessageMatch = /^\/admin\/users\/([^/]+)\/message$/.exec(path);
     if (method === "POST" && adminUserMessageMatch) {
@@ -4221,19 +4221,19 @@ exports.handler = async (event) => {
         ...(event.pathParameters || {}),
         userId: adminUserMessageMatch[1]
       };
-      return adminMessageUser(event);
+      return await adminMessageUser(event);
     }
 
     const adminStatusMatch = /^\/admin\/consultants\/([^/]+)\/status$/.exec(path);
     if (method === "PUT" && adminStatusMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), consultantId: adminStatusMatch[1] };
-      return setConsultantStatus(event);
+      return await setConsultantStatus(event);
     }
 
     const adminGetMatch = /^\/admin\/consultants\/([^/]+)$/.exec(path);
     if (method === "GET" && adminGetMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), consultantId: adminGetMatch[1] };
-      return getConsultantForAdmin(event);
+      return await getConsultantForAdmin(event);
     }
 
     return notFound("Route not found.");

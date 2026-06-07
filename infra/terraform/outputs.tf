@@ -57,6 +57,26 @@ output "frontend_certificate_validation_records" {
   ] : []
 }
 
+output "ses_domain_verification_record" {
+  value = var.ses_domain_identity != "" ? {
+    domain_name = var.ses_domain_identity
+    name        = "_amazonses.${var.ses_domain_identity}"
+    type        = "TXT"
+    value       = aws_ses_domain_identity.platform[0].verification_token
+  } : null
+}
+
+output "ses_domain_dkim_records" {
+  value = var.ses_domain_identity != "" ? [
+    for token in aws_ses_domain_dkim.platform[0].dkim_tokens : {
+      domain_name = var.ses_domain_identity
+      name        = "${token}._domainkey.${var.ses_domain_identity}"
+      type        = "CNAME"
+      value       = "${token}.dkim.amazonses.com"
+    }
+  ] : []
+}
+
 output "frontend_env_snippet" {
   value = <<-EOT
 VITE_APP_NAME=GrowPoint
