@@ -3931,6 +3931,7 @@ async function listConsultantsForAdmin(event) {
         profileType: item.profileType,
         profileStatus: item.profileStatus || "approved",
         isPublic: item.isPublic !== false,
+        featured: Boolean(item.featured),
         membershipTier: item.membershipTier || "standard",
         avatarUrl,
         experienceYears: item.experienceYears || 0,
@@ -4052,6 +4053,7 @@ async function setConsultantStatus(event) {
     ...existing.Item,
     profileStatus: status,
     isPublic: status === "approved",
+    featured: status === "approved" ? Boolean(existing.Item.featured) : false,
     statusUpdatedAt: now,
     statusUpdatedBy: claims.sub,
     statusUpdatedByEmail: claims.email || "",
@@ -4070,11 +4072,88 @@ async function setConsultantStatus(event) {
     consultantId: updated.consultantId,
     profileStatus: updated.profileStatus,
     isPublic: updated.isPublic,
+    featured: updated.featured,
     statusUpdatedAt: updated.statusUpdatedAt,
     statusUpdatedBy: updated.statusUpdatedBy,
     statusUpdatedByEmail: updated.statusUpdatedByEmail,
     statusSelfApproved: updated.statusSelfApproved
   });
+}
+
+async function setConsultantFeatured(event) {
+  const claims = requireAdmin(event);
+  const body = parseBody(event);
+  const consultantId = event.pathParameters?.consultantId;
+
+  if (!consultantId) {
+    return badRequest("consultantId is required.");
+  }
+
+  if (typeof body.featured !== "boolean") {
+    return badRequest("featured must be a boolean.");
+  }
+
+  const existing = await dynamo.send(
+    new GetCommand({
+      TableName: env.consultantsTable,
+      Key: { consultantId }
+    })
+  );
+
+  if (!existing.Item) {
+    return notFound("Consultant not found.");
+  }
+
+  const isApproved =
+    existing.Item.profileStatus === "approved" || existing.Item.profileStatus === "active";
+  const isPublic = existing.Item.isPublic !== false;
+
+  if (body.featured && (!isApproved || !isPublic)) {
+    return badRequest("Only approved public consultant profiles can be featured.");
+  }
+
+  const currentFeatured = Boolean(existing.Item.featured);
+
+  if (currentFeatured === body.featured) {
+    return response(
+      200,
+      {
+        consultantId,
+        featured: currentFeatured,
+        unchanged: true
+      },
+      { "Cache-Control": "no-store" }
+    );
+  }
+
+  const now = new Date().toISOString();
+  const updated = {
+    ...existing.Item,
+    featured: body.featured,
+    featuredUpdatedAt: now,
+    featuredUpdatedBy: claims.sub,
+    featuredUpdatedByEmail: claims.email || "",
+    updatedAt: now
+  };
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: env.consultantsTable,
+      Item: updated
+    })
+  );
+
+  return response(
+    200,
+    {
+      consultantId,
+      featured: updated.featured,
+      featuredUpdatedAt: updated.featuredUpdatedAt,
+      featuredUpdatedBy: updated.featuredUpdatedBy,
+      featuredUpdatedByEmail: updated.featuredUpdatedByEmail
+    },
+    { "Cache-Control": "no-store" }
+  );
 }
 
 async function adminMessageUser(event) {
@@ -4228,6 +4307,12 @@ exports.handler = async (event) => {
     if (method === "PUT" && adminStatusMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), consultantId: adminStatusMatch[1] };
       return await setConsultantStatus(event);
+    }
+
+    const adminFeaturedMatch = /^\/admin\/consultants\/([^/]+)\/featured$/.exec(path);
+    if (method === "PUT" && adminFeaturedMatch) {
+      event.pathParameters = { ...(event.pathParameters || {}), consultantId: adminFeaturedMatch[1] };
+      return await setConsultantFeatured(event);
     }
 
     const adminGetMatch = /^\/admin\/consultants\/([^/]+)$/.exec(path);

@@ -8,7 +8,7 @@ import type {
 } from "../../lib/types";
 import PageScene from "../layout/PageScene";
 
-type Filter = "pending" | "approved" | "rejected" | "all";
+type Filter = "pending" | "featured" | "approved" | "rejected" | "all";
 
 function statusLabel(status: AdminConsultantSummary["profileStatus"]) {
   if (status === "approved" || status === "active") return "Одобрен";
@@ -56,6 +56,7 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<Filter>("pending");
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [featuredActionId, setFeaturedActionId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [messageTargetId, setMessageTargetId] = useState<string | null>(null);
   const [adminMessageText, setAdminMessageText] = useState("");
@@ -87,6 +88,7 @@ export default function AdminPage() {
       approved: items.filter(
         (item) => item.profileStatus === "approved" || item.profileStatus === "active"
       ).length,
+      featured: items.filter((item) => item.featured).length,
       rejected: items.filter((item) => item.profileStatus === "rejected").length,
       all: items.length
     };
@@ -98,6 +100,9 @@ export default function AdminPage() {
       return items.filter(
         (item) => item.profileStatus === "approved" || item.profileStatus === "active"
       );
+    }
+    if (filter === "featured") {
+      return items.filter((item) => item.featured);
     }
     return items.filter((item) => item.profileStatus === filter);
   }, [items, filter]);
@@ -167,6 +172,42 @@ export default function AdminPage() {
     }
   }
 
+  async function setFeatured(item: AdminConsultantSummary, nextFeatured: boolean) {
+    if (!token) return;
+
+    const isApproved =
+      item.profileStatus === "approved" || item.profileStatus === "active";
+
+    if (nextFeatured && (!isApproved || !item.isPublic)) {
+      setError("Първо одобри профила и го направи публичен, преди да го добавиш към подбраните.");
+      return;
+    }
+
+    setFeaturedActionId(item.consultantId);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      await api.adminSetConsultantFeatured(token, item.consultantId, nextFeatured);
+      setItems((currentItems) =>
+        currentItems.map((current) =>
+          current.consultantId === item.consultantId
+            ? { ...current, featured: nextFeatured }
+            : current
+        )
+      );
+      setSuccessMessage(
+        nextFeatured
+          ? `${item.name} е добавен към подбраните профили на началната страница.`
+          : `${item.name} е премахнат от подбраните профили.`
+      );
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно обновяване на подбран профил.");
+    } finally {
+      setFeaturedActionId(null);
+    }
+  }
+
   async function sendAdminMessage(
     event: FormEvent<HTMLFormElement>,
     item: AdminConsultantSummary
@@ -200,6 +241,7 @@ export default function AdminPage() {
 
   const filterChips: { key: Filter; label: string; count: number }[] = [
     { key: "pending", label: "Чакащи", count: counts.pending },
+    { key: "featured", label: "Подбрани", count: counts.featured },
     { key: "approved", label: "Одобрени", count: counts.approved },
     { key: "rejected", label: "Отказани", count: counts.rejected },
     { key: "all", label: "Всички", count: counts.all }
@@ -213,6 +255,10 @@ export default function AdminPage() {
     approved: {
       title: "Все още няма одобрени профили.",
       hint: "Одобрените профили се показват тук с информация кой и кога ги е приел."
+    },
+    featured: {
+      title: "Няма подбрани профили за началната страница.",
+      hint: "Одобри публичен профил и използвай бутона за подбиране, за да го покажеш в началната секция."
     },
     rejected: {
       title: "Няма отказани профили.",
@@ -250,6 +296,10 @@ export default function AdminPage() {
             <div>
               <dt>Одобрени</dt>
               <dd>{counts.approved}</dd>
+            </div>
+            <div>
+              <dt>Подбрани</dt>
+              <dd>{counts.featured}</dd>
             </div>
             <div>
               <dt>Отказани</dt>
@@ -293,6 +343,7 @@ export default function AdminPage() {
                   item.profileStatus === "approved" || item.profileStatus === "active";
                 const isRejected = item.profileStatus === "rejected";
                 const busy = pendingActionId === item.consultantId;
+                const featuredBusy = featuredActionId === item.consultantId;
                 const isOwnProfile = item.ownerUserId === user.id;
                 const isExpanded = expandedId === item.consultantId;
                 const auditWho =
@@ -332,6 +383,11 @@ export default function AdminPage() {
                                 Самостоятелно одобрен
                               </span>
                             ) : null}
+                            {item.featured ? (
+                              <span className="status-badge admin-card__featured-badge">
+                                Подбран за начална
+                              </span>
+                            ) : null}
                           </div>
                           <h3>{item.name}</h3>
                           <p>{item.headline || "Без описание"}</p>
@@ -368,6 +424,10 @@ export default function AdminPage() {
                       <div>
                         <dt>Публичен</dt>
                         <dd>{item.isPublic ? "Да" : "Не"}</dd>
+                      </div>
+                      <div>
+                        <dt>Начална</dt>
+                        <dd>{item.featured ? "Подбран" : "Не"}</dd>
                       </div>
                     </dl>
 
@@ -439,6 +499,23 @@ export default function AdminPage() {
                             : "Съобщение"}
                         </button>
                       ) : null}
+                      <button
+                        className={`ghost-button admin-card__featured-action ${item.featured ? "admin-card__featured-action--active" : ""}`}
+                        type="button"
+                        disabled={featuredBusy || (!item.featured && (!isApproved || !item.isPublic))}
+                        title={
+                          !item.featured && (!isApproved || !item.isPublic)
+                            ? "Профилът трябва първо да е одобрен и публичен."
+                            : undefined
+                        }
+                        onClick={() => setFeatured(item, !item.featured)}
+                      >
+                        {featuredBusy
+                          ? "Записваме..."
+                          : item.featured
+                            ? "Махни от подбрани"
+                            : "Подбери за начална"}
+                      </button>
                       {!isApproved ? (
                         <button
                           className="ghost-button"

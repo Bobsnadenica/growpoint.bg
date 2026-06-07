@@ -947,6 +947,14 @@ resource "aws_apigatewayv2_route" "admin_consultant_status" {
   authorization_type = "JWT"
 }
 
+resource "aws_apigatewayv2_route" "admin_consultant_featured" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "PUT /admin/consultants/{consultantId}/featured"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
 resource "aws_apigatewayv2_route" "admin_consultant_get" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "GET /admin/consultants/{consultantId}"

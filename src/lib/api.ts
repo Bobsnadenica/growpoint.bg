@@ -473,6 +473,25 @@ export const api = {
     );
   },
 
+  async adminSetConsultantFeatured(
+    token: string,
+    consultantId: string,
+    featured: boolean
+  ) {
+    return request<{
+      consultantId: string;
+      featured: boolean;
+      featuredUpdatedAt?: string;
+      featuredUpdatedBy?: string;
+      featuredUpdatedByEmail?: string;
+      unchanged?: boolean;
+    }>(
+      `/admin/consultants/${encodeURIComponent(consultantId)}/featured`,
+      { method: "PUT", body: JSON.stringify({ featured }) },
+      token
+    );
+  },
+
   async adminMessageUser(
     token: string,
     userId: string,

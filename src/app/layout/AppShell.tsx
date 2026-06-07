@@ -267,11 +267,13 @@ export default function AppShell() {
   const [isRouteTransitioning, setIsRouteTransitioning] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
+  const [isThemeSwitching, setIsThemeSwitching] = useState(false);
   const [betaNoticeVisible, setBetaNoticeVisible] = useState(readInitialBetaNoticeVisibility);
   const [headerNotifications, setHeaderNotifications] = useState<NotificationItem[]>([]);
   const [activeHeaderPanel, setActiveHeaderPanel] = useState<HeaderPanel | null>(null);
   const [headerNotificationsBusy, setHeaderNotificationsBusy] = useState(false);
   const topbarPanelRef = useRef<HTMLDivElement | null>(null);
+  const themeSwitchTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -283,6 +285,14 @@ export default function AppShell() {
       // localStorage may be disabled.
     }
   }, [theme]);
+
+  useEffect(() => {
+    return () => {
+      if (themeSwitchTimerRef.current) {
+        window.clearTimeout(themeSwitchTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setIsMenuOpen(false);
@@ -500,6 +510,17 @@ export default function AppShell() {
   const activeUnreadCount = activeHeaderItems.filter((item) => !item.readAt).length;
 
   function toggleTheme() {
+    setIsThemeSwitching(true);
+
+    if (themeSwitchTimerRef.current) {
+      window.clearTimeout(themeSwitchTimerRef.current);
+    }
+
+    themeSwitchTimerRef.current = window.setTimeout(() => {
+      setIsThemeSwitching(false);
+      themeSwitchTimerRef.current = null;
+    }, 560);
+
     setTheme((value) => (value === "dark" ? "light" : "dark"));
   }
 
@@ -535,7 +556,13 @@ export default function AppShell() {
   }
 
   return (
-    <div className={`site-shell ${isLoggingOut ? "site-shell--signing-out" : ""}`}>
+    <div
+      className={[
+        "site-shell",
+        isLoggingOut ? "site-shell--signing-out" : "",
+        isThemeSwitching ? "site-shell--theme-switching" : ""
+      ].filter(Boolean).join(" ")}
+    >
       <RouteExperience />
       <a className="skip-link" href="#main-content">
         Към съдържанието

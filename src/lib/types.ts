@@ -33,6 +33,7 @@ export interface AdminConsultantSummary {
   profileType: ConsultantProfileType;
   profileStatus: ConsultantProfileStatus | "active";
   isPublic: boolean;
+  featured: boolean;
   membershipTier: string;
   avatarUrl: string;
   experienceYears: number;
