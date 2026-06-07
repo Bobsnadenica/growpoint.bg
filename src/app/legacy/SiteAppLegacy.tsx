@@ -4479,6 +4479,52 @@ export function DashboardPage() {
             </div>
           </section>
 
+          {profile.plan !== "pro" ? (
+            <section
+              className={`panel upgrade-preview-card upgrade-preview-card--${profile.role}`}
+              id="upgrade"
+              aria-label="Надграждане до GrowPoint Pro"
+            >
+              <p className="eyebrow">Скоро · GrowPoint Pro</p>
+              <h2>
+                {profile.role === "consultant"
+                  ? "Надгради до Pro профил за повече видимост"
+                  : "Надгради до GrowPoint Pro"}
+              </h2>
+              <p className="section-caption">
+                {profile.role === "consultant"
+                  ? "Pro профилите се открояват в каталога и отключват повече начини за представяне."
+                  : "Pro акаунтът ще ти даде повече инструменти, за да намериш правилния консултант по-бързо."}
+              </p>
+              <div className="upgrade-preview-card__benefits">
+                {(profile.role === "consultant"
+                  ? [
+                      "Подреждане над стандартните профили",
+                      "Цветова тема на профила",
+                      "Повече снимки и разширено представяне",
+                      "Значка за доверен профил"
+                    ]
+                  : [
+                      "Запазени и приоритетни консултанти",
+                      "Разширена история на сесиите",
+                      "По-бърза връзка с консултанти",
+                      "Ранен достъп до нови функции"
+                    ]
+                ).map((benefit) => (
+                  <span className="chip chip--soft" key={benefit}>
+                    {benefit}
+                  </span>
+                ))}
+              </div>
+              <div className="upgrade-preview-card__footer">
+                <span>Плащанията още не са активни — засега всичко е безплатно.</span>
+                <Link className="ghost-button" to="/contact">
+                  Заяви интерес
+                </Link>
+              </div>
+            </section>
+          ) : null}
+
           <NotificationsPanel
             notifications={notifications}
             busy={notificationsBusy}

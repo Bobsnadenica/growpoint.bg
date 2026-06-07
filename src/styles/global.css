@@ -6597,6 +6597,10 @@ textarea {
 }
 
 .upgrade-preview-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
