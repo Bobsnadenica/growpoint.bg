@@ -1,0 +1,236 @@
+GrowPoint — Website Review & Fix Report
+=======================================
+Date: 2026-06-07
+Reviewer: automated pass (review #2, includes fixes)
+
+Targets:
+  - Live site (GitHub Pages):  https://www.growpoint.bg
+  - CloudFront test domain:    https://d30m6jtjij7col.cloudfront.net
+  - Live API:                  https://zmajj05nm1.execute-api.eu-west-1.amazonaws.com
+  - AWS account:               010419877195 (eu-west-1)
+  - Local repo:                /Users/privileged/Projects/growpoint.bg/growpoint.bg
+
+Scope notes from the owner (applied to this pass):
+  - Apex DNS (growpoint.bg without www) failing TLS is KNOWN and will be fixed
+    later. Excluded from findings.
+  - Payments are intentionally not ready. Excluded.
+  - Demo/example consultants are kept on purpose so the site looks full for
+    pre-launch testing. They were NOT removed — instead their data was repaired.
+
+
+==================================================================
+PART 1 — WHAT WAS TESTED
+==================================================================
+
+A) Code & infra validation (local)
+   - tsc --noEmit (frontend type-check) ............ PASS
+   - node -c backend/api/index.cjs ................. PASS
+   - node --check scripts/site-build.mjs .......... PASS
+   - node --check scripts/refresh-example-availability.cjs ... PASS
+   - terraform validate (infra/terraform) ......... PASS ("Success! The configuration is valid.")
+   - terraform fmt -check ......................... clean
+
+B) Safe production smoke (npm run smoke:prod) — twice (before & after fixes)
+   - 14/14 PASS both runs (latest run id 6u51r3nfog).
+   - Covers: API /health, /consultants (11 profiles), Cyrillic profile route,
+     /, /users/, /consultants/, a profile route, /auth/, sitemap, robots,
+     anonymous 401 on /me/notifications, /bookings, /admin/consultants,
+     and production-origin CORS preflight (204).
+
+C) Live API probing (curl)
+   - GET /health -> {"ok":true,"service":"growpoint-api"}
+   - GET /consultants -> 11 items (10 demo isExample=true + 1 real "Димитър Менторски")
+   - GET /consultants/{cyrillic-slug} -> 200 with decoded Bulgarian content
+   - Anonymous GET on /me/profile, /me/notifications, /bookings,
+     /admin/consultants, /bookings/{id}/messages -> all 401 (no data leak)
+   - POST /me/documents/{id}/share (no token) -> 404 (route doesn't exist;
+     sharing is an embedded field saved via PUT /me/profile — correct)
+   - OPTIONS /bookings from Origin www.growpoint.bg -> 204
+
+D) Browser render (local dev server via Preview, production env mode)
+   - Home page renders cleanly; no JS console errors.
+   - Mobile (375px) + responsive layout: hamburger menu, hero, cookie banner
+     all render correctly.
+   - Cookie consent defaults to privacy-preserving copy ("Само необходимите"
+     / "Приемам"); no third-party ad trackers mentioned.
+   - "beta" warning tape banner is present and dismissible.
+   - NOTE: API-backed pages (consultant detail, directory) cannot load from
+     localhost because the API CORS allowlist only contains www.growpoint.bg
+     and the CloudFront origins. This is a dev-only limitation, NOT a bug —
+     the production origin is allowlisted and works.
+
+E) Per-route SEO metadata (live HTML + regenerated build)
+   - Every public route returns a route-specific <title>, description,
+     canonical, OG/Twitter tags and JSON-LD. Cyrillic slug canonical URLs are
+     correctly percent-encoded.
+   - CSP, referrer-policy, robots meta, hreflang, structured data all present.
+
+F) Build pipeline
+   - npm run build (GitHub Pages) ....... OK; regenerated route copies + sitemap
+   - npm run build:cloudfront ........... OK; now also emits per-route HTML into dist/
+   - Bundle (gzip): main JS 154 KB, HeroAnimation 125 KB (separate lazy chunk),
+     CSS 27 KB. Healthy — the raw ~540 KB figure noted in review #1 was the
+     uncompressed size; gzip transfer size is fine and the hero animation is
+     correctly code-split.
+
+
+==================================================================
+PART 2 — WHAT WAS FIXED IN THIS PASS
+==================================================================
+
+[DONE + LIVE] FIX 1 — Stale demo availability (was review #1 finding F3)
+   Problem: all 10 demo consultants had availability entirely in May 2026 (in
+   the past). The booking panel filters to future slots only, so every demo
+   profile showed "Свободните часове се подготвят" with zero bookable hours —
+   the opposite of "looks full".
+   Fix: added scripts/refresh-example-availability.cjs. It scans the
+   consultants table, and for rows with isExample === true ONLY, rewrites
+   `availability` to future weekday slots (next ~2 weeks, weekends skipped),
+   preserving each profile's original hour-of-day pattern, and recomputes
+   `nextAvailable`. Real profiles are never touched. Safe-by-default (dry-run
+   unless --apply).
+   Applied to production DynamoDB (owner-approved). Verified via live API:
+   all 11 public profiles now have a future nextAvailable (earliest 2026-06-08)
+   and 10–40 future slots each. This is live immediately (data is fetched at
+   runtime), no redeploy required.
+   Reversible: DynamoDB point-in-time recovery is enabled; re-runnable any time.
+
+[DONE — staged, not yet deployed] FIX 2 — og:image leaked external demo URLs (F4)
+   Problem: demo profiles' social/SEO images pointed at randomuser.me stock
+   photos (e.g. og:image = randomuser.me/...men/32.jpg). README intent is that
+   SEO/social images stay branded/stable.
+   Fix: scripts/site-build.mjs now only trusts images hosted on the GrowPoint
+   site host or *.amazonaws.com for SEO. External/demo hosts and signed S3 URLs
+   fall back to the branded default (assets/advertisement/3.jpg).
+   Verified: regenerated the committed GitHub Pages route HTML — og:image,
+   twitter:image AND JSON-LD ImageObject for all 10 demo profiles now use the
+   branded image. The real Менторски profile was already branded (unchanged).
+   STATUS: the fix is staged in the working tree (consultants/*/index.html +
+   sitemap.xml). It goes live only after commit + push to the GitHub Pages
+   branch. Not pushed (left to the owner).
+
+[DONE — staged, not deployed by owner choice] FIX 3 — CloudFront per-route SEO (F1)
+   Problem: CloudFront served the generic home <title> for ALL routes,
+   including known consultant slugs. Two root causes:
+     (a) build:cloudfront did not render per-route static HTML into dist/.
+     (b) The distribution uses a private S3 REST origin (OAC). default_root_object
+         only resolves "/", so "/consultants/foo/" hit S3 as a missing key,
+         got 403/404, and the custom_error_response fell back to the generic
+         root /index.html — losing per-route metadata.
+   Fix (two parts):
+     (a) scripts/site-build.mjs: build:cloudfront now renders the per-route
+         index.html files into dist/ (renderStaticRoutes: true). Verified —
+         dist/consultants/<slug>/index.html etc. are emitted with correct
+         per-route metadata.
+     (b) infra/terraform/main.tf: added a CloudFront Function (viewer-request,
+         cloudfront-js-2.0) that rewrites directory-style URIs to their
+         index.html object ("/x/" -> "/x/index.html", "/x" -> "/x/index.html",
+         leaving files with extensions alone), and associated it with the
+         default cache behavior. Unknown routes still 404 at S3 and fall back to
+         the SPA shell, so SPA fallback is preserved. terraform validate passes.
+   STATUS: NOT applied to AWS (owner chose to keep this local for now). To
+   deploy: see PART 4.
+
+
+==================================================================
+PART 3 — WHAT STILL NEEDS WORK (remaining)
+==================================================================
+
+[P0] Deploy the CloudFront SEO fix before DNS cutover.
+   The code/infra above is ready but not applied. Until then, CloudFront still
+   serves generic metadata per route. Apply steps in PART 4. (Apex DNS itself
+   is owner-acknowledged/out of scope.)
+
+[P0] GrowPoint SES email sender.
+   Still blocked on Cloudflare SES DNS records + SES production access. Real
+   verification/reset/booking/admin/reminder email content has never been seen
+   in a real inbox; backend falls back to in-app notifications. (Cognito's
+   default sender still delivers signup/reset codes.)
+
+[P1] Admin browser flow (approve / reject / delete / preview / message).
+   Not exercised in this pass (no admin credentials used here). The featured
+   ("Подбрани") API and UI are implemented per the README ledger but the
+   destructive admin actions still need a browser pass with one disposable
+   consultant.
+
+[P1] Documents-sharing UI on desktop + mobile.
+   API privacy is verified (403 for unrelated consultant). The visible
+   dashboard upload/share flow still needs a real-user pass.
+
+[P1] Mobile logged-in UX (dashboard, notifications, messages, booking actions).
+   Only the public home/mobile shell was checked here (logged-in pages need
+   the live origin / real auth).
+
+[P2] Reminder timing around a real upcoming session — observe live.
+
+[P2] Sitemap/SEO freshness automation.
+   site-build runs only at build time, so a newly approved consultant won't
+   appear in sitemap.xml / get a route copy until the next build+deploy.
+   Consider a scheduled CloudFront build/deploy (or edge metadata renderer)
+   after profile approvals.
+
+[P2] Observability: CloudWatch alarms, rate limits, structured validation
+   tests, and load testing are still thin for scale.
+
+DOC NIT: README section 7.2 route map omits the document-sharing mechanism
+   (it's an embedded `sharedWithConsultantIds` field saved via PUT /me/profile,
+   not a dedicated /share route). Worth a one-line note so future readers don't
+   look for a missing endpoint.
+
+
+==================================================================
+PART 4 — HOW TO DEPLOY THE STAGED FIXES
+==================================================================
+
+1) og:image fix (GitHub Pages):
+   - Already rebuilt into the working tree. Review `git diff` on
+     consultants/*/index.html and sitemap.xml, then commit + push the
+     GitHub Pages source branch. (The owner controls commit/push.)
+
+2) CloudFront per-route SEO fix:
+   - terraform -chdir=infra/terraform apply        # creates the CF Function + association
+   - npm run deploy:cloudfront                      # builds dist (now with route copies) and syncs to S3 + invalidates
+   - node scripts/smoke-production.mjs --cloudfront # confirm routes + SPA fallback
+   - Manually confirm a known route now serves its own <title> on the
+     CloudFront domain, e.g.:
+       curl -s https://d30m6jtjij7col.cloudfront.net/consultants/georgi-dimitrov-tech-careers/ | grep '<title>'
+
+3) Demo availability:
+   - Already applied & live. Re-run any time it goes stale again:
+       AWS_REGION=eu-west-1 CONSULTANTS_TABLE=careerdoc-dev-consultants \
+         node scripts/refresh-example-availability.cjs --apply
+
+
+==================================================================
+PART 5 — FILES CHANGED IN THIS PASS
+==================================================================
+   scripts/site-build.mjs                  (og:image host allowlist; CF route copies)
+   infra/terraform/main.tf                 (CloudFront Function + association)
+   scripts/refresh-example-availability.cjs (NEW — demo availability refresher)
+   consultants/*/index.html, sitemap.xml   (regenerated GitHub Pages artifacts w/ branded og:image)
+   test.txt                                (this report)
+   .claude/launch.json                     (NEW — local Preview dev-server config; harmless, optional)
+
+Production data changed: availability/nextAvailable on the 10 isExample
+consultants in careerdoc-dev-consultants (owner-approved; PITR-reversible).
+No commit/push and no Terraform/CloudFront deploy were performed.
+
+
+==================================================================
+PART 6 — SUMMARY
+==================================================================
+The platform's public read paths, API security boundaries, CORS, SEO metadata,
+and build/infra config are all healthy and validate cleanly.
+
+This pass repaired the three substantive content/SEO issues from review #1 that
+were in scope:
+  • Demo availability is fixed and LIVE — the directory now shows real,
+    upcoming bookable slots on every profile.
+  • Demo og:image leakage is fixed in the build (staged; commit+push to deploy).
+  • The CloudFront per-route SEO regression is fixed in code + Terraform
+    (staged; apply+deploy to activate) — this clears the main blocker for the
+    eventual DNS cutover.
+
+Out of scope by owner direction: apex DNS/TLS, payments, demo-profile removal.
+Still genuinely open: SES email, admin destructive-action browser QA, logged-in
+mobile UX, reminder timing, and scale observability.

@@ -126,25 +126,45 @@ function consultantDescription(item, seoData) {
   return `Резервирай среща с ${item.name || "експерт"} - ${role}${city} в GrowPoint.`;
 }
 
-function isStablePublicImageUrl(value) {
+function isStablePublicImageUrl(value, allowedHosts = []) {
   if (!value) return false;
 
   try {
     const url = new URL(String(value));
-    return !(
+    const isSignedUrl =
       url.searchParams.has("X-Amz-Algorithm") ||
       url.searchParams.has("X-Amz-Signature") ||
       url.searchParams.has("X-Amz-Expires") ||
-      url.searchParams.has("X-Amz-Security-Token")
+      url.searchParams.has("X-Amz-Security-Token");
+    if (isSignedUrl) return false;
+    if (!allowedHosts.length) return true;
+    return allowedHosts.some(
+      (host) => url.hostname === host || url.hostname.endsWith(`.${host}`)
     );
   } catch {
     return false;
   }
 }
 
+// Only trust images hosted by GrowPoint itself or our own S3 bucket for SEO /
+// social metadata. Demo/example profiles use external avatar hosts (e.g.
+// randomuser.me) that should never leak into og:image/Twitter cards, and signed
+// S3 URLs are temporary — both fall back to the stable branded default image.
+function seoImageHosts(seoData) {
+  const hosts = new Set(["amazonaws.com"]);
+  try {
+    hosts.add(new URL(seoData.siteUrl).hostname);
+  } catch {}
+  return Array.from(hosts);
+}
+
 function consultantSeoImage(item, seoData) {
+  const allowedHosts = seoImageHosts(seoData);
   const candidates = [item.heroUrl, item.avatarUrl];
-  return candidates.find(isStablePublicImageUrl) || seoData.defaultImage;
+  return (
+    candidates.find((url) => isStablePublicImageUrl(url, allowedHosts)) ||
+    seoData.defaultImage
+  );
 }
 
 function consultantRoute(item, seoData) {
@@ -472,9 +492,13 @@ async function runCloudfrontBuild() {
   process.chdir(projectDir);
   await viteBuild();
   const effectiveSeoData = await loadEffectiveSeoData();
+  // Render the per-route static HTML into dist/ so CloudFront serves
+  // route-specific metadata (title/description/OG/JSON-LD) for known public
+  // routes. A CloudFront viewer-request function rewrites directory paths to
+  // these index.html objects; unknown routes still fall back to the SPA shell.
   await writeSeoFiles(await readFile(path.join(distDir, "index.html"), "utf8"), effectiveSeoData, {
     targetRoot: distDir,
-    renderStaticRoutes: false
+    renderStaticRoutes: true
   });
 }
 

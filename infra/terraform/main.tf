@@ -351,6 +351,26 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_function" "frontend_rewrite" {
+  count   = var.frontend_hosting_enabled ? 1 : 0
+  name    = "${local.name_prefix}-frontend-rewrite"
+  runtime = "cloudfront-js-2.0"
+  comment = "Resolve directory-style requests to their index.html object"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+      if (uri.endsWith('/')) {
+        request.uri = uri + 'index.html';
+      } else if (uri.lastIndexOf('.') < uri.lastIndexOf('/')) {
+        request.uri = uri + '/index.html';
+      }
+      return request;
+    }
+  EOT
+}
+
 resource "aws_cloudfront_response_headers_policy" "frontend_security" {
   count   = var.frontend_hosting_enabled ? 1 : 0
   name    = "${local.name_prefix}-frontend-security"
@@ -410,6 +430,11 @@ resource "aws_cloudfront_distribution" "frontend" {
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_disabled.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend_security[0].id
     compress                   = true
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.frontend_rewrite[0].arn
+    }
   }
 
   ordered_cache_behavior {
