@@ -1847,10 +1847,12 @@ async function listConsultants(event) {
       items: decoratedItems.map(stripSensitiveConsultantFields),
       nextCursor: encodeCursor(lastEvaluatedKey)
     },
-    // Marketplace data updates whenever a consultant saves their profile;
-    // a 60s cache made client-side updates appear with a lag. Keep this
-    // fully fresh until traffic justifies a CDN with explicit invalidation.
-    { "Cache-Control": "no-store" }
+    // Public marketplace data. A short max-age plus stale-while-revalidate lets
+    // browsers and any CDN layer serve repeat/concurrent reads without hitting
+    // Lambda (lower latency + cost), while consultant profile edits still
+    // surface within ~60s. Note: responses include short-lived signed media
+    // URLs, so the TTL is intentionally kept under their expiry.
+    { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" }
   );
 }
 
@@ -1876,9 +1878,11 @@ async function getConsultant(event) {
     200,
     stripSensitiveConsultantFields({ ...decorated, recentReviews }),
     {
-      // Match /consultants — no caching so profile edits are immediately
-      // visible to clients without waiting for stale-while-revalidate.
-      "Cache-Control": "no-store"
+      // Match /consultants — short public cache with revalidation. Signed media
+      // URLs in the payload are valid for 3600s, comfortably longer than the
+      // max served age (max-age + stale-while-revalidate), so cached responses
+      // never hand out an expired image URL.
+      "Cache-Control": "public, max-age=60, stale-while-revalidate=300"
     }
   );
 }

@@ -1,3 +1,23 @@
+# --- Secrets & environment (public repo: never commit real secrets) ---
+# Ignore all env files by default. The only intentionally tracked one is
+# .env.production, which holds PUBLIC client config (API URL + Cognito pool/app
+# client IDs) that already ships inside the built frontend bundle — no secrets.
+.env
+.env.*
+!.env.production
+.env*.local
+
+# Private keys, certificates and credential files
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+id_rsa*
+.aws/
+aws-credentials*
+**/service-account*.json
+
 # Local .terraform directories
 .terraform/
 

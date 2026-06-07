@@ -63,6 +63,24 @@ Last QA pass: 2026-06-07 on `https://www.growpoint.bg`, the CloudFront test doma
 
 This table is the current production-readiness map: what works, what still needs work, and what should be tested with real users next. Controlled live QA runs use disposable Cognito users, a disposable consultant profile, temporary S3 objects, and disposable bookings; the latest run removed those records afterwards and cleanup was verified.
 
+### 2026-06-07 Production Hardening Pass
+
+The latest pass focused on launch readiness, speed, and repo security:
+
+- **Functional QA:** the full live lifecycle suite passed 27/27 — signup + resend + admin confirm, login, consultant profile save/approval/public route, avatar + cover upload, the full booking lifecycle, two-way booking messages, ICS, document sharing + privacy, past-session confirmation + review, and notifications. Disposable data was cleaned up.
+- **Public profile SEO on CloudFront:** a CloudFront viewer-request function now resolves directory-style routes to their `index.html`, so known public routes serve route-specific metadata while unknown routes still fall back to the SPA shell.
+- **Speed / cost:** public `GET /consultants` and `GET /consultants/{slug}` now send `Cache-Control: public, max-age=60, stale-while-revalidate=300`, so browsers and any CDN layer can serve repeat reads without hitting Lambda. Signed media URLs stay valid for 3600s, comfortably longer than the cache window.
+- **Demo profiles:** example consultants are retained on purpose to keep the directory full and are clearly labeled with a "Пример" badge; their availability is refreshed to upcoming dates via `scripts/refresh-example-availability.cjs`.
+
+### Security and Secrets (public repository)
+
+This repository is public, so no secrets are committed:
+
+- Real secrets live only in `infra/terraform/terraform.tfvars`, which is gitignored. Use `infra/terraform/terraform.tfvars.example` as the template.
+- `.gitignore` ignores `.env` / `.env.*` (and `.env*.local`), `*.pem` / `*.key` / `*.p8` / `*.p12` / `*.pfx`, `id_rsa*`, `.aws/`, `aws-credentials*`, and `service-account*.json`.
+- The only tracked env file is `.env.production`, which contains **public** client configuration only (API base URL plus the Cognito user-pool and app-client IDs). These values already ship inside the built frontend bundle and are not secret.
+- Backend AWS credentials are never stored in the repo; the Lambda uses its IAM role and local tooling uses your own AWS CLI profile.
+
 ### Simple Launch Checklist
 
 | Area | Tested | Works | Needs testing / improvement |

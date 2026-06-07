@@ -234,3 +234,82 @@ were in scope:
 Out of scope by owner direction: apex DNS/TLS, payments, demo-profile removal.
 Still genuinely open: SES email, admin destructive-action browser QA, logged-in
 mobile UX, reminder timing, and scale observability.
+
+
+==================================================================
+SPRINT: PRODUCTION READINESS (BG launch) — PROGRESS & BUG LOG
+==================================================================
+Date: 2026-06-07 (sprint pass)
+
+AUDIT RESULTS (grounding the plan)
+  - Demo "example" label: PRESENT. <ExampleBadge> ("Пример", tooltip "Този
+    профил е примерен и служи за визуализация.") renders on spotlight, directory
+    cards, and the public profile (SiteAppLegacy.tsx:905/1900/4508/6586).
+    Requirement met; still want a live visual confirm.
+  - Bulgarian completeness: GOOD. UI is overwhelmingly BG. Only minor English in
+    a few input PLACEHOLDERS that are intentional anglicisms/examples
+    (e.g. "MBA, Product School, Google Analytics", "Stakeholder management, CV
+    writing, Interview prep", slug placeholder "ivan-petrov"). Not blockers.
+  - Repo security: CLEAN. No AWS keys / private-key blocks in tracked files.
+    terraform.tfvars (real social-login secrets) is gitignored; only
+    terraform.tfvars.example + docs/social-login-setup.md contain placeholders.
+    .env.production is tracked but holds ONLY public client config (API URL +
+    Cognito pool/app-client IDs) that already ships in the frontend bundle.
+  - Payment groundwork: PARTIAL. CSS for .upgrade-preview-card (client +
+    consultant variants) exists but appears unwired in the React tree — no
+    visible post-registration upgrade hint yet.
+
+PERF / RELIABILITY FINDINGS (measured against live API)
+  [BUG-P1] Public /consultants is slow: TTFB ~1.9s, total ~2.6s for 31 KB.
+    Single profile TTFB ~1.0s. Likely Lambda cold start + list work. Caching
+    helps repeat/concurrent loads; cold-start latency still needs attention
+    (warm path / lighter payload / GSI query) for a snappy first load.
+  [BUG-P1] Public endpoints sent NO cacheable header (Cache-Control: no-store) —
+    every load hit Lambda (cost + latency). README claimed cache headers exist;
+    it did not match the code.
+  [BUG-P2] Demo avatars are hosted on randomuser.me (TTFB ~2s, external, not
+    under our control) — slow profile pictures and a third-party dependency.
+    Real avatars are 1-hour signed S3 URLs (not CDN-cached).
+
+FIXES MADE THIS SPRINT (staged locally; not deployed/committed)
+  [DONE] Speed: added "Cache-Control: public, max-age=60,
+    stale-while-revalidate=300" to GET /consultants and /consultants/{slug}
+    (backend/api/index.cjs). Verified signed media URLs live 3600s, comfortably
+    longer than the max served age, so cached responses never serve an expired
+    image URL. Profile edits still surface within ~60s. Deploy via terraform
+    apply to take effect.
+  [DONE] Security: hardened .gitignore — ignores .env / .env.* (keeps public
+    .env.production), .env*.local, *.pem/*.key/*.p8/*.p12/*.pfx, id_rsa*, .aws/,
+    aws-credentials*, service-account*.json. Verified .env.production stays
+    tracked and stray secrets (terraform.tfvars, backend/api/.env, *.p8, *.pem)
+    are now ignored.
+
+BLOCKED — NEEDS OWNER AUTHORIZATION
+  - Functional QA of registration / forgot-password / admin approval requires
+    creating real (self-cleaning) accounts in production Cognito via
+    `npm run smoke:prod:live`. The safety layer blocked this pending explicit
+    approval. This is the core "test every flow + record bugs" item (#12) and is
+    not yet done.
+
+FUNCTIONAL QA RESULT (npm run smoke:prod:live, run yhg62ix3wwl) — owner-approved
+  PASSED 27/27. No functional bugs found. Verified end-to-end against live prod:
+    - Signup + resend confirmation + admin confirm (2 disposable users)
+    - Login (client + consultant tokens), bootstrap, profile creation
+    - Consultant profile save + approval + public route
+    - Avatar + cover upload (signed S3)
+    - Booking lifecycle: create, accept, decline, cancel, reschedule, re-accept
+    - Booking messages BOTH directions (client↔consultant)
+    - ICS download, document upload/share/privacy (incl. unrelated-user 403)
+    - Past-session confirmation + review (rating 5)
+    - Notifications list + mark-read
+    - Forgot-password request delivery
+    - Disposable production data cleaned up afterward
+  SKIP: optional admin auth/message test (needs GROWPOINT_ADMIN_EMAIL/PASSWORD —
+    admin approve/reject/delete BROWSER flow still not exercised here).
+
+STILL TODO THIS SPRINT
+  - #12 Functional QA + bug log — DONE (27/27, no bugs). Admin browser flow open.
+  - #16 Payment groundwork: add a visible post-registration "Надгради" hint
+  - #17 Messaging/notifications reliability verification (desktop + mobile)
+  - #18 README refresh (no confidential info)
+  - Deploy decision for the staged backend/.gitignore/CloudFront/og:image fixes
