@@ -307,9 +307,43 @@ FUNCTIONAL QA RESULT (npm run smoke:prod:live, run yhg62ix3wwl) — owner-approv
   SKIP: optional admin auth/message test (needs GROWPOINT_ADMIN_EMAIL/PASSWORD —
     admin approve/reject/delete BROWSER flow still not exercised here).
 
-STILL TODO THIS SPRINT
-  - #12 Functional QA + bug log — DONE (27/27, no bugs). Admin browser flow open.
-  - #16 Payment groundwork: add a visible post-registration "Надгради" hint
-  - #17 Messaging/notifications reliability verification (desktop + mobile)
-  - #18 README refresh (no confidential info)
-  - Deploy decision for the staged backend/.gitignore/CloudFront/og:image fixes
+SPRINT CLOSE-OUT (deployed)
+  Owner approved the live functional test + a full deploy. Shipped:
+  - Backend cache headers: LIVE. GET /consultants + /consultants/{slug} now
+    return "public, max-age=60, stale-while-revalidate=300". Warm list TTFB
+    dropped ~1.9s -> ~0.42s. (terraform apply, commit d2c57c6f)
+  - CloudFront per-route SEO: LIVE on the test domain. The new CloudFront
+    Function rewrites directory paths to index.html, so known routes serve
+    route-specific <title>/metadata (verified: georgi, Cyrillic Менторски,
+    about) while unknown routes still return the SPA shell and assets are
+    untouched. (terraform apply + npm run deploy:cloudfront)
+  - .gitignore hardening + README security/prod notes: committed d2c57c6f.
+  - og:image branded fix + demo availability refresh: were committed/pushed by
+    the owner as da4b5114 and are live.
+  - Payment groundwork: post-registration "GrowPoint Pro" upgrade hint added to
+    the dashboard for free-plan users (role-aware, BG copy, "payments not active
+    yet", CTA -> /contact). Pushed b0e2f68b. NOTE: compiles + builds + app boots
+    clean, but the dashboard is auth-gated so it has NOT had a logged-in visual
+    pass yet — quick visual confirm recommended.
+  - Post-deploy CloudFront smoke: 14/15 (the 1 fail was a transient "fetch
+    failed"; /bookings re-verified 401 x3 — not a bug).
+
+  STATUS BY TASK:
+    #12 Functional QA ............ DONE (27/27, no functional bugs)
+    #13 Repo security/.gitignore . DONE + committed
+    #14 Speed (cache headers) .... DONE + deployed (image-CDN still a P2 idea)
+    #15 Demo label + Bulgarian ... DONE (badge present; BG essentially complete)
+    #16 Payment groundwork ....... DONE + deployed (visual check pending)
+    #17 Messaging/notifications .. VERIFIED server-side (two-way messages +
+        notification counts passed in 27/27); mobile visual pass still open
+    #18 README ................... DONE + committed
+
+  REMAINING (carry-over, not blockers for a soft launch):
+    - Admin approve/reject/delete BROWSER flow (set GROWPOINT_ADMIN_* and test)
+    - Logged-in MOBILE visual pass (dashboard, upgrade card, messages, bookings)
+    - SES production sender + real inbox email copy (Cloudflare DNS + SES access)
+    - Profile-picture CDN / stable public derivatives (demo avatars still on
+      external randomuser.me ~2s; real avatars are 1h signed S3 URLs)
+    - Cold-start API latency (~1-2s first hit) — consider warmer/lighter path
+    - Repo bloat: backend/api/node_modules is committed (P2 hygiene)
+    - Apex DNS/TLS cutover (owner-owned, out of scope)
