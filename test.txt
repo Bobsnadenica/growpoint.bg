@@ -347,3 +347,68 @@ SPRINT CLOSE-OUT (deployed)
     - Cold-start API latency (~1-2s first hit) — consider warmer/lighter path
     - Repo bloat: backend/api/node_modules is committed (P2 hygiene)
     - Apex DNS/TLS cutover (owner-owned, out of scope)
+
+
+==================================================================
+FOLLOW-UP SESSION — admin test, cleanup, network, CloudFront/DNS
+==================================================================
+Date: 2026-06-07 (later)
+
+ENVIRONMENT NOTE (root cause of the Terraform error)
+  The owner's `terraform plan` failed with "dial tcp: lookup
+  sts.eu-west-1.amazonaws.com: no such host". This is the LOCAL MACHINE's
+  network/DNS to AWS flapping (probes alternated HTTP 200 / HTTP 000 / hung),
+  NOT a Terraform or config problem. Public-domain DNS is unrelated and fine:
+  growpoint.bg is registered/DNS-managed at **jethost.bg** and resolves `www`
+  to GitHub Pages (the live landing page). Fix on the machine: reconnect
+  network/VPN, set a working resolver (e.g. 1.1.1.1 / 8.8.8.8), confirm with
+  `nslookup sts.eu-west-1.amazonaws.com`, then re-run terraform.
+
+ADMIN ACCOUNT TEST (admin@admin.com)
+  - Admin Cognito login (USER_PASSWORD_AUTH): WORKS.
+  - GET /admin/consultants (admin-only list): WORKS — returned 18 profiles
+    incl. non-public/pending/rejected ones.
+  - PUT /admin/consultants/{id}/status -> rejected: WORKS (verified live;
+    statusUpdatedByEmail=admin@admin.com, isPublic flipped to false).
+  - NOT yet exercised: approve (re-approve), featured toggle on a disposable
+    profile, admin message, and the full lifecycle via smoke:prod:live — the
+    machine network was too unstable to run the full suite safely this session.
+
+  [BUG-P0 FOUND + FIXED] Orphaned QA profile leaked to the PUBLIC directory:
+    "Codex QA Mentor lx9tnahos1o" (consultant-4cead84c-...) was approved+public
+    and appeared in live GET /consultants (public count had risen 11 -> 12). It
+    is an orphan from a smoke run whose cleanup failed when the network dropped.
+    FIX: admin-rejected it (reversible) with owner approval -> isPublic=false,
+    removed from the public directory (allow up to ~60s for the new cache TTL).
+
+  [NOTE] 6 other non-public test profiles remain in the DB by owner's choice
+    (keep): gsgdsgds (pending), Dimitar Adminski x2 (approved+rejected),
+    testtesttesttest (approved), Димитър Консултантски (rejected), Пепи Еврото
+    (active). None are visible on the public site (public filter = approved +
+    complete + not self-approved).
+
+  PROCESS GAP: smoke:prod:live cleanup is not resilient to mid-run network
+    failure -> it can orphan a public consultant. Consider an idempotent
+    "purge by run-id / purge codex-* orphans" cleanup pass, and run the live
+    suite only on a stable connection.
+
+CLOUDFRONT — SPEED / COST FOR A BULGARIAN AUDIENCE
+  - Price class already = PriceClass_100 (North America + EUROPE) — the cheapest
+    class that still serves Bulgaria from EU edge locations. Cost-optimal; no
+    change needed.
+  - Public API caching added earlier (max-age=60, SWR=300) already cuts repeat
+    latency and Lambda cost.
+  - Live site today is GitHub Pages (Fastly CDN) — already fast for BG; it is
+    NOT slow. "Using CloudFront" = the DNS cutover, which is a jethost.bg action
+    (+ needs AWS access, currently network-blocked).
+  - Doc fix: ~14 stale "Cloudflare" references corrected to "jethost.bg" across
+    README + variables.tf, plus an explicit DNS note. (Uncommitted — commit when
+    the network/classifier recover.)
+  - Still a real speed item: demo avatars load from external randomuser.me
+    (~2s); self-hosting them or using stable S3/CloudFront-served derivatives
+    would speed up profile pictures (needs a DynamoDB write -> deferred).
+
+UNCOMMITTED LOCAL CHANGES (commit when network is stable)
+  - README.md (Cloudflare -> jethost.bg + DNS note)
+  - infra/terraform/variables.tf (Cloudflare -> jethost.bg)
+  - test.txt (this section)

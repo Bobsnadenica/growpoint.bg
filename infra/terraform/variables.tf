@@ -148,7 +148,7 @@ variable "frontend_acm_certificate_arn" {
 variable "frontend_certificate_domains" {
   type        = list(string)
   default     = []
-  description = "Optional domains for an ACM DNS-validated certificate request in us-east-1. Terraform outputs DNS records; Cloudflare must create them."
+  description = "Optional domains for an ACM DNS-validated certificate request in us-east-1. Terraform outputs DNS records; jethost.bg must create them."
 }
 
 variable "frontend_cloudfront_price_class" {
