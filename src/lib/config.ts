@@ -47,8 +47,11 @@ export const isCognitoHostedUiConfigured = Boolean(
 );
 
 export function resolveAuthRedirectUrl() {
+  // Must exactly match a Cognito-registered OAuth callback URL. Use a stable
+  // app-root URL (origin + base path) instead of the current pathname so the
+  // redirect works regardless of which route starts the social login.
   if (typeof window !== "undefined") {
-    return `${window.location.origin}${window.location.pathname}`;
+    return `${window.location.origin}${config.basePath}`;
   }
 
   return `http://localhost:5173${config.basePath}`;

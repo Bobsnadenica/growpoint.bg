@@ -844,8 +844,9 @@ async function liveMutationChecks(config) {
   });
 
   if (config.adminEmail && config.adminPassword) {
+    const adminLogin = await login(config, config.adminEmail, config.adminPassword);
+
     await check("Optional admin auth and message", async () => {
-      const adminLogin = await login(config, config.adminEmail, config.adminPassword);
       const list = await api(config, "/admin/consultants", {}, adminLogin.token);
       const items = Array.isArray(list) ? list : list.items || [];
       await api(config, `/admin/users/${encodeURIComponent(state.client.sub)}/message`, {
@@ -856,6 +857,45 @@ async function liveMutationChecks(config) {
         })
       }, adminLogin.token);
       return `${items.length} admin profiles visible`;
+    });
+
+    // Exercise the admin moderation lifecycle against the DISPOSABLE consultant
+    // only (never a real profile). Cleanup at the end removes the row.
+    await check("Admin consultant lifecycle (preview/reject/approve/feature)", async () => {
+      if (!state.consultantId) throw new Error("No disposable consultant to manage.");
+      const id = encodeURIComponent(state.consultantId);
+
+      await api(config, `/admin/consultants/${id}`, {}, adminLogin.token);
+
+      const rejected = await api(config, `/admin/consultants/${id}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status: "rejected" })
+      }, adminLogin.token);
+      if (rejected.profileStatus !== "rejected" || rejected.isPublic !== false) {
+        throw new Error("Reject did not unpublish the profile.");
+      }
+
+      const approved = await api(config, `/admin/consultants/${id}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status: "approved" })
+      }, adminLogin.token);
+      if (approved.profileStatus !== "approved" || approved.isPublic !== true) {
+        throw new Error("Approve did not publish the profile.");
+      }
+
+      const featured = await api(config, `/admin/consultants/${id}/featured`, {
+        method: "PUT",
+        body: JSON.stringify({ featured: true })
+      }, adminLogin.token);
+      if (featured.featured !== true) throw new Error("Featuring failed.");
+
+      // Leave it un-featured before cleanup.
+      await api(config, `/admin/consultants/${id}/featured`, {
+        method: "PUT",
+        body: JSON.stringify({ featured: false })
+      }, adminLogin.token);
+
+      return "preview + reject + approve + feature on/off";
     });
   } else {
     console.log("SKIP Optional admin auth and message - set GROWPOINT_ADMIN_EMAIL and GROWPOINT_ADMIN_PASSWORD");
