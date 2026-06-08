@@ -1026,6 +1026,12 @@ resource "aws_cognito_user_group" "admin" {
   description  = "Users in this group can approve/reject consultant profiles. Add manually via AWS CLI: aws cognito-idp admin-add-user-to-group --user-pool-id <id> --username <email> --group-name admin"
 }
 
+resource "aws_cognito_user_group" "consultants" {
+  name         = "consultants"
+  user_pool_id = aws_cognito_user_pool.main.id
+  description  = "Members are treated as consultants/mentors: /auth/bootstrap forces role=consultant and creates a consultant draft. Promote a Cognito user with: aws cognito-idp admin-add-user-to-group --user-pool-id <id> --username <email> --group-name consultants (they pick it up on next login). Absence of the group means a regular client."
+}
+
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.http.id
   name        = "$default"

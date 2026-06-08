@@ -463,3 +463,48 @@ STILL NEEDS OWNER VERIFICATION (cannot test without a real sign-in / login)
     localhost due to the production-only API CORS allowlist).
   - LinkedIn app: confirm "Sign In with LinkedIn using OpenID Connect" product
     is enabled (needed for openid/profile/email scopes).
+
+
+==================================================================
+SPRINT: UI CONSISTENCY + ROLES (sprint-planning + execute)
+==================================================================
+Date: 2026-06-08 (later)
+
+SHIPPED
+  [Roles/groups] Added a `consultants` Cognito group (terraform). /auth/bootstrap
+    now treats group membership as authoritative: a member is forced to
+    role=consultant and gets a consultant draft, even if they signed up as a
+    client. This answers "how do I make a Cognito user a mentor" -> add them to
+    the consultants group; they pick it up on next login. `admin` stays separate.
+    Deployed via terraform apply (consultants group created, Lambda updated;
+    /health still ok). client/secret unaffected.
+      To promote: aws cognito-idp admin-add-user-to-group --user-pool-id
+        eu-west-1_Yl8EDZKFA --username <email> --group-name consultants
+  [Dark theme] Fixed the personal-profile white-background bug: .dashboard-sidebar
+    (+ --client/--consultant), .documents-zone, .dashboard-overview--client/
+    consultant, .dashboard-sidebar__stats>div, .dashboard-document-card--active/
+    __meta div, .auth-summary-card, .auth-choice-card--active all layered an
+    opaque white gradient over the surface -> solid white in dark mode. Added
+    dark overrides (verified computed bg = rgb(23,32,28), no white gradient).
+    Also fixed the hero .page-intro::before white glow in dark mode.
+  [Archetype icons] The 6 archetype cards on /users now show distinct SVG icons
+    (document / leadership / transition / product / data / communication) instead
+    of 2-letter codes. Verified all 6 render an <svg>.
+  [Extra pages] Reviewed about/contact/faq/privacy: consistent structure
+    (PageScene + hero--centered + info-card/panel). Dark-mode hero glow fixed;
+    panels/cards covered. Admin reviewed via code (auth-gated).
+
+VERIFICATION
+  - tsc --noEmit, node -c backend/api/index.cjs, terraform validate: pass.
+  - terraform apply: 1 add (consultants group) + 1 change (Lambda), 0 destroy.
+  - Cognito groups now: admin, consultants (+ IdP-generated Google/LinkedIn).
+  - Archetype icons + dark-theme fixes verified in the local preview browser
+    (isolated render: sidebar/documents/overview computed bg is dark).
+  - npm run build clean.
+
+NOT DONE / OWNER VERIFY
+  - Logged-in dashboard visual pass needs prod (localhost can't hit the API due
+    to CORS). Test account test@mentor.com (pw 123456789aA -> set
+    PrincipnoPecataePi4) — to see the mentor dashboard, add it to the consultants
+    group (command above) then log in.
+  - Real end-to-end review of the mentor profile flow on prod.

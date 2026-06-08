@@ -9957,3 +9957,46 @@ textarea {
   border-color: rgba(143, 181, 168, 0.4);
   color: var(--text);
 }
+
+/* Dashboard sidebar / overview / documents zone: these layer an opaque white
+   gradient over the surface, so they render solid white in dark mode. */
+:root[data-theme="dark"] .dashboard-sidebar,
+:root[data-theme="dark"] .dashboard-sidebar--client,
+:root[data-theme="dark"] .dashboard-sidebar--consultant,
+:root[data-theme="dark"] .documents-zone,
+:root[data-theme="dark"] .dashboard-overview--client,
+:root[data-theme="dark"] .dashboard-overview--consultant,
+:root[data-theme="dark"] .auth-summary-card {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+}
+
+:root[data-theme="dark"] .dashboard-sidebar__stats > div,
+:root[data-theme="dark"] .dashboard-document-card__meta div {
+  background: var(--surface-alt);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .dashboard-document-card--active {
+  background: var(--surface-alt);
+  border-color: rgba(143, 181, 168, 0.5);
+}
+
+:root[data-theme="dark"] .auth-choice-card--active {
+  border-color: rgba(143, 181, 168, 0.55);
+  background:
+    linear-gradient(180deg, rgba(52, 83, 71, 0.5), rgba(31, 43, 38, 0.94)),
+    var(--surface);
+}
+
+/* The hero glow uses a bright white wash that hazes the dark theme; swap it for
+   a subtle green-tinted glow. */
+:root[data-theme="dark"] .page-intro::before,
+:root[data-theme="dark"] .auth-copy::before {
+  background:
+    linear-gradient(180deg, rgba(143, 181, 168, 0.1), rgba(143, 181, 168, 0)),
+    radial-gradient(circle at top left, rgba(143, 181, 168, 0.12), transparent 60%);
+}

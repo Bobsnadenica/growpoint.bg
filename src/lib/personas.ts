@@ -1,9 +1,18 @@
 import type { ConsultantProfileType } from "./types";
 
+export type PersonaIcon =
+  | "document"
+  | "leadership"
+  | "transition"
+  | "product"
+  | "data"
+  | "communication";
+
 export type PersonaPreset = {
   id: string;
   type: ConsultantProfileType;
   code: string;
+  icon: PersonaIcon;
   name: string;
   description: string;
   tags: string[];
@@ -14,6 +23,7 @@ export const personaPresets: PersonaPreset[] = [
     id: "cv-interview",
     type: "consultant",
     code: "CV",
+    icon: "document",
     name: "CV и интервю",
     description:
       "Преглед на CV и LinkedIn и подготовка за конкретно интервю в близките седмици.",
@@ -23,6 +33,7 @@ export const personaPresets: PersonaPreset[] = [
     id: "leadership-positioning",
     type: "consultant",
     code: "LP",
+    icon: "leadership",
     name: "Leadership позициониране",
     description:
       "Executive CV и подготовка за senior, директорски и management роли.",
@@ -39,6 +50,7 @@ export const personaPresets: PersonaPreset[] = [
     id: "career-transition",
     type: "consultant",
     code: "КП",
+    icon: "transition",
     name: "Кариерна промяна",
     description:
       "Стратегия за смяна на посока, индустрия или ниво и подреждане на план за кандидатстване.",
@@ -48,6 +60,7 @@ export const personaPresets: PersonaPreset[] = [
     id: "product-mentor",
     type: "mentor",
     code: "PM",
+    icon: "product",
     name: "Product и стартъпи",
     description:
       "Дългосрочна посока за product, ownership и стартъп роли.",
@@ -57,6 +70,7 @@ export const personaPresets: PersonaPreset[] = [
     id: "tech-data-mentor",
     type: "mentor",
     code: "TD",
+    icon: "data",
     name: "Tech и Data",
     description:
       "Кариерен растеж в инженерни, аналитични и data роли.",
@@ -66,6 +80,7 @@ export const personaPresets: PersonaPreset[] = [
     id: "soft-skills-mentor",
     type: "mentor",
     code: "СК",
+    icon: "communication",
     name: "Увереност и комуникация",
     description:
       "Soft skills, нетуъркинг и подготовка за стресови или презентационни интервюта.",

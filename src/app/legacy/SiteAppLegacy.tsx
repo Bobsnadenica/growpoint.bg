@@ -29,7 +29,12 @@ import {
   writePendingBootstrap,
   writeSocialAuthIntent
 } from "../../lib/auth-flow";
-import { getPersonaById, personaPresets, type PersonaPreset } from "../../lib/personas";
+import {
+  getPersonaById,
+  personaPresets,
+  type PersonaIcon,
+  type PersonaPreset
+} from "../../lib/personas";
 import { applyConsultantProfileSeo } from "../../lib/seo";
 import {
   DOCUMENT_UPLOAD_ACCEPT,
@@ -1040,6 +1045,72 @@ function getConsultantMatch(profile: UserProfile | null, consultant: ConsultantP
   } satisfies MatchInsight;
 }
 
+function renderPersonaIcon(icon: PersonaIcon) {
+  const common = {
+    viewBox: "0 0 24 24",
+    width: 24,
+    height: 24,
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true
+  };
+
+  switch (icon) {
+    case "document":
+      return (
+        <svg {...common}>
+          <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+          <path d="M14 3v5h5" />
+          <path d="M9 13h6M9 17h6" />
+        </svg>
+      );
+    case "leadership":
+      return (
+        <svg {...common}>
+          <path d="M12 3l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.1l5.8-.8z" />
+        </svg>
+      );
+    case "transition":
+      return (
+        <svg {...common}>
+          <path d="M5 8h12" />
+          <path d="M14 5l3 3-3 3" />
+          <path d="M19 16H7" />
+          <path d="M10 13l-3 3 3 3" />
+        </svg>
+      );
+    case "product":
+      return (
+        <svg {...common}>
+          <path d="M21 16V8l-9-5-9 5v8l9 5z" />
+          <path d="M3.3 7.5 12 12l8.7-4.5" />
+          <path d="M12 12v9" />
+        </svg>
+      );
+    case "data":
+      return (
+        <svg {...common}>
+          <path d="M5 20V11" />
+          <path d="M12 20V4" />
+          <path d="M19 20v-6" />
+          <path d="M3 20h18" />
+        </svg>
+      );
+    case "communication":
+      return (
+        <svg {...common}>
+          <path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z" />
+          <path d="M8.5 11h7M8.5 14.5h4" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 function getPersonaMatch(persona: PersonaPreset | null, consultant: ConsultantProfile) {
   if (!persona) {
     return null;
@@ -1533,7 +1604,7 @@ export function UsersPage() {
                 >
                   <div className="persona-card__head">
                     <span className="persona-card__code" aria-hidden="true">
-                      {preset.code}
+                      {renderPersonaIcon(preset.icon)}
                     </span>
                     <span className="persona-card__type">
                       {preset.type === "mentor" ? "Ментор" : "Консултант"}
