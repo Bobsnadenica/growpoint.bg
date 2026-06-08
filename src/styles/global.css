@@ -10000,3 +10000,36 @@ textarea {
     linear-gradient(180deg, rgba(143, 181, 168, 0.1), rgba(143, 181, 168, 0)),
     radial-gradient(circle at top left, rgba(143, 181, 168, 0.12), transparent 60%);
 }
+
+/* These cards layer an opaque white wash over var(--surface): the wash paints
+   white even though the surface color is dark. Neutralize it so every box reads
+   on the dark theme (home hero/journey/pricing/ad, register role cards, upgrade
+   hints, question flow, helper/profile cards). */
+:root[data-theme="dark"] .ad-banner,
+:root[data-theme="dark"] .auth-onboarding-section,
+:root[data-theme="dark"] .helper-card,
+:root[data-theme="dark"] .hero__card,
+:root[data-theme="dark"] .home-hero-profile,
+:root[data-theme="dark"] .journey-card,
+:root[data-theme="dark"] .pricing-card--coming-soon,
+:root[data-theme="dark"] .pricing-card--featured,
+:root[data-theme="dark"] .profile-card,
+:root[data-theme="dark"] .question-flow__intro,
+:root[data-theme="dark"] .role-experience-card,
+:root[data-theme="dark"] .role-experience-card--client,
+:root[data-theme="dark"] .role-experience-card--consultant,
+:root[data-theme="dark"] .upgrade-preview-card--client,
+:root[data-theme="dark"] .upgrade-preview-card--consultant {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .hero-stats > div,
+:root[data-theme="dark"] .hero__points > div,
+:root[data-theme="dark"] .question-flow__meter,
+:root[data-theme="dark"] .role-experience-card__eyebrow {
+  background: var(--surface-alt);
+  border-color: var(--border);
+  color: var(--text);
+}
