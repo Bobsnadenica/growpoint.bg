@@ -1,3 +1,9 @@
+# --- Dependencies & OS junk (never commit) ---
+node_modules/
+**/node_modules/
+.DS_Store
+**/.DS_Store
+
 # --- Secrets & environment (public repo: never commit real secrets) ---
 # Ignore all env files by default. The only intentionally tracked one is
 # .env.production, which holds PUBLIC client config (API URL + Cognito pool/app
