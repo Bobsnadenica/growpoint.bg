@@ -10,6 +10,7 @@ import {
   readSocialAuthIntent
 } from "../../lib/auth-flow";
 import { config } from "../../lib/config";
+import { getNotificationCategory } from "../../lib/notifications";
 import { applyRouteSeo } from "../../lib/seo";
 import type { NotificationItem } from "../../lib/types";
 import AboutPage from "../pages/AboutPage";
@@ -190,7 +191,7 @@ function HeaderNotificationPopover({
           {visibleItems.map((item) => (
             <li key={item.id}>
               <Link
-                className={`topbar-popover__item ${item.readAt ? "" : "topbar-popover__item--unread"}`}
+                className={`topbar-popover__item topbar-popover__item--${getNotificationCategory(item.type)} ${item.readAt ? "" : "topbar-popover__item--unread"}`}
                 to={notificationHref(item)}
                 onClick={onClose}
               >

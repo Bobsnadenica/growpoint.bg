@@ -49,6 +49,7 @@ import {
   groupAvailabilityByDay,
   normalizeAvailabilitySlots
 } from "./availability";
+import { NOTIFICATION_ICONS, getNotificationCategory } from "../../lib/notifications";
 import { applyConsultantProfileSeo } from "../../lib/seo";
 import {
   DOCUMENT_UPLOAD_ACCEPT,
@@ -4409,6 +4410,9 @@ export function DashboardPage() {
               id="upgrade"
               aria-label="Надграждане до GrowPoint Pro"
             >
+              <span className="coming-soon-tape" aria-hidden="true">
+                <span>Скоро</span>
+              </span>
               <p className="eyebrow">Скоро · GrowPoint Pro</p>
               <h2>
                 {profile.role === "consultant"
@@ -4441,7 +4445,6 @@ export function DashboardPage() {
                 ))}
               </div>
               <div className="upgrade-preview-card__footer">
-                <span>Плащанията още не са активни — засега всичко е безплатно.</span>
                 <Link className="ghost-button" to="/contact">
                   Заяви интерес
                 </Link>
@@ -6057,19 +6060,6 @@ export function DashboardPage() {
   );
 }
 
-const NOTIFICATION_ICONS: Record<NotificationItem["type"], string> = {
-  booking_requested: "📨",
-  booking_accepted: "✅",
-  booking_declined: "↩️",
-  booking_cancelled: "⛔",
-  booking_rescheduled: "🔁",
-  booking_reminder: "⏰",
-  session_confirmed: "✓",
-  message_received: "✉",
-  admin_message: "!",
-  review_received: "⭐"
-};
-
 function formatRelativeBg(iso: string) {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return "";
@@ -6124,7 +6114,7 @@ function NotificationsPanel({
           {visible.map((n) => (
           <li
             key={n.id}
-            className={`notifications-item ${n.readAt ? "" : "notifications-item--unread"}`}
+            className={`notifications-item notifications-item--${getNotificationCategory(n.type)} ${n.readAt ? "" : "notifications-item--unread"}`}
           >
             <span className="notifications-item__icon" aria-hidden="true">
               {NOTIFICATION_ICONS[n.type] || "🔔"}

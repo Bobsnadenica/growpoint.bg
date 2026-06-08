@@ -10204,3 +10204,124 @@ textarea {
   border-color: rgba(143, 181, 168, 0.55);
   background: var(--primary-soft);
 }
+
+/* GrowPoint Pro "coming soon" caution-tape corner ribbon */
+.upgrade-preview-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.coming-soon-tape {
+  position: absolute;
+  top: 20px;
+  right: -56px;
+  width: 200px;
+  transform: rotate(45deg);
+  text-align: center;
+  padding: 7px 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(251, 191, 36, 0.97) 0 11px,
+    rgba(24, 33, 29, 0.95) 11px 20px
+  );
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.22);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.coming-soon-tape span {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111916;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Notifications colour-coded by category (admin / message / booking / review /
+   system) in both the dashboard list and the header popover. */
+.notifications-item,
+.topbar-popover__item {
+  border-left: 3px solid transparent;
+}
+
+.notifications-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  flex: 0 0 auto;
+}
+
+.notifications-item--admin {
+  border-left-color: #8b5cf6;
+}
+.notifications-item--message {
+  border-left-color: #14b8a6;
+}
+.notifications-item--booking {
+  border-left-color: #4b9e6a;
+}
+.notifications-item--review {
+  border-left-color: #f5a524;
+}
+.notifications-item--system {
+  border-left-color: #6b8cae;
+}
+
+.notifications-item--admin .notifications-item__icon {
+  background: rgba(139, 92, 246, 0.16);
+  color: #8b5cf6;
+}
+.notifications-item--message .notifications-item__icon {
+  background: rgba(20, 184, 166, 0.16);
+  color: #0f9488;
+}
+.notifications-item--booking .notifications-item__icon {
+  background: rgba(75, 158, 106, 0.18);
+  color: #3f7d56;
+}
+.notifications-item--review .notifications-item__icon {
+  background: rgba(245, 165, 36, 0.18);
+  color: #b9750a;
+}
+.notifications-item--system .notifications-item__icon {
+  background: rgba(107, 140, 174, 0.16);
+  color: #4f6f93;
+}
+
+.topbar-popover__item--admin {
+  border-left-color: #8b5cf6;
+}
+.topbar-popover__item--message {
+  border-left-color: #14b8a6;
+}
+.topbar-popover__item--booking {
+  border-left-color: #4b9e6a;
+}
+.topbar-popover__item--review {
+  border-left-color: #f5a524;
+}
+.topbar-popover__item--system {
+  border-left-color: #6b8cae;
+}
+.topbar-popover__item--admin .topbar-popover__dot {
+  background: #8b5cf6;
+}
+.topbar-popover__item--message .topbar-popover__dot {
+  background: #14b8a6;
+}
+.topbar-popover__item--booking .topbar-popover__dot {
+  background: #4b9e6a;
+}
+.topbar-popover__item--review .topbar-popover__dot {
+  background: #f5a524;
+}
+.topbar-popover__item--system .topbar-popover__dot {
+  background: #6b8cae;
+}

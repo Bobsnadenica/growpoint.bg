@@ -25,7 +25,7 @@ const css = readFileSync(cssPath, "utf8");
 // Selectors that legitimately keep a light/colored background (badges, pills,
 // buttons, decorative pseudo-elements, avatars, status chips, etc.).
 const SKIP =
-  /data-theme="dark"|::(before|after|-webkit|placeholder|marker|selection)|scrollbar|\bbutton\b|__button|-btn|primary-button|ghost-button|\bchip\b|chip--|pill|badge|tab-row|slot-button|theme-toggle|menu-toggle|brand-mark|avatar|::file|:focus|:hover|:active|skip-link|step-pill|rating|star|social-auth|status-badge|panel--success|panel--error|advertisement|lottie/;
+  /data-theme="dark"|::(before|after|-webkit|placeholder|marker|selection)|scrollbar|\bbutton\b|__button|-btn|primary-button|ghost-button|\bchip\b|chip--|pill|badge|tab-row|slot-button|theme-toggle|menu-toggle|brand-mark|avatar|::file|:focus|:hover|:active|skip-link|step-pill|rating|star|social-auth|status-badge|panel--success|panel--error|advertisement|lottie|tape/;
 
 function maxLuminance(value) {
   let best = -1;
