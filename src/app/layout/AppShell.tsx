@@ -327,6 +327,11 @@ export default function AppShell() {
       return;
     }
 
+    // Captured as non-null locals so the narrowing survives into the nested
+    // async closure below (TS won't re-narrow the captured hook value there).
+    const authedUser = user;
+    const intent = socialIntent;
+
     let cancelled = false;
     let completed = false;
 
@@ -354,9 +359,9 @@ export default function AppShell() {
             role: "client",
             plan: "free",
             ...(pendingBootstrap || {}),
-            name: pendingBootstrap?.name?.trim() || user.name || user.email,
-            email: pendingBootstrap?.email?.trim() || user.email,
-            avatarUrl: user.avatarUrl || pendingBootstrap?.avatarUrl || ""
+            name: pendingBootstrap?.name?.trim() || authedUser.name || authedUser.email,
+            email: pendingBootstrap?.email?.trim() || authedUser.email,
+            avatarUrl: authedUser.avatarUrl || pendingBootstrap?.avatarUrl || ""
           });
           markSocialOnboardingPending();
         }
@@ -365,14 +370,14 @@ export default function AppShell() {
 
         if (!cancelled) {
           completed = true;
-          navigate(socialIntent.redirect || "/dashboard", { replace: true });
+          navigate(intent.redirect || "/dashboard", { replace: true });
         }
       } catch {
         if (!cancelled) {
           const authParams = new URLSearchParams();
           authParams.set("tab", "register");
           authParams.set("social", "1");
-          authParams.set("redirect", socialIntent.redirect || "/dashboard");
+          authParams.set("redirect", intent.redirect || "/dashboard");
           navigate(`/auth?${authParams.toString()}`, { replace: true });
         }
       } finally {

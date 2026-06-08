@@ -1063,22 +1063,38 @@ function collectSharedConsultantIdsFromDocuments(user) {
   return ids;
 }
 
+// Page through every item of a Query so callers that need a complete set (e.g.
+// conflict detection, document-sharing checks) aren't silently capped at the
+// first 1 MB page once a client/consultant accumulates many bookings.
+async function queryAllItems(input, { maxPages = 50 } = {}) {
+  const items = [];
+  let exclusiveStartKey;
+  let pages = 0;
+  do {
+    const result = await dynamo.send(
+      new QueryCommand({ ...input, ExclusiveStartKey: exclusiveStartKey })
+    );
+    items.push(...(result.Items || []));
+    exclusiveStartKey = result.LastEvaluatedKey;
+    pages += 1;
+  } while (exclusiveStartKey && pages < maxPages);
+  return items;
+}
+
 async function getConfirmedConsultantIdsForClient(clientId) {
   if (!clientId) return new Set();
 
-  const result = await dynamo.send(
-    new QueryCommand({
-      TableName: env.bookingsTable,
-      IndexName: "client-index",
-      KeyConditionExpression: "clientId = :clientId",
-      ExpressionAttributeValues: {
-        ":clientId": clientId
-      }
-    })
-  );
+  const items = await queryAllItems({
+    TableName: env.bookingsTable,
+    IndexName: "client-index",
+    KeyConditionExpression: "clientId = :clientId",
+    ExpressionAttributeValues: {
+      ":clientId": clientId
+    }
+  });
 
   return new Set(
-    (result.Items || [])
+    items
       .filter((booking) => booking.status === "confirmed")
       .map((booking) => booking.consultantId)
       .filter(Boolean)
@@ -2684,16 +2700,14 @@ async function createBooking(event) {
     return badRequest("The selected slot is no longer available.");
   }
 
-  const existingBookings = await dynamo.send(
-    new QueryCommand({
-      TableName: env.bookingsTable,
-      IndexName: "consultant-index",
-      KeyConditionExpression: "consultantId = :consultantId",
-      ExpressionAttributeValues: {
-        ":consultantId": consultant.consultantId
-      }
-    })
-  );
+  const existingBookings = await queryAllItems({
+    TableName: env.bookingsTable,
+    IndexName: "consultant-index",
+    KeyConditionExpression: "consultantId = :consultantId",
+    ExpressionAttributeValues: {
+      ":consultantId": consultant.consultantId
+    }
+  });
 
   const sessionLengthMinutes =
     Number(consultant.sessionLengthMinutes) > 0
@@ -2703,7 +2717,7 @@ async function createBooking(event) {
   const newStart = scheduledDate.getTime();
   const newEnd = newStart + sessionMs;
 
-  const hasConflictingBooking = (existingBookings.Items || []).some((item) => {
+  const hasConflictingBooking = existingBookings.some((item) => {
     if (item.status === "cancelled") return false;
     const existingStart = new Date(item.scheduledAt).getTime();
     if (Number.isNaN(existingStart)) return false;
@@ -2721,7 +2735,7 @@ async function createBooking(event) {
   // same consultant in any rolling 24h window. Defends against accidental
   // duplicate submits and intentional spam without locking out legit re-bookings.
   const last24h = Date.now() - 24 * 60 * 60 * 1000;
-  const recentBookings = (existingBookings.Items || []).filter((item) => {
+  const recentBookings = existingBookings.filter((item) => {
     if (item.clientId !== user.userId) return false;
     if (item.status === "cancelled" || item.status === "declined") return false;
     const createdAt = new Date(item.createdAt || 0).getTime();
@@ -3255,19 +3269,17 @@ async function rescheduleBooking(event) {
   }
 
   // Check the new slot isn't already taken by another booking
-  const existingBookings = await dynamo.send(
-    new QueryCommand({
-      TableName: env.bookingsTable,
-      IndexName: "consultant-index",
-      KeyConditionExpression: "consultantId = :consultantId",
-      ExpressionAttributeValues: { ":consultantId": consultant.consultantId }
-    })
-  );
+  const existingBookings = await queryAllItems({
+    TableName: env.bookingsTable,
+    IndexName: "consultant-index",
+    KeyConditionExpression: "consultantId = :consultantId",
+    ExpressionAttributeValues: { ":consultantId": consultant.consultantId }
+  });
   const sessionMs =
     (Number(consultant.sessionLengthMinutes) || 60) * 60 * 1000;
   const newStart = newScheduledAt.getTime();
   const newEnd = newStart + sessionMs;
-  const hasConflict = (existingBookings.Items || []).some((item) => {
+  const hasConflict = existingBookings.some((item) => {
     if (item.bookingId === bookingId) return false;
     if (item.status === "cancelled" || item.status === "declined") return false;
     const start = new Date(item.scheduledAt).getTime();

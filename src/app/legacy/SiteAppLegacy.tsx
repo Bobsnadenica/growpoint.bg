@@ -3877,6 +3877,10 @@ export function DashboardPage() {
     setError("");
     setMessage("");
 
+    if (!profile) {
+      return;
+    }
+
     const formData = new FormData(event.currentTarget);
     const avatarLink = String(formData.get("avatarUrl") || "").trim();
     const avatarFile = formData.get("avatarFile");
@@ -3921,6 +3925,10 @@ export function DashboardPage() {
     event.preventDefault();
     setError("");
     setMessage("");
+
+    if (!profile) {
+      return;
+    }
 
     const formElement = event.currentTarget;
     const formData = new FormData(formElement);
@@ -3970,6 +3978,10 @@ export function DashboardPage() {
     }
     setError("");
     setMessage("");
+
+    if (!profile) {
+      return;
+    }
     try {
       const isCurrentCv = profile.cvDocument?.storageKey === storageKey;
       const updated = isCurrentCv
@@ -4005,6 +4017,11 @@ export function DashboardPage() {
   async function updateDocumentSharing(storageKey: string, sharedWithConsultantIds: string[]) {
     setError("");
     setMessage("");
+
+    if (!profile) {
+      return;
+    }
+
     try {
       const updateSharedIds = (doc: UploadedDocument) =>
         doc.storageKey === storageKey ? { ...doc, sharedWithConsultantIds } : doc;
