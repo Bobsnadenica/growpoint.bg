@@ -10033,3 +10033,66 @@ textarea {
   border-color: var(--border);
   color: var(--text);
 }
+
+/* Light-gray/blue boxes (not pure white) that the earlier audit missed — these
+   render light in dark mode and hide their (light) labels, e.g. the consultant
+   media section "ПРОФИЛНА СНИМКА". Neutralize to dark surfaces. */
+:root[data-theme="dark"] .media-preview-grid,
+:root[data-theme="dark"] .media-preview-card,
+:root[data-theme="dark"] .page-side-card,
+:root[data-theme="dark"] .booking-shared-documents,
+:root[data-theme="dark"] .answer-suggestions,
+:root[data-theme="dark"] .answer-suggestions--hint,
+:root[data-theme="dark"] .question-flow__progress,
+:root[data-theme="dark"] .delete-profile-modal__checks,
+:root[data-theme="dark"] .auth-terms,
+:root[data-theme="dark"] .consultant-card__media,
+:root[data-theme="dark"] .consultant-card__portrait,
+:root[data-theme="dark"] .consultant-card--themed .consultant-card__portrait,
+:root[data-theme="dark"] .consultant-proof-card__media,
+:root[data-theme="dark"] .consultant-proof-card img,
+:root[data-theme="dark"] .privacy-actions--danger {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .media-preview-card__placeholder,
+:root[data-theme="dark"] .profile-documents__icon,
+:root[data-theme="dark"] .dashboard-document-card--empty .dashboard-document-card__marker,
+:root[data-theme="dark"] .profile-completion-meter__bar,
+:root[data-theme="dark"] .profile-completion-meter__steps span,
+:root[data-theme="dark"] .consultant-card__status-row > *,
+:root[data-theme="dark"] .auth-choice-card em,
+:root[data-theme="dark"] .auth-choice-card span,
+:root[data-theme="dark"] .match-card__meta span,
+:root[data-theme="dark"] .site-nav a.active,
+:root[data-theme="dark"] .topbar-alert,
+:root[data-theme="dark"] input[readonly] {
+  background: var(--surface-alt);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .notifications-item--unread {
+  background: var(--primary-soft);
+}
+
+/* Status banners keep their semantic color but as a dark-friendly tint + light text. */
+:root[data-theme="dark"] .status-banner--pending {
+  background: rgba(243, 196, 121, 0.12);
+  border-color: rgba(243, 196, 121, 0.4);
+  color: var(--warning);
+}
+
+:root[data-theme="dark"] .status-banner--rejected {
+  background: rgba(243, 143, 143, 0.12);
+  border-color: rgba(243, 143, 143, 0.4);
+  color: var(--danger);
+}
+
+:root[data-theme="dark"] .status-banner--success {
+  background: rgba(117, 199, 141, 0.12);
+  border-color: rgba(117, 199, 141, 0.4);
+  color: var(--success);
+}
