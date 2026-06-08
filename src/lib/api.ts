@@ -3,6 +3,7 @@ import { getCvUploadContentType, getDocumentUploadContentType } from "./uploads"
 import type {
   AdminConsultantDetail,
   AdminConsultantSummary,
+  AdminMetrics,
   Booking,
   BookingMessage,
   ConsultantMediaKind,
@@ -440,6 +441,10 @@ export const api = {
       },
       token
     );
+  },
+
+  async adminGetMetrics(token: string) {
+    return request<AdminMetrics>("/admin/metrics", undefined, token);
   },
 
   async adminListConsultants(token: string) {

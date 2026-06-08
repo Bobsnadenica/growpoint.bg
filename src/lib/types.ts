@@ -50,6 +50,34 @@ export interface AdminConsultantSummary {
   statusSelfApproved: boolean;
 }
 
+export interface AdminMetrics {
+  generatedAt: string;
+  users: {
+    total: number;
+    clients: number;
+    consultants: number;
+    registrationsLast7: number;
+    registrationsPerDay: { date: string; count: number }[];
+  };
+  consultants: {
+    total: number;
+    public: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+  };
+  bookings: {
+    total: number;
+    pending: number;
+    confirmed: number;
+    declined: number;
+    cancelled: number;
+    confirmedSessions: number;
+  };
+  messages: number;
+  reviews: number;
+}
+
 export type DocumentCategory = "cv" | "certificate" | "portfolio" | "other";
 
 export interface UploadedDocument {

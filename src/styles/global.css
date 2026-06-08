@@ -10096,3 +10096,108 @@ textarea {
   border-color: rgba(117, 199, 141, 0.4);
   color: var(--success);
 }
+
+/* Admin monitoring */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.metric-card {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.metric-card > span {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.metric-card > strong {
+  font-size: 1.9rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.metric-card > em {
+  font-style: normal;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+.metric-breakdown {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 14px;
+}
+
+.metric-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 130px;
+  margin-top: 14px;
+}
+
+.metric-chart__bar {
+  flex: 1;
+  min-width: 0;
+  background: linear-gradient(180deg, var(--primary), var(--primary-soft));
+  border-radius: 6px 6px 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 4px;
+}
+
+.metric-chart__bar b {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-top: -16px;
+}
+
+.metric-rows {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.metric-rows > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.metric-rows dt {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.metric-rows dd {
+  margin: 0;
+  font-weight: 800;
+  color: var(--text);
+}
+
+@media (max-width: 760px) {
+  .metric-breakdown {
+    grid-template-columns: 1fr;
+  }
+}

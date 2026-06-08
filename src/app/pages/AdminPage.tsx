@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import type {
   AdminConsultantSummary,
+  AdminMetrics,
   ConsultantProfileStatus
 } from "../../lib/types";
 import PageScene from "../layout/PageScene";
@@ -62,6 +63,7 @@ export default function AdminPage() {
   const [adminMessageText, setAdminMessageText] = useState("");
   const [adminMessageBusy, setAdminMessageBusy] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
 
   const reload = useCallback(async () => {
     if (!token) return;
@@ -81,6 +83,22 @@ export default function AdminPage() {
     if (!isAdmin || !token) return;
     void reload();
   }, [isAdmin, reload, token]);
+
+  useEffect(() => {
+    if (!isAdmin || !token) return;
+    let active = true;
+    api
+      .adminGetMetrics(token)
+      .then((data) => {
+        if (active) setMetrics(data);
+      })
+      .catch(() => {
+        // Metrics are non-critical; the moderation list still works without them.
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAdmin, token]);
 
   const counts = useMemo(() => {
     return {
@@ -285,6 +303,117 @@ export default function AdminPage() {
           </div>
         </div>
       </section>
+
+      {metrics
+        ? (() => {
+            const reg14 = metrics.users.registrationsPerDay.slice(-14);
+            const regMax = Math.max(1, ...reg14.map((day) => day.count));
+            return (
+              <section className="section section--tight">
+                <div className="container">
+                  <div className="dashboard-form-head">
+                    <p className="eyebrow">Мониторинг</p>
+                    <h2>Преглед на платформата</h2>
+                  </div>
+                  <div className="metric-grid">
+                    <article className="metric-card">
+                      <span>Регистрирани потребители</span>
+                      <strong>{metrics.users.total}</strong>
+                      <em>
+                        {metrics.users.clients} клиенти · {metrics.users.consultants} консултанти
+                      </em>
+                    </article>
+                    <article className="metric-card">
+                      <span>Нови за 7 дни</span>
+                      <strong>{metrics.users.registrationsLast7}</strong>
+                      <em>регистрации</em>
+                    </article>
+                    <article className="metric-card">
+                      <span>Публични профили</span>
+                      <strong>{metrics.consultants.public}</strong>
+                      <em>от {metrics.consultants.total} консултантски</em>
+                    </article>
+                    <article className="metric-card">
+                      <span>Резервации</span>
+                      <strong>{metrics.bookings.total}</strong>
+                      <em>{metrics.bookings.confirmed} потвърдени</em>
+                    </article>
+                    <article className="metric-card">
+                      <span>Съобщения</span>
+                      <strong>{metrics.messages}</strong>
+                      <em>между потребители</em>
+                    </article>
+                    <article className="metric-card">
+                      <span>Отзиви</span>
+                      <strong>{metrics.reviews}</strong>
+                      <em>{metrics.bookings.confirmedSessions} проведени сесии</em>
+                    </article>
+                  </div>
+
+                  <div className="metric-breakdown">
+                    <article className="metric-card metric-card--wide">
+                      <span>Регистрации по дни (последни 14)</span>
+                      <div className="metric-chart" role="img" aria-label="Регистрации по дни">
+                        {reg14.map((day) => (
+                          <div
+                            key={day.date}
+                            className="metric-chart__bar"
+                            title={`${day.date}: ${day.count}`}
+                            style={{ height: `${Math.max(6, (day.count / regMax) * 100)}%` }}
+                          >
+                            <b>{day.count || ""}</b>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                    <article className="metric-card">
+                      <span>Консултанти по статус</span>
+                      <dl className="metric-rows">
+                        <div>
+                          <dt>Чакащи</dt>
+                          <dd>{metrics.consultants.pending}</dd>
+                        </div>
+                        <div>
+                          <dt>Одобрени</dt>
+                          <dd>{metrics.consultants.approved}</dd>
+                        </div>
+                        <div>
+                          <dt>Отказани</dt>
+                          <dd>{metrics.consultants.rejected}</dd>
+                        </div>
+                      </dl>
+                    </article>
+                    <article className="metric-card">
+                      <span>Резервации по статус</span>
+                      <dl className="metric-rows">
+                        <div>
+                          <dt>Чакащи</dt>
+                          <dd>{metrics.bookings.pending}</dd>
+                        </div>
+                        <div>
+                          <dt>Потвърдени</dt>
+                          <dd>{metrics.bookings.confirmed}</dd>
+                        </div>
+                        <div>
+                          <dt>Отказани</dt>
+                          <dd>{metrics.bookings.declined}</dd>
+                        </div>
+                        <div>
+                          <dt>Отменени</dt>
+                          <dd>{metrics.bookings.cancelled}</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  </div>
+                  <p className="form-note">
+                    Посещенията на сайта не се проследяват тук — за това е нужен аналитичен
+                    инструмент (напр. Plausible или Google Analytics).
+                  </p>
+                </div>
+              </section>
+            );
+          })()
+        : null}
 
       <section className="section section--tight">
         <div className="container">

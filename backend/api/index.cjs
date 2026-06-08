@@ -3898,6 +3898,114 @@ async function listBookings(event) {
   return response(200, result.Items || []);
 }
 
+async function scanAllItems(tableName, { maxPages = 100 } = {}) {
+  const items = [];
+  let exclusiveStartKey;
+  let pages = 0;
+  do {
+    const result = await dynamo.send(
+      new ScanCommand({
+        TableName: tableName,
+        Limit: 500,
+        ExclusiveStartKey: exclusiveStartKey
+      })
+    );
+    items.push(...(result.Items || []));
+    exclusiveStartKey = result.LastEvaluatedKey;
+    pages += 1;
+  } while (exclusiveStartKey && pages < maxPages);
+  return items;
+}
+
+function lastNDays(n) {
+  const days = [];
+  const today = new Date();
+  for (let i = n - 1; i >= 0; i -= 1) {
+    const d = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+async function getAdminMetrics(event) {
+  requireAdmin(event);
+
+  const [users, consultantRows, bookings] = await Promise.all([
+    scanAllItems(env.usersTable),
+    scanAllItems(env.consultantsTable),
+    scanAllItems(env.bookingsTable)
+  ]);
+
+  const consultants = consultantRows.filter(isConsultantRecord);
+
+  // Users
+  let clientUsers = 0;
+  let consultantUsers = 0;
+  const regByDay = {};
+  for (const u of users) {
+    if (normalizeUserRole(u.role, "client") === "consultant") consultantUsers += 1;
+    else clientUsers += 1;
+    const day = String(u.createdAt || "").slice(0, 10);
+    if (day) regByDay[day] = (regByDay[day] || 0) + 1;
+  }
+  const registrationsPerDay = lastNDays(30).map((date) => ({
+    date,
+    count: regByDay[date] || 0
+  }));
+  const registrationsLast7 = registrationsPerDay.slice(-7).reduce((s, d) => s + d.count, 0);
+
+  // Consultants
+  const consultantsByStatus = { pending: 0, approved: 0, rejected: 0 };
+  let publicConsultants = 0;
+  for (const c of consultants) {
+    const status = normalizeConsultantStatus(c.profileStatus) || "pending";
+    consultantsByStatus[status] = (consultantsByStatus[status] || 0) + 1;
+    if (isVisibleConsultant(c)) publicConsultants += 1;
+  }
+
+  // Bookings, messages, reviews
+  const bookingsByStatus = { pending: 0, confirmed: 0, declined: 0, cancelled: 0 };
+  let totalMessages = 0;
+  let totalReviews = 0;
+  let confirmedSessions = 0;
+  for (const b of bookings) {
+    if (bookingsByStatus[b.status] !== undefined) bookingsByStatus[b.status] += 1;
+    if (Array.isArray(b.messages)) totalMessages += b.messages.length;
+    if (b.review && Number(b.review.rating) > 0) totalReviews += 1;
+    if (b.sessionConfirmation?.clientConfirmedAt && b.sessionConfirmation?.consultantConfirmedAt) {
+      confirmedSessions += 1;
+    }
+  }
+
+  return response(200, {
+    generatedAt: new Date().toISOString(),
+    users: {
+      total: users.length,
+      clients: clientUsers,
+      consultants: consultantUsers,
+      registrationsLast7,
+      registrationsPerDay
+    },
+    consultants: {
+      total: consultants.length,
+      public: publicConsultants,
+      pending: consultantsByStatus.pending,
+      approved: consultantsByStatus.approved,
+      rejected: consultantsByStatus.rejected
+    },
+    bookings: {
+      total: bookings.length,
+      pending: bookingsByStatus.pending,
+      confirmed: bookingsByStatus.confirmed,
+      declined: bookingsByStatus.declined,
+      cancelled: bookingsByStatus.cancelled,
+      confirmedSessions
+    },
+    messages: totalMessages,
+    reviews: totalReviews
+  });
+}
+
 async function listConsultantsForAdmin(event) {
   requireAdmin(event);
 
@@ -4309,6 +4417,7 @@ exports.handler = async (event) => {
       return await downloadBookingIcs(event);
     }
 
+    if (method === "GET" && path === "/admin/metrics") return await getAdminMetrics(event);
     if (method === "GET" && path === "/admin/consultants") return await listConsultantsForAdmin(event);
 
     const adminUserMessageMatch = /^\/admin\/users\/([^/]+)\/message$/.exec(path);

@@ -980,6 +980,14 @@ resource "aws_apigatewayv2_route" "bookings_ics" {
   authorization_type = "JWT"
 }
 
+resource "aws_apigatewayv2_route" "admin_metrics" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /admin/metrics"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
 resource "aws_apigatewayv2_route" "admin_consultants_list" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "GET /admin/consultants"
