@@ -4329,6 +4329,15 @@ export function DashboardPage() {
             {error ? <div className="panel panel--error">{error}</div> : null}
           </div>
 
+          <Link className="dashboard-ad" to="/contact" aria-label="Рекламно пространство">
+            <span className="dashboard-ad__tag">Реклама</span>
+            <img
+              src={resolvePublicUrl("/assets/advertisement/4.jpg")}
+              alt=""
+              loading="lazy"
+            />
+          </Link>
+
           {profile.role === "consultant" && consultantProfile ? (
             <ConsultantStatusBanner consultant={consultantProfile} />
           ) : null}
@@ -4455,7 +4464,7 @@ export function DashboardPage() {
             onMarkAllRead={markNotificationsReadAction}
           />
 
-          {profile.role === "client" ? (
+          {profile.role === "client" && profileCompletion >= 100 ? (
             <section className="panel" id="matches">
               <p className="eyebrow">Подходящи консултанти</p>
               <h2>Профили с най-добро съвпадение и видими свободни часове</h2>
