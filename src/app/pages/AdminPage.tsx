@@ -348,6 +348,11 @@ export default function AdminPage() {
                       <strong>{metrics.reviews}</strong>
                       <em>{metrics.bookings.confirmedSessions} проведени сесии</em>
                     </article>
+                    <article className="metric-card">
+                      <span>Посещения (7 дни)</span>
+                      <strong>{metrics.visits.last7}</strong>
+                      <em>{metrics.visits.total} общо сесии</em>
+                    </article>
                   </div>
 
                   <div className="metric-breakdown">

@@ -808,6 +808,13 @@ resource "aws_apigatewayv2_route" "health" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
+# Public page-view beacon (no JWT authorizer).
+resource "aws_apigatewayv2_route" "metrics_visit" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /metrics/visit"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
 resource "aws_apigatewayv2_route" "consultants_list" {
   api_id    = aws_apigatewayv2_api.http.id
   route_key = "GET /consultants"

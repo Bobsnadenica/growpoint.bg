@@ -97,6 +97,7 @@ const VISIBLE_CONSULTANT_STATUSES = new Set(["approved"]);
 const ADMIN_GROUP = "admin";
 const CONSULTANT_GROUP = "consultants";
 const CLIENT_GROUP = "clients";
+const VISITS_ITEM_ID = "system#visits";
 
 function response(statusCode, body, extraHeaders = {}) {
   return {
@@ -3942,16 +3943,33 @@ function lastNDays(n) {
 async function getAdminMetrics(event) {
   requireAdmin(event);
 
-  const [users, consultantRows, bookings] = await Promise.all([
+  const [allUsers, consultantRows, bookings, visitsItem] = await Promise.all([
     scanAllItems(env.usersTable),
     scanAllItems(env.consultantsTable),
-    scanAllItems(env.bookingsTable)
+    scanAllItems(env.bookingsTable),
+    dynamo
+      .send(new GetCommand({ TableName: env.usersTable, Key: { userId: VISITS_ITEM_ID } }))
+      .then((r) => r.Item || {})
+      .catch(() => ({}))
   ]);
+
+  // Exclude internal system rows (e.g. the page-view counter) from user metrics.
+  const users = allUsers.filter((u) => !String(u.userId || "").startsWith("system#"));
 
   // Dedupe by owner: an owner can have several draft rows, which would inflate
   // the "consultants by status" counts. Use the same canonical-pick logic as the
   // admin list so the metrics match what admins actually see.
   const consultants = dedupeConsultantsByOwner(consultantRows);
+
+  // Page views (first-party counter stored as v_<date> on the system#visits row)
+  const visitsPerDay = lastNDays(30).map((date) => ({
+    date,
+    count: Number(visitsItem[`v_${date}`]) || 0
+  }));
+  const visitsLast7 = visitsPerDay.slice(-7).reduce((sum, d) => sum + d.count, 0);
+  const visitsTotal = Object.entries(visitsItem)
+    .filter(([key]) => key.startsWith("v_"))
+    .reduce((sum, [, value]) => sum + (Number(value) || 0), 0);
 
   // Users
   let clientUsers = 0;
@@ -4017,8 +4035,34 @@ async function getAdminMetrics(event) {
       confirmedSessions
     },
     messages: totalMessages,
-    reviews: totalReviews
+    reviews: totalReviews,
+    visits: {
+      total: visitsTotal,
+      last7: visitsLast7,
+      perDay: visitsPerDay
+    }
   });
+}
+
+// Public, unauthenticated page-view beacon. Atomically increments a per-day
+// counter on a single system row. It's a vanity metric (no PII); the worst an
+// abuser can do is inflate the counter, so we keep it cheap and unguarded.
+async function recordVisit() {
+  const day = new Date().toISOString().slice(0, 10);
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: env.usersTable,
+        Key: { userId: VISITS_ITEM_ID },
+        UpdateExpression: "ADD #day :one",
+        ExpressionAttributeNames: { "#day": `v_${day}` },
+        ExpressionAttributeValues: { ":one": 1 }
+      })
+    );
+  } catch (error) {
+    console.error("[visit] failed", { error: error?.message || error });
+  }
+  return response(200, { ok: true });
 }
 
 async function listConsultantsForAdmin(event) {
@@ -4373,6 +4417,7 @@ exports.handler = async (event) => {
     const path = event.rawPath;
 
     if (method === "GET" && path === "/health") return await health();
+    if (method === "POST" && path === "/metrics/visit") return await recordVisit();
     if (method === "GET" && path === "/consultants") return await listConsultants(event);
     if (method === "GET" && path === "/consultants/me") return await getMyConsultant(event);
     if (method === "PUT" && path === "/consultants/me") return await updateMyConsultant(event);

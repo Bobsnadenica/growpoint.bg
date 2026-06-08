@@ -76,6 +76,11 @@ export interface AdminMetrics {
   };
   messages: number;
   reviews: number;
+  visits: {
+    total: number;
+    last7: number;
+    perDay: { date: string; count: number }[];
+  };
 }
 
 export type DocumentCategory = "cv" | "certificate" | "portfolio" | "other";

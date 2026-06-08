@@ -317,6 +317,18 @@ export default function AppShell() {
   }, [location.pathname]);
 
   useEffect(() => {
+    // First-party page-view beacon: count one visit per browser session per day.
+    try {
+      const key = `growpoint.visit.${new Date().toISOString().slice(0, 10)}`;
+      if (window.sessionStorage.getItem(key)) return;
+      window.sessionStorage.setItem(key, "1");
+    } catch {
+      // sessionStorage unavailable — fall through and still record the visit
+    }
+    api.recordVisit();
+  }, []);
+
+  useEffect(() => {
     if (loading || !user || !token) {
       return;
     }

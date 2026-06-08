@@ -447,6 +447,19 @@ export const api = {
     return request<AdminMetrics>("/admin/metrics", undefined, token);
   },
 
+  // Fire-and-forget page-view beacon (public, no token). Never throws.
+  recordVisit() {
+    if (!isApiConfigured) return;
+    try {
+      void fetch(`${config.apiBaseUrl}/metrics/visit`, {
+        method: "POST",
+        keepalive: true
+      }).catch(() => undefined);
+    } catch {
+      // ignore — analytics must never affect the app
+    }
+  },
+
   async adminListConsultants(token: string) {
     const payload = await request<
       { items: AdminConsultantSummary[]; nextCursor?: string | null } | AdminConsultantSummary[]
