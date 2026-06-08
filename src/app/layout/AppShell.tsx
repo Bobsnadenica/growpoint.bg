@@ -52,7 +52,6 @@ const footerLinks = [
 type ThemePreference = "light" | "dark";
 
 const THEME_STORAGE_KEY = "growpoint.theme";
-const BETA_NOTICE_STORAGE_KEY = "growpoint.betaNoticeDismissed";
 const NOTIFICATIONS_MARKED_READ_EVENT = "growpoint:notifications-marked-read";
 
 function readInitialTheme(): ThemePreference {
@@ -248,16 +247,6 @@ function RouteExperience() {
   return null;
 }
 
-function readInitialBetaNoticeVisibility() {
-  if (typeof window === "undefined") return true;
-
-  try {
-    return window.localStorage.getItem(BETA_NOTICE_STORAGE_KEY) !== "true";
-  } catch {
-    return true;
-  }
-}
-
 export default function AppShell() {
   const { user, token, loading, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -268,7 +257,6 @@ export default function AppShell() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const [isThemeSwitching, setIsThemeSwitching] = useState(false);
-  const [betaNoticeVisible, setBetaNoticeVisible] = useState(readInitialBetaNoticeVisibility);
   const [headerNotifications, setHeaderNotifications] = useState<NotificationItem[]>([]);
   const [activeHeaderPanel, setActiveHeaderPanel] = useState<HeaderPanel | null>(null);
   const [headerNotificationsBusy, setHeaderNotificationsBusy] = useState(false);
@@ -522,16 +510,6 @@ export default function AppShell() {
     }, 560);
 
     setTheme((value) => (value === "dark" ? "light" : "dark"));
-  }
-
-  function dismissBetaNotice() {
-    setBetaNoticeVisible(false);
-
-    try {
-      window.localStorage.setItem(BETA_NOTICE_STORAGE_KEY, "true");
-    } catch {
-      // localStorage may be disabled.
-    }
   }
 
   async function markHeaderNotificationsRead() {
@@ -810,18 +788,6 @@ export default function AppShell() {
             </div>
           </nav>
         </>
-      ) : null}
-
-      {betaNoticeVisible ? (
-        <button
-          className="beta-notice"
-          type="button"
-          onClick={dismissBetaNotice}
-          aria-label="Скрий бета предупреждението"
-        >
-          <span>Все още работим над проекта, това е бета</span>
-          <small>Натисни, за да скриеш</small>
-        </button>
       ) : null}
 
       <main id="main-content" className="page-main">

@@ -494,90 +494,6 @@ main {
   gap: 10px;
 }
 
-.beta-notice {
-  --beta-rotation: 7deg;
-  position: fixed;
-  top: clamp(96px, 13vh, 152px);
-  left: 50%;
-  z-index: 29;
-  /* Decorative fixed tape: never intercept clicks on the page beneath it
-     (e.g. the вход/регистрация tabs). The visible label pills re-enable
-     pointer events below so the notice stays dismissible. */
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  width: max(920px, 145vw);
-  min-height: 44px;
-  padding: 9px 18px;
-  border: 0;
-  border-block: 1px solid rgba(17, 25, 22, 0.38);
-  background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(251, 191, 36, 0.96) 0 18px,
-      rgba(24, 33, 29, 0.96) 18px 28px
-    );
-  color: #111916;
-  cursor: pointer;
-  box-shadow:
-    0 18px 34px rgba(15, 23, 42, 0.16),
-    inset 0 1px rgba(255, 255, 255, 0.22),
-    inset 0 -1px rgba(0, 0, 0, 0.16);
-  transform: translateX(-50%) rotate(var(--beta-rotation));
-  transform-origin: center;
-  transition:
-    filter 0.18s ease,
-    opacity 0.18s ease,
-    transform 0.2s ease;
-}
-
-.beta-notice span,
-.beta-notice small {
-  /* Re-enable clicks on the visible pills so the tape can still be dismissed. */
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-.beta-notice span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 3px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #111916;
-  font-size: 0.92rem;
-  font-weight: 800;
-  letter-spacing: 0;
-  line-height: 1.2;
-}
-
-.beta-notice small {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: rgba(17, 25, 22, 0.78);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 0.76rem;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.beta-notice:hover span,
-.beta-notice:focus-visible span {
-  background: white;
-}
-
-.beta-notice:hover,
-.beta-notice:focus-visible {
-  filter: saturate(1.08);
-  transform: translateX(-50%) rotate(var(--beta-rotation)) scale(1.01);
-}
-
 .site-nav a,
 .ghost-button,
 .user-chip,
@@ -8775,13 +8691,6 @@ textarea {
     position: static;
   }
 
-  .beta-notice {
-    --beta-rotation: 8deg;
-    top: 92px;
-    width: max(720px, 158vw);
-    min-height: 42px;
-  }
-
   .consultant-grid,
   .consultant-detail-cards,
   .consultant-card__fact-grid,
@@ -9061,21 +8970,6 @@ textarea {
 
   .page-scene__particles {
     opacity: 0.42;
-  }
-
-  .beta-notice {
-    flex-direction: column;
-    gap: 4px;
-    top: 52px;
-    width: max(500px, 150vw);
-    min-height: 52px;
-    padding: 8px 12px;
-  }
-
-  .beta-notice span {
-    justify-content: center;
-    text-align: center;
-    white-space: normal;
   }
 
   .brand-link span {
