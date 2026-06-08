@@ -508,3 +508,35 @@ NOT DONE / OWNER VERIFY
     PrincipnoPecataePi4) — to see the mentor dashboard, add it to the consultants
     group (command above) then log in.
   - Real end-to-end review of the mentor profile flow on prod.
+
+
+==================================================================
+SPRINT: PROFILE & ENGAGEMENT POLISH
+==================================================================
+Date: 2026-06-08 (later)
+
+SHIPPED + DEPLOYED
+  - GrowPoint Pro card: diagonal "coming soon" caution-tape ribbon; removed the
+    payments-not-active line.
+  - Notifications colour-coded by category (admin / message / booking / review /
+    system) in the dashboard list and the header popover (shared helper).
+  - Profile banner: confirmed it already fills its area (object-fit: cover,
+    full-width); no change needed.
+  - Profile layout: relocated the "browse other consultants" CTA into the left
+    column and capped the booking list height; the empty gap beside the left
+    column dropped from ~636px to ~264px (verified on a live profile via a
+    temporary localhost API-CORS allowance, reverted afterwards).
+
+VERIFICATION NOTE
+  - Logged-in/profile pages can't be rendered from localhost (prod API CORS is
+    www/CloudFront only). For this pass localhost was temporarily allowed through
+    CORS to verify against the real dashboard/profile, then reverted (confirmed
+    localhost is no longer allowed).
+
+STILL OPEN (larger features, need a focused build with verification)
+  - Social login: prompt user-vs-consultant role + prefill name/photo/city from
+    the provider + a complete-profile step before finishing signup.
+  - Interactive booking calendar (consultant picks hours / user books) replacing
+    the slot list — this also fully closes the profile layout gap.
+  - Dedicated /messages and /notifications pages (click-through from the popover).
+  - "Предстоящи сесии" popup button for consultants and users.
