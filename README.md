@@ -51,6 +51,8 @@ GitHub Pages still serves `https://www.growpoint.bg` until DNS is cut over, but 
 This removes the GitHub Pages limitation where every new consultant route needs a committed static folder to avoid a refresh `404`. After jethost.bg DNS is switched to CloudFront, a newly approved consultant URL can load immediately through the SPA fallback.
 
 > DNS note: the `growpoint.bg` / `www.growpoint.bg` domain is registered and DNS-managed at **jethost.bg**, and currently resolves `www` to GitHub Pages (the live landing page). Any DNS records mentioned below (CloudFront cutover, ACM certificate validation, SES verification) must be created in the **jethost.bg** DNS panel.
+>
+> Mail note: inbound email for the `@growpoint.bg` addresses (`contactus@`, `legal@`, `partnership@`) is handled via **[ImprovMX](https://improvmx.com/)** mail forwarding (MX/forwarding records in the jethost.bg DNS panel). Outbound transactional email is a separate concern (AWS SES, see below).
 
 Important SEO nuance:
 

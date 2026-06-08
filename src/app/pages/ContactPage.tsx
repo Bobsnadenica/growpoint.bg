@@ -10,12 +10,12 @@ const contactChannels = [
   {
     title: "Партньорства и реклама",
     description: "За рекламни позиции, работодателски брандове, академии и други партньорски формати.",
-    email: "partners@growpoint.bg"
+    email: "partnership@growpoint.bg"
   },
   {
     title: "Правни и данни",
     description: "За правни запитвания, privacy заявки и административни въпроси, свързани с данни.",
-    email: "contactus@growpoint.bg"
+    email: "legal@growpoint.bg"
   }
 ] as const;
 
@@ -33,9 +33,9 @@ export default function ContactPage() {
 
     const recipient =
       form.topic === "partnerships"
-        ? "partners@growpoint.bg"
+        ? "partnership@growpoint.bg"
         : form.topic === "legal"
-          ? "contactus@growpoint.bg"
+          ? "legal@growpoint.bg"
           : "contactus@growpoint.bg";
     const subject = `[GrowPoint] ${
       form.topic === "partnerships"

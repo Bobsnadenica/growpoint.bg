@@ -5974,22 +5974,10 @@ export function DashboardPage() {
               <p className="eyebrow">Поверителност</p>
               <h2>Контрол върху твоите данни.</h2>
             </header>
-            <div className="privacy-actions">
-              <div>
-                <strong>Свали копие на данните си</strong>
-                <p className="form-note">
-                  Получаваш JSON файл с профила, резервациите и метаданните за качените документи.
-                </p>
-              </div>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={exportMyDataAction}
-                disabled={accountActionLoading !== null}
-              >
-                {accountActionLoading === "export" ? "Подготвяме..." : "Свали данните"}
-              </button>
-            </div>
+            <p className="form-note">
+              Можеш да поискаш копие на личните си данни по имейл — виж Политиката за
+              поверителност.
+            </p>
             <div className="privacy-actions privacy-actions--danger">
               <div>
                 <strong>Изтрий профила</strong>
