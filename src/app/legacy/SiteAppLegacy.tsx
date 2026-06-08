@@ -3475,7 +3475,11 @@ export function DashboardPage() {
 
     Promise.all([
       fetchProfileWithRetry(token),
-      api.listBookings(token),
+      // Runs concurrently with the profile bootstrap above; for a brand-new
+      // (e.g. manually-created) user this can momentarily 404 with "Profile not
+      // found" before the bootstrap lands, so tolerate it and start with no
+      // bookings rather than failing the whole dashboard load.
+      api.listBookings(token).catch(() => []),
       api
         .getMyConsultantProfile(token)
         .then((value) => value)
