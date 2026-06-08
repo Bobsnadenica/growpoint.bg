@@ -10199,3 +10199,8 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+:root[data-theme="dark"] .auth-terms:has(input:checked) {
+  border-color: rgba(143, 181, 168, 0.55);
+  background: var(--primary-soft);
+}

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && node scripts/site-build.mjs build",
-    "build:cloudfront": "tsc --noEmit && node scripts/site-build.mjs cloudfront",
+    "theme:check": "node scripts/check-theme.mjs",
+    "build": "node scripts/check-theme.mjs && tsc --noEmit && node scripts/site-build.mjs build",
+    "build:cloudfront": "node scripts/check-theme.mjs && tsc --noEmit && node scripts/site-build.mjs cloudfront",
     "deploy:cloudfront": "node scripts/deploy-frontend-cloudfront.mjs",
     "preview": "tsc --noEmit && node scripts/site-build.mjs preview && vite preview",
     "smoke:prod": "node scripts/smoke-production.mjs",
