@@ -461,6 +461,7 @@ The Lambda does all of the following:
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/health` | No | health check |
+| `POST` | `/metrics/visit` | No | first-party page-view beacon (increments a daily counter) |
 | `GET` | `/consultants` | No | public consultant list |
 | `GET` | `/consultants/{slug}` | No | public consultant detail |
 | `GET` | `/consultants/me` | Yes | consultant's own editable profile |
@@ -471,6 +472,8 @@ The Lambda does all of the following:
 | `POST` | `/me/cv/upload-url` | Yes | request pre-signed upload URL for CV/avatar/hero media |
 | `GET` | `/bookings` | Yes | list bookings for current user or consultant |
 | `POST` | `/bookings` | Yes | create booking request |
+| `GET` | `/admin/metrics` | Admin | platform monitoring aggregates (users, registrations/day, consultants by status, bookings, messages, reviews, visits) |
+| `GET` | `/admin/consultants` | Admin | moderation list (all consultant profiles) |
 
 ### 7.3 Lambda Request Handling Step by Step
 
