@@ -4331,6 +4331,190 @@ textarea {
   font-size: 0.9rem;
 }
 
+/* ─── Interactive month calendar (book + pick) ──────────────────────── */
+.cal {
+  display: grid;
+  gap: 12px;
+}
+
+.cal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cal__title {
+  text-transform: capitalize;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.cal__nav {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cal__nav:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.cal__nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cal__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal__cell {
+  aspect-ratio: 1 / 1;
+  min-height: 38px;
+}
+
+.cal__cell--empty {
+  background: transparent;
+}
+
+.cal__day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+
+.cal__day:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.cal__day:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cal__day--today {
+  border-color: var(--accent);
+}
+
+.cal__day--has-slots {
+  border-color: rgba(75, 106, 96, 0.5);
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-weight: 600;
+}
+
+.cal__day--selected {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 600;
+  transform: translateY(-1px);
+}
+
+.cal__day-count {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 0.62rem;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.cal__day--selected .cal__day-count {
+  background: #ffffff;
+  color: var(--primary-dark);
+}
+
+.cal__hours {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border);
+}
+
+.cal__hours-label {
+  text-transform: capitalize;
+  font-size: 0.85rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cal__hours-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cal__hint {
+  margin: 0;
+}
+
+.availability-calendar--pick {
+  max-height: none;
+  overflow: visible;
+}
+
+.availability-pattern-toggle > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--primary-dark);
+  padding: 8px 0;
+}
+
+.section-edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.section-edit-head h2,
+.section-edit-head .eyebrow {
+  margin: 0;
+}
+
+.profile-owner-note {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px dashed var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 0.88rem;
+}
+
 .consultant-detail-grid {
   grid-template-columns: minmax(0, 1fr) 360px;
 }
@@ -7013,6 +7197,26 @@ textarea {
   margin-bottom: 0;
 }
 
+.auth-social-prefill {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.auth-social-prefill__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.auth-social-prefill strong {
+  color: var(--text);
+  display: block;
+}
+
 .auth-choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7881,6 +8085,132 @@ textarea {
   gap: 6px;
 }
 
+/* ─── Dedicated inbox: /notifications + /messages ───────────────────── */
+.inbox-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.notifications-item--link {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.notifications-item--link:hover {
+  border-color: rgba(10, 102, 194, 0.45);
+  transform: translateY(-1px);
+}
+
+.notifications-item__tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+}
+
+.form-note--error {
+  color: #b3261e;
+}
+
+.messages-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.messages-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.messages-list__item {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.messages-list__item:hover {
+  border-color: rgba(10, 102, 194, 0.4);
+}
+
+.messages-list__item--active {
+  border-color: rgba(10, 102, 194, 0.55);
+  background: rgba(235, 244, 254, 0.6);
+}
+
+.messages-list__item strong {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.messages-list__preview {
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages-list__time {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.messages-thread {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-height: 320px;
+}
+
+.messages-thread__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.messages-thread__head strong {
+  font-size: 1.05rem;
+}
+
+.messages-thread__list {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.messages-thread__placeholder {
+  align-self: center;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .messages-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ─── Modals ────────────────────────────────────────────────────────── */
 .modal-backdrop {
   position: fixed;
@@ -7919,6 +8249,25 @@ textarea {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard-overview__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sessions-modal {
+  width: min(720px, 100%);
+}
+
+.sessions-modal__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
@@ -10074,6 +10423,20 @@ textarea {
 
 :root[data-theme="dark"] .notifications-item--unread {
   background: var(--primary-soft);
+}
+
+:root[data-theme="dark"] .messages-list__item--active {
+  background: var(--primary-soft);
+}
+
+:root[data-theme="dark"] .cal__day--selected .cal__day-count {
+  background: var(--surface);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .notifications-item__tag {
+  background: var(--surface-alt);
+  color: var(--text);
 }
 
 /* Status banners keep their semantic color but as a dark-friendly tint + light text. */

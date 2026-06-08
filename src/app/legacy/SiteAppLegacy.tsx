@@ -46,9 +46,9 @@ import {
   getAvailabilityDayKey,
   getRelativeDateInputValue,
   getUpcomingAvailabilitySlots,
-  groupAvailabilityByDay,
   normalizeAvailabilitySlots
 } from "./availability";
+import AvailabilityCalendar from "./AvailabilityCalendar";
 import { NOTIFICATION_ICONS, getNotificationCategory } from "../../lib/notifications";
 import { applyConsultantProfileSeo } from "../../lib/seo";
 import {
@@ -1672,9 +1672,9 @@ export function ConsultantPage() {
   }
 
   const isConsultantViewer = viewerProfile?.role === "consultant";
+  const isOwnProfile = Boolean(user && consultant.ownerUserId === user.id);
   const bookingCtaTo = user ? "/dashboard" : "/auth?tab=register";
   const visibleAvailability = getUpcomingAvailabilitySlots(consultant.availability, 12);
-  const availabilityCalendar = groupAvailabilityByDay(visibleAvailability);
   const themeStyle = getConsultantThemeStyle(consultant);
   const hasTheme = hasConsultantTheme(consultant);
   const profileSummary =
@@ -1800,7 +1800,18 @@ export function ConsultantPage() {
 
                 <p className="profile-stage__summary">{profileSummary}</p>
 
+                {isOwnProfile ? (
+                  <p className="profile-owner-note">
+                    Това е твоят публичен профил — така те виждат потребителите. Използвай
+                    бутоните „Редактирай“, за да обновиш всяка секция.
+                  </p>
+                ) : null}
                 <div className="profile-actions">
+                  {isOwnProfile ? (
+                    <Link className="primary-button" to="/dashboard#consultant-profile">
+                      Редактирай профила
+                    </Link>
+                  ) : null}
                   <Link className="ghost-button" to="/users">
                     Назад към профилите
                   </Link>
@@ -1822,7 +1833,14 @@ export function ConsultantPage() {
         <div className="container consultant-detail-grid consultant-detail-grid--profile">
           <div className="panel-stack">
             <article className="panel consultant-detail-panel consultant-detail-panel--wide">
-              <h2>За консултанта</h2>
+              <div className="section-edit-head">
+                <h2>За консултанта</h2>
+                {isOwnProfile ? (
+                  <Link className="text-button" to="/dashboard#consultant-profile">
+                    Редактирай
+                  </Link>
+                ) : null}
+              </div>
               {consultant.bio ? <p>{consultant.bio}</p> : null}
               {consultant.experienceSummary ? (
                 <p>{consultant.experienceSummary}</p>
@@ -1837,7 +1855,14 @@ export function ConsultantPage() {
             </article>
 
             <article className="panel consultant-detail-panel consultant-detail-panel--wide consultant-expertise">
-              <h2>Експертиза и фокус</h2>
+              <div className="section-edit-head">
+                <h2>Експертиза и фокус</h2>
+                {isOwnProfile ? (
+                  <Link className="text-button" to="/dashboard#consultant-profile">
+                    Редактирай
+                  </Link>
+                ) : null}
+              </div>
 
               {getConsultantIdealFor(consultant).length ? (
                 <section className="consultant-expertise__block">
@@ -1982,7 +2007,14 @@ export function ConsultantPage() {
           ) : (
           <form className="panel booking-panel" onSubmit={submitBooking}>
             <header className="booking-panel__head">
-              <p className="eyebrow">Резервация</p>
+              <div className="section-edit-head">
+                <p className="eyebrow">Резервация</p>
+                {isOwnProfile ? (
+                  <Link className="text-button" to="/dashboard#consultant-profile">
+                    Редактирай часовете
+                  </Link>
+                ) : null}
+              </div>
               <h2>Избери свободен час</h2>
               <p className="section-caption">
                 {getSessionLengthLabel(consultant)} · {consultant.sessionModes.join(" · ")}
@@ -1991,29 +2023,12 @@ export function ConsultantPage() {
 
             {visibleAvailability.length ? (
               <div className="availability-calendar" id="availability-calendar">
-                {availabilityCalendar.map((day) => (
-                  <article className="availability-calendar__day" key={day.key}>
-                    <div className="availability-calendar__day-header">
-                      <strong>{day.label}</strong>
-                      <span>{day.slots.length} часа</span>
-                    </div>
-                    <div className="availability-calendar__slots">
-                      {day.slots.map((slot) => (
-                        <button
-                          className={`slot-button slot-button--compact ${
-                            selectedSlot === slot ? "slot-button--active" : ""
-                          }`}
-                          key={slot}
-                          type="button"
-                          onClick={() => setSelectedSlot(slot)}
-                          aria-pressed={selectedSlot === slot}
-                        >
-                          {formatAvailabilityTimeLabel(slot)}
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-                ))}
+                <AvailabilityCalendar
+                  mode="book"
+                  availability={visibleAvailability}
+                  selectedSlot={selectedSlot}
+                  onSelectSlot={setSelectedSlot}
+                />
               </div>
             ) : (
               <div className="panel panel--subtle">
@@ -2185,7 +2200,9 @@ export function AuthPage() {
     code: "",
     newPassword: "",
     confirmNewPassword: "",
-    role: initialRole as UserRole
+    role: initialRole as UserRole,
+    city: "",
+    occupation: ""
   });
 
   useEffect(() => {
@@ -2388,7 +2405,9 @@ export function AuthPage() {
           email: form.email.trim() || user.email,
           role: form.role,
           plan: "free",
-          avatarUrl: user.avatarUrl || ""
+          avatarUrl: user.avatarUrl || "",
+          city: form.city.trim() || undefined,
+          occupation: form.occupation.trim() || undefined
         });
         clearPendingBootstrap();
         navigate(resolvedRedirect);
@@ -2820,6 +2839,78 @@ export function AuthPage() {
                 </div>
               </fieldset>
 
+              {isSocialOnboarding ? (
+                <div className="auth-onboarding-section">
+                  {user?.avatarUrl ? (
+                    <div className="auth-social-prefill">
+                      <img
+                        src={user.avatarUrl}
+                        alt=""
+                        className="auth-social-prefill__avatar"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div>
+                        <strong>{form.name || user.name}</strong>
+                        <p className="form-note">
+                          Снимката и името са взети от външния ти профил. Можеш да ги
+                          промениш по всяко време.
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+                  <label>
+                    Име и фамилия
+                    <input
+                      value={form.name}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, name: event.target.value }))
+                      }
+                      autoComplete="name"
+                      placeholder="Например: Елица Маринова"
+                      required
+                      disabled={submitting}
+                    />
+                  </label>
+                  <div className="two-column">
+                    <label>
+                      Град <span className="form-note">(по избор)</span>
+                      <input
+                        value={form.city}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, city: event.target.value }))
+                        }
+                        autoComplete="address-level2"
+                        placeholder="Например: София"
+                        disabled={submitting}
+                      />
+                    </label>
+                    <label>
+                      {form.role === "consultant" ? "Сфера / роля" : "Професия"}{" "}
+                      <span className="form-note">(по избор)</span>
+                      <input
+                        value={form.occupation}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            occupation: event.target.value
+                          }))
+                        }
+                        autoComplete="organization-title"
+                        placeholder={
+                          form.role === "consultant"
+                            ? "Например: Кариерен консултант"
+                            : "Например: Маркетинг специалист"
+                        }
+                        disabled={submitting}
+                      />
+                    </label>
+                  </div>
+                  <p className="form-note">
+                    Останалите детайли можеш да допълниш от таблото си след това.
+                  </p>
+                </div>
+              ) : null}
+
               {!isSocialOnboarding ? (
                 <>
                   <label>
@@ -3243,6 +3334,7 @@ export function DashboardPage() {
   const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
   const [messageSendingId, setMessageSendingId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [onboardingPending, setOnboardingPending] = useState(readSocialOnboardingPending);
   const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [accountActionLoading, setAccountActionLoading] = useState<
@@ -4166,6 +4258,14 @@ export function DashboardPage() {
     setConsultantAvailability((current) => current.filter((item) => item !== slot));
   }
 
+  function toggleAvailabilitySlot(slot: string) {
+    if (consultantAvailability.includes(slot)) {
+      removeAvailabilitySlot(slot);
+    } else {
+      addAvailabilitySlot(slot);
+    }
+  }
+
   function addAvailabilitySlots(slots: string[]) {
     if (!slots.length) return;
     setError("");
@@ -4310,8 +4410,8 @@ export function DashboardPage() {
                 Подходящи консултанти
               </button>
             ) : null}
-            <button type="button" onClick={() => scrollToDashboardSection("sessions")}>
-              Сесии
+            <button type="button" onClick={() => setSessionsOpen(true)}>
+              Предстоящи сесии
             </button>
             <button type="button" onClick={() => scrollToDashboardSection("privacy")}>
               Поверителност
@@ -4355,18 +4455,43 @@ export function DashboardPage() {
                     : "Допълни секциите по-долу, за да изглежда профилът ти по-пълен."}
                 </p>
               </div>
-              <Link
-                className="primary-button"
-                to={
-                  profile.role === "consultant" && consultantProfile
-                    ? `/consultants/${consultantProfile.slug}`
-                    : "/users"
-                }
-              >
-                {profile.role === "consultant" && consultantProfile
-                  ? "Виж публичната страница"
-                  : "Търси консултант"}
-              </Link>
+              <div className="dashboard-overview__actions">
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => scrollToDashboardSection("documents")}
+                >
+                  Документи
+                </button>
+                {profile.role === "consultant" ? (
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={openConsultantAvailabilitySection}
+                  >
+                    Свободни часове
+                  </button>
+                ) : null}
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => setSessionsOpen(true)}
+                >
+                  Предстоящи сесии{bookings.length ? ` (${bookings.length})` : ""}
+                </button>
+                <Link
+                  className="primary-button"
+                  to={
+                    profile.role === "consultant" && consultantProfile
+                      ? `/consultants/${consultantProfile.slug}`
+                      : "/users"
+                  }
+                >
+                  {profile.role === "consultant" && consultantProfile
+                    ? "Виж публичната страница"
+                    : "Търси консултант"}
+                </Link>
+              </div>
             </div>
 
             <div className="summary-grid summary-grid--compact">
@@ -5428,6 +5553,20 @@ export function DashboardPage() {
                       </span>
                     </div>
 
+                    <div className="availability-calendar availability-calendar--pick">
+                      <p className="form-note">
+                        Натисни ден и след това час, за да добавиш или премахнеш свободен
+                        слот.
+                      </p>
+                      <AvailabilityCalendar
+                        mode="pick"
+                        availability={consultantAvailability}
+                        onToggleSlot={toggleAvailabilitySlot}
+                      />
+                    </div>
+
+                    <details className="availability-pattern-toggle">
+                      <summary>Или добави цял седмичен график наведнъж</summary>
                     <div className="availability-pattern">
                       <div className="availability-pattern__row">
                         <span className="availability-pattern__label">Дни от седмицата</span>
@@ -5515,6 +5654,7 @@ export function DashboardPage() {
                         ) : null}
                       </div>
                     </div>
+                    </details>
 
                     <details className="availability-single">
                       <summary>Добави един час ръчно</summary>
@@ -5906,21 +6046,39 @@ export function DashboardPage() {
               );
             };
 
+            if (!sessionsOpen) return null;
             return (
-              <section className="panel" id="sessions">
-                <header className="dashboard-bookings__head">
-                  <div>
-                    <h2>Предстоящи сесии</h2>
-                    <p className="section-caption">
-                      Всички заявки и потвърдени срещи са събрани тук.
-                    </p>
-                  </div>
-                  {bookings.length ? (
-                    <span className="dashboard-bookings__count">
-                      {upcoming.length} предстоящи · {pastOrCancelled.length} архив
-                    </span>
-                  ) : null}
-                </header>
+              <div
+                className="modal-backdrop"
+                role="dialog"
+                aria-modal="true"
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) setSessionsOpen(false);
+                }}
+              >
+                <div className="modal-card sessions-modal">
+                  <header className="dashboard-bookings__head">
+                    <div>
+                      <h2>Предстоящи сесии</h2>
+                      <p className="section-caption">
+                        Всички заявки и потвърдени срещи са събрани тук.
+                      </p>
+                    </div>
+                    <div className="sessions-modal__head-actions">
+                      {bookings.length ? (
+                        <span className="dashboard-bookings__count">
+                          {upcoming.length} предстоящи · {pastOrCancelled.length} архив
+                        </span>
+                      ) : null}
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() => setSessionsOpen(false)}
+                      >
+                        Затвори
+                      </button>
+                    </div>
+                  </header>
 
                 {bookings.length === 0 ? (
                   <DashboardEmptyState
@@ -5974,7 +6132,8 @@ export function DashboardPage() {
                     ) : null}
                   </div>
                 )}
-              </section>
+                </div>
+              </div>
             );
           })()}
 

@@ -23,6 +23,8 @@ import ContactPage from "../pages/ContactPage";
 import FaqPage from "../pages/FaqPage";
 import HomePage from "../pages/HomePage";
 import LegalPage from "../pages/LegalPage";
+import MessagesPage from "../pages/MessagesPage";
+import NotificationsPage from "../pages/NotificationsPage";
 import PrivacyPage from "../pages/PrivacyPage";
 import TermsPage from "../pages/TermsPage";
 import NotFoundPage from "../pages/NotFoundPage";
@@ -123,7 +125,7 @@ type HeaderPanel = "notifications" | "messages";
 
 function notificationHref(item: NotificationItem) {
   if (item.href) return item.href;
-  return item.type === "message_received" ? "/dashboard#sessions" : "/dashboard#notifications";
+  return item.type === "message_received" ? "/messages" : "/notifications";
 }
 
 function formatHeaderNotificationTime(iso: string) {
@@ -159,7 +161,7 @@ function HeaderNotificationPopover({
 }) {
   const isMessages = activePanel === "messages";
   const title = isMessages ? "Съобщения" : "Известия";
-  const fullHref = isMessages ? "/dashboard#sessions" : "/dashboard#notifications";
+  const fullHref = isMessages ? "/messages" : "/notifications";
   const visibleItems = items.slice(0, 8);
 
   return (
@@ -827,6 +829,8 @@ export default function AppShell() {
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/dashboard" element={<ProfilePage />} />
+          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route
             path="/admin/preview/:consultantId"

@@ -540,3 +540,74 @@ STILL OPEN (larger features, need a focused build with verification)
     the slot list — this also fully closes the profile layout gap.
   - Dedicated /messages and /notifications pages (click-through from the popover).
   - "Предстоящи сесии" popup button for consultants and users.
+
+
+==================================================================
+SPRINT: ENGAGEMENT FEATURES + APPLE PREP (calendar, inbox, onboarding)
+==================================================================
+Date: 2026-06-09
+
+SHIPPED (built clean: theme guard + tsc + vite all pass)
+  - "Предстоящи сесии" is now a POPUP for both roles. The sessions panel became a
+    modal opened from a top action button in the dashboard overview head and from
+    the sidebar nav (moved out of the inline profile body). Shows the booking
+    count.
+  - Dedicated pages: /messages and /notifications (new routes + pages). The header
+    notification/message popover items and "Виж всички" now deep-link to these
+    pages instead of dashboard hash anchors. /notifications = full list with
+    category colour tags + mark-all-read (syncs the header badge). /messages = a
+    conversations-by-booking inbox (list + thread + reply) for confirmed sessions.
+    Both gate to a login prompt when signed out. Verified rendering for both.
+  - Interactive booking calendar (NEW shared component
+    src/app/legacy/AvailabilityCalendar.tsx). A compact month grid used in TWO
+    modes: "book" (user picks a day -> sees free hours -> selects) on the public
+    consultant profile, and "pick" (consultant taps day+hour to add/remove a slot)
+    in the dashboard availability composer. The old flat day-list is replaced; the
+    weekly-pattern bulk composer is preserved under a collapsible <details>.
+    Verified live on a public profile (today auto-selected, available days
+    highlighted with a count badge, past days disabled).
+  - Profile (D): top action buttons (Документи / Свободни часове [consultant] /
+    Предстоящи сесии) in the dashboard overview head. The PUBLIC consultant
+    profile now detects the owner (ownerUserId === current user) and shows an
+    owner note plus "Редактирай" links per section (За консултанта, Експертиза и
+    фокус, Резервация) and a top "Редактирай профила" button, all linking back to
+    the dashboard editor. (The header name-chip still opens /dashboard as the hub,
+    which prominently links to the public page; regular users have no public page.)
+  - Social onboarding (#1): the role choice already existed; added a
+    complete-profile step shown during provider sign-up — name/photo prefilled
+    from the provider account (avatar preview), plus optional Град / Професия
+    fields, passed into /auth/bootstrap.
+  - Contact page: the three channels are contactus@ / partnership@ / legal@
+    growpoint.bg (general / partnerships+ads / legal+data); the form routes to the
+    matching address. (Inbound mail forwarding is ImprovMX — see README.)
+  - Earlier in scope and already live: GrowPoint Pro "coming soon" tape, removed
+    data-export ("Свали копие на данните си") from the profile (privacy policy
+    covers it / request by email), ad box below ТАБЛО from assets/advertisement/,
+    and the matches section ("най-добро съвпадение") only shows at 100% profile
+    completion.
+
+APPLE SIGN-IN (C) — PREPPED, NOT YET LIVE
+  - Frontend is already correct: the Apple button auto-enables from config and
+    Amplify maps it to the Cognito "SignInWithApple" provider. Terraform has the
+    Apple IdP wired (client/team/key all read from gitignored terraform.tfvars).
+  - BLOCKER: the 10-char Apple **Key ID** (the AuthKey_XXXXXXXXXX.p8 identifier)
+    is still missing. apple_key_id="" -> apple_enabled stays false -> no IdP is
+    created and the button correctly stays "Скоро". The .p8 private key itself is
+    stored only in the gitignored tfvars (never committed, never in docs).
+  - To go live: set apple_key_id in terraform.tfvars, `terraform apply` (creates
+    the Apple IdP), add Apple to VITE_COGNITO_SOCIAL_PROVIDERS, rebuild + deploy.
+    Apple's return URL is already the Cognito .../oauth2/idpresponse.
+
+SECURITY / CORS
+  - Local logged-in/public verification used a temporary localhost entry in the
+    API+S3 CORS allowlist; it was REVERTED and re-applied at the end of this pass.
+    Confirmed prod CORS allow_origins is back to www.growpoint.bg + the CloudFront
+    domain only (no localhost). No secrets are in tracked files.
+
+STILL OPEN / OWNER VERIFY
+  - Apple Key ID (only blocker for Apple sign-in — see above).
+  - Logged-in visual pass on prod for: the sessions modal, /messages thread+reply,
+    the consultant "pick" calendar, and the social complete-profile step (these
+    are auth-gated; localhost can't hit the prod API once CORS is reverted).
+  - Deploy: rebuild is clean locally; commit + push (GitHub Pages) and
+    `npm run deploy:cloudfront` to publish, per the owner's deploy flow.

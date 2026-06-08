@@ -65,6 +65,16 @@ Important SEO nuance:
 
 Last QA pass: 2026-06-08 on `https://www.growpoint.bg`, the CloudFront test domain, and the live AWS API. Controlled live QA runs use disposable Cognito users, a disposable consultant profile, temporary S3 objects, and disposable bookings, all removed afterwards (cleanup verified).
 
+### 2026-06-09 pass (engagement features + Apple prep)
+
+- **"Предстоящи сесии" is now a popup** for both consultants and users — opened from a top action button in the dashboard overview and the sidebar nav, instead of living inline in the profile body.
+- **Dedicated `/messages` and `/notifications` pages.** The header message/notification popover (and its "Виж всички" link) now deep-link to these pages. `/notifications` is a full, category-colour-coded list with mark-all-read that syncs the header badge; `/messages` is a conversations-by-booking inbox (list → thread → reply) for confirmed sessions. Both show a login prompt when signed out.
+- **Interactive booking calendar.** A new shared month-grid component (`src/app/legacy/AvailabilityCalendar.tsx`) replaces the flat slot list. Users pick a day → see free hours → select; consultants tap day+hour to add/remove availability. The weekly-pattern bulk composer is kept under a collapsible section.
+- **Profile:** top action buttons (Документи / Свободни часове / Предстоящи сесии) in the dashboard overview; the public consultant profile detects the owner (`ownerUserId`) and shows an owner note plus per-section "Редактирай" links back to the dashboard editor.
+- **Social onboarding completeness:** the provider sign-up step now prefills name + photo from the provider account and collects optional city/occupation before finishing (passed into `/auth/bootstrap`).
+- **Apple sign-in: prepped, not live.** The frontend button and the Terraform IdP are wired; the only remaining blocker is the 10-char Apple **Key ID** (`apple_key_id`). Until it is set the IdP is not created and the button stays "Скоро". The `.p8` private key lives only in the gitignored `terraform.tfvars`.
+- **Contact:** channels are `contactus@` (general), `partnership@` (partnerships + ads), and `legal@` (legal + data) `@growpoint.bg`; inbound mail forwards via ImprovMX (see the Mail note above).
+
 ### 2026-06-08 pass (social login + UI polish)
 
 - **Social login is live:** Google and LinkedIn sign-in work through the Cognito hosted UI (`growpoint-auth.auth.eu-west-1.amazoncognito.com`). The live `/oauth2/authorize` handoff for both providers reaches the provider consent screen with no `redirect_uri` error. Apple is wired in code but not configured (its button shows "Скоро").
@@ -119,6 +129,7 @@ Do not mark a feature as production-ready unless it has either live browser evid
 
 | Date | Scope | Evidence | Result | Follow-up |
 | --- | --- | --- | --- | --- |
+| 2026-06-09 | Engagement features + Apple prep | Sessions popup (both roles), `/messages` + `/notifications` pages, interactive book/pick calendar, profile owner-edit + top buttons, social complete-profile step; `npm run build` clean (theme guard + tsc + vite); public calendar + both new pages verified in the preview browser | Passed (build + public render) | Owner to do a logged-in pass (sessions modal, messages reply, consultant pick-calendar, social complete-profile) and supply the Apple Key ID to enable Apple. |
 | 2026-06-08 | Social login + UI polish | Google + LinkedIn IdPs created (Terraform), hosted-UI domain ACTIVE, live `/oauth2/authorize` handoff reaches both consent screens; onboarding modal, dark-theme, banner, and beta-tape-removal builds; `npm run smoke:prod` 14/14 | Passed | Owner to run a real Google/LinkedIn end-to-end sign-in and verify the onboarding modal + dark `/dashboard`. |
 | 2026-06-06 | Live API lifecycle QA | Disposable Cognito users, consultant, and booking run `mq2teq4uxw3pz` | Passed and cleaned up | Superseded by the repeatable 2026-06-07 smoke script. |
 | 2026-06-06 | Live public profile QA | `/consultants`, `/consultants/димитър-менторски`, admin detail, public route generation | Passed | Refresh availability dates before larger public launch. |
@@ -260,6 +271,8 @@ Routes include:
 - `/consultants/:slug`
 - `/auth`
 - `/dashboard`
+- `/messages`
+- `/notifications`
 - `/about`
 - `/faq`
 - `/contact`
