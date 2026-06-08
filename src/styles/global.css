@@ -2332,9 +2332,10 @@ textarea {
    per-card rule below caps height and lets aspect-ratio shape the width. */
 .media-preview-card__cover {
   width: 100%;
-  height: auto;
+  aspect-ratio: 16 / 7;
   max-height: 180px;
   object-fit: cover;
+  object-position: center;
 }
 
 .profile-card__avatar,

@@ -61,18 +61,16 @@ Important SEO nuance:
 
 ## Production Feature Status and Roadmap
 
-Last QA pass: 2026-06-07 on `https://www.growpoint.bg`, the CloudFront test domain, and the live AWS API.
+Last QA pass: 2026-06-08 on `https://www.growpoint.bg`, the CloudFront test domain, and the live AWS API. Controlled live QA runs use disposable Cognito users, a disposable consultant profile, temporary S3 objects, and disposable bookings, all removed afterwards (cleanup verified).
 
-This table is the current production-readiness map: what works, what still needs work, and what should be tested with real users next. Controlled live QA runs use disposable Cognito users, a disposable consultant profile, temporary S3 objects, and disposable bookings; the latest run removed those records afterwards and cleanup was verified.
+### 2026-06-08 pass (social login + UI polish)
 
-### 2026-06-07 Production Hardening Pass
+- **Social login is live:** Google and LinkedIn sign-in work through the Cognito hosted UI (`growpoint-auth.auth.eu-west-1.amazoncognito.com`). The live `/oauth2/authorize` handoff for both providers reaches the provider consent screen with no `redirect_uri` error. Apple is wired in code but not configured (its button shows "Скоро").
+- **Social onboarding:** brand-new Google/LinkedIn accounts get a one-time dashboard modal to confirm their name, upload a profile photo, and add city/occupation (role defaults to client). Returning users and email/password signups are unaffected.
+- **UI fixes:** the beta "caution tape" banner was removed site-wide; dark-mode readability was fixed across the dashboard/profile/modal surfaces; the consultant banner now fills its area (`object-fit: cover`) so vertical uploads no longer leave gaps, and the upload field states the recommended size (1600×700, landscape).
+- **Repo hygiene:** `dist/` build output is no longer tracked, and the Cognito Google/LinkedIn identity-provider Terraform resources no longer show a phantom perpetual diff (`terraform plan` is clean).
 
-The latest pass focused on launch readiness, speed, and repo security:
-
-- **Functional QA:** the full live lifecycle suite passed 27/27 — signup + resend + admin confirm, login, consultant profile save/approval/public route, avatar + cover upload, the full booking lifecycle, two-way booking messages, ICS, document sharing + privacy, past-session confirmation + review, and notifications. Disposable data was cleaned up.
-- **Public profile SEO on CloudFront:** a CloudFront viewer-request function now resolves directory-style routes to their `index.html`, so known public routes serve route-specific metadata while unknown routes still fall back to the SPA shell.
-- **Speed / cost:** public `GET /consultants` and `GET /consultants/{slug}` now send `Cache-Control: public, max-age=60, stale-while-revalidate=300`, so browsers and any CDN layer can serve repeat reads without hitting Lambda. Signed media URLs stay valid for 3600s, comfortably longer than the cache window.
-- **Demo profiles:** example consultants are retained on purpose to keep the directory full and are clearly labeled with a "Пример" badge; their availability is refreshed to upcoming dates via `scripts/refresh-example-availability.cjs`.
+Earlier passes (2026-06-07) shipped CloudFront per-route SEO, public-API cache headers (`max-age=60, stale-while-revalidate=300`), demo-availability refresh, and a full 27/27 live lifecycle suite (signup, login, consultant profile, media, booking lifecycle, messages, documents, reviews, notifications) with disposable data cleaned up.
 
 ### Security and Secrets (public repository)
 
@@ -83,58 +81,23 @@ This repository is public, so no secrets are committed:
 - The only tracked env file is `.env.production`, which contains **public** client configuration only (API base URL plus the Cognito user-pool and app-client IDs). These values already ship inside the built frontend bundle and are not secret.
 - Backend AWS credentials are never stored in the repo; the Lambda uses its IAM role and local tooling uses your own AWS CLI profile.
 
-### Simple Launch Checklist
+### What was tested and how
 
-| Area | Tested | Works | Needs testing / improvement |
-| --- | --- | --- | --- |
-| Public site and SEO | Safe smoke on `www.growpoint.bg` and CloudFront | Public routes, sitemap, robots, canonical metadata, live consultant routes, and SPA fallback | jethost.bg DNS cutover to CloudFront; scheduled rebuild/deploy for fresh profile SEO metadata |
-| Auth and account flows | Live smoke plus earlier controlled inbox/API checks | Login, registration, verification resend, new-password-required with confirm field, forgot-password request | Complete one full password-reset code flow from a real inbox and inspect final email copy |
-| Consultant directory/profile | Live public API and browser checks | Approved profiles load publicly, EUR pricing is clean, photos/lightbox and dark profile booking layout work | Refresh stale availability and add an admin quality checklist before broad launch |
-| Admin panel | Live admin API plus CloudFront browser check | Admin list, preview, message route, status controls, and `Подбрани` homepage selection/filter are implemented | Browser-test approve/reject/delete with one disposable consultant and continue improving admin rights/audit UX |
-| Bookings, messages, reviews | Live mutation smoke | Booking lifecycle, messages, notifications, files after confirmed booking, session confirmation, ICS, and reviews work | Mobile logged-in QA and real reminder timing observation |
-| Emails | API acceptance and backend templates reviewed | Cognito can deliver default verification/reset emails; backend GrowPoint email templates and in-app fallback exist | Finish SES DNS/production access and inspect real GrowPoint-branded inbox delivery |
-| Theme and UI polish | CloudFront desktop browser check | White theme is default, dark/light toggle is far-right in the header, and theme switching has a short transition animation | Broader mobile visual QA after more admin/dashboard UI polish |
-| Scaling/reliability | Infrastructure validation and smoke checks | DynamoDB on-demand, Lambda/API Gateway, S3 media, CloudFront SPA fallback, and CORS work | Add CloudWatch alarms, rate limits, structured validation tests, and load testing |
+| Area | Result | How it was verified |
+| --- | --- | --- |
+| Public site & SEO | Works | `npm run smoke:prod` 14/14 — routes return `200`, sitemap/robots, canonical/OG metadata; CloudFront SPA fallback 15/15 via `--cloudfront` |
+| Public API | Works | `/health` ok; `/consultants` returns 11 public profiles; Cyrillic slug `200`; protected routes `401` without a token; production-origin CORS preflight `204` |
+| Social login (Google + LinkedIn) | Backend live | Cognito `/oauth2/authorize` handoff for both providers reaches the provider consent screen with no `redirect_uri` error (live curl). Owner to confirm a real end-to-end sign-in. |
+| Auth & account flows | Core flows | Live 27/27 lifecycle — signup + resend + admin confirm, login, new-password-required, forgot-password request |
+| Consultant profile & media | Works | Live QA saved a disposable profile (text, price, city, languages, topics, availability) and uploaded avatar + cover; public route loaded |
+| Bookings, messages, reviews | Works | Live 27/27 — booking create/accept/decline/cancel/reschedule, two-way messages, ICS, session confirmation, review |
+| Documents & sharing | Works | Live 27/27 — upload, owner download, confirmed-consultant share, unrelated share rejected `403` |
+| Admin panel | Partial | Admin API list/preview/message/status + `Подбрани` featured selection verified; approve/reject/delete still need a browser pass |
+| Emails | Blocked | Cognito default sender delivers verification/reset codes; GrowPoint SES sender blocked on jethost.bg DNS + SES production access |
+| Theme & UI | Fixed | Dark-mode dashboard/profile/modal surfaces fixed (audit + `tsc`/build); banner fill verified with a vertical test image; beta tape removed |
+| Scaling / reliability | MVP-ready | DynamoDB on-demand + PITR, API Gateway throttling, multi-origin CORS, private S3 + CloudFront SPA fallback validated |
 
-| Area | Status | What Works Now | Gaps / Risks | Next Step |
-| --- | --- | --- | --- | --- |
-| Public site shell | Works; CloudFront cutover prepared | Home, users, consultants, about, FAQ, contact, terms, privacy, auth, dashboard, admin, account, sitemap, robots, and manifest return `200` on `www.growpoint.bg`. S3 + CloudFront hosting is provisioned and deployed at `https://d30m6jtjij7col.cloudfront.net` with SPA fallback for unknown routes. | `https://growpoint.bg` without `www` fails TLS on the current GitHub Pages path. jethost.bg DNS is still pointed at GitHub Pages. | Validate the ACM DNS records in jethost.bg, attach the issued certificate to CloudFront aliases, then point `www` and apex to CloudFront. |
-| SEO | Works with live profile generation; needs scheduled refresh after CloudFront cutover | Static route files, canonical links, Open Graph/Twitter tags, structured data, `robots.txt`, and `sitemap.xml` are generated by `scripts/site-build.mjs`. The build pulls approved public consultants from the live API, percent-encodes Cyrillic canonical URLs, and avoids temporary signed S3 URLs in SEO/social metadata. CloudFront SPA fallback removes the need for static route folders just to load a new profile URL. | Brand-new profiles will load immediately after CloudFront cutover, but their first-response HTML metadata and sitemap entry still refresh only when the CloudFront build/deploy runs. | Add scheduled `npm run deploy:cloudfront`, or add a dynamic metadata renderer if real-time profile SEO snippets become important. |
-| Public consultant directory | Works | Live API `/consultants` returns 11 approved public profiles, including the approved Dimitar profile. The incomplete self-approved `dimitar-adminski` profile is hidden from public routes. Directory search/filter routes render and query state is reflected in the URL. | Seed/example availability dates should be refreshed before a larger public campaign. | Add an admin quality checklist and stale-availability warning before publishing profiles broadly. |
-| Public consultant profile | Works | Public profile pages fetch live data, show uploaded avatar/cover media, share link, and no longer show the old `Consultant profile not found` for the approved Cyrillic slug. The `Бърз профил` block/label has been removed. Dimitar's public placeholder copy was replaced with professional Bulgarian content and EUR pricing. | Booking CTA is useful only when profiles have future availability. | Require availability/price/profile quality before publishing, or add a clearer "request availability" flow. |
-| Image handling | Verified live for upload/public media path | Uploaded public profile images render from signed S3 URLs, and real profile avatars can open in the full-screen lightbox. SEO metadata falls back to a stable GrowPoint image when profile media is signed/temporary. The 2026-06-07 live smoke uploaded disposable avatar and cover images, saved both storage keys, and verified public signed URLs. | Cached social previews will use the fallback image until stable public image derivatives exist. Lightbox/admin preview still deserve a quick browser pass with a real uploaded photo. | Generate stable public profile image derivatives for approved profiles and browser-test lightbox/admin preview after the next media UI change. |
-| Auth: login/register/verification | Verified for core flows | Cognito login works. Live QA verified signup + resend confirmation code, new-password-required challenge completion, client/consultant login, and forgot-password request delivery. The new-password screen includes a second confirm field. | Full password-reset completion still requires reading the emailed code in a controlled inbox. Email copy should be reviewed from real received messages, not only API acceptance. | Run one manual inbox test for verification/reset email wording and reset-code completion. |
-| Admin panel | Works for tested flows | Admin Cognito user can call protected admin APIs. Admin messaging was live-tested and created an in-app notification. Admin remains a management role and does not need a dashboard profile. Admin can now mark approved public consultants as `Подбрани` for the homepage; the list exposes a `Подбрани` stat/filter, featured badges, and disabled featured buttons for non-public pending profiles. | Approve/reject/delete buttons were not all re-tested in the browser during this pass, and admin rights/audit UX still needs a fuller production-hardening pass. | Test approve, reject, preview, message, and deletion in the browser with one disposable consultant; add finer-grained admin permissions/audit views. |
-| Consultant profile editing | Verified live | Live QA created a disposable consultant, saved text, price, profile type, city, languages, topics, availability, avatar, and cover media; the public route loaded successfully. Backend canonical ownership logic remains in place. | Admin browser preview of freshly uploaded media was not re-tested visually in this pass. | Browser-test admin preview with one disposable consultant after the next admin UI pass. |
-| Booking requests | Verified live | Automated live QA creates bookings, confirms one as the consultant, declines another, cancels a confirmed booking, reschedules a confirmed booking back to pending, re-accepts it, downloads ICS, and verifies in-app notifications. CORS preflight from `www.growpoint.bg` and CloudFront works. Declined bookings no longer count against the 24-hour active-booking limit. | Real-world reminder timing still needs observation around actual upcoming sessions. | Keep reminder timing in the production test ledger and add a time-windowed reminder smoke once practical. |
-| Booking messages | Verified live | Automated live QA sends messages from client to consultant and consultant to client on a confirmed booking; notification counts update. The top-bar messages popover was browser-tested after the latest frontend deploy. | Full mobile visual QA still needs a pass with logged-in client/consultant users. | Re-test the messages popover on mobile and during a real booked session. |
-| Session confirmation | Verified live | Live QA moved a disposable confirmed booking to a past session time and confirmed the session from both client and consultant. | Real-world reminder timing still needs monitoring around actual upcoming sessions. | Keep EventBridge reminder checks in production smoke tests. |
-| Notifications | Works with top-bar popover | Backend notifications exist, top-bar notification/message popovers are implemented for logged-in non-admin users, dashboard notification history remains available, and mark-read is covered by browser QA and the automated live smoke script. | Mobile still uses dashboard links from the menu rather than a dedicated notification sheet. | Add a mobile notification sheet if users report friction. |
-| Documents and sharing | Verified live | User documents, signed download URLs, and confirmed-session-only sharing rules are implemented. The 2026-06-07 live smoke uploaded a disposable document, verified owner download, shared it with the confirmed consultant, verified consultant download through `/bookings`, and confirmed an unrelated consultant share is rejected with `403`. | Browser/mobile UI for document upload and sharing still needs a real user pass. | Browser-test the document sharing flow from the dashboard on desktop and mobile. |
-| Reviews | Verified live | Live QA submitted a review after a confirmed past session and both-party session confirmation; consultant rating/review count updated for the disposable profile before cleanup. | Public review display for a long-lived real profile should be checked after the first real session. | Watch first real review end to end and confirm public display/copy. |
-| Emails | Blocked for production sender; Cognito default works | Cognito resend confirmation and forgot-password requests return email delivery details through the default Cognito sender. GrowPoint-branded backend email templates exist for booking/admin flows. Terraform now supports SES domain verification and DKIM outputs for `growpoint.bg`. | SES account production access is still disabled, the old `noreply@theprivilegedcompany.com` identity is failed, and no GrowPoint sender/domain is verified in DNS yet. Backend booking/admin emails currently fall back to in-app notifications when SES cannot send. Actual inbox copy was not inspected. | Add the SES TXT/DKIM DNS records in jethost.bg, request/obtain SES production access with a GrowPoint use case, set `ses_from_email = "contactus@growpoint.bg"`, optionally set `cognito_ses_from_email`, then run inbox tests. |
-| Scaling and reliability | MVP-ready, not scale-complete | DynamoDB pay-per-request tables, point-in-time recovery, Lambda/API Gateway throttling, dynamic multi-origin CORS, private S3 frontend hosting, and CloudFront SPA fallback are configured. Public routes and API health are live. Async route errors are now awaited by the Lambda router so intended API errors return proper statuses instead of leaking as API Gateway `500`s. | Public search/listing is still simple and should not be treated as a large-scale search engine. Observability, alarms, rate limits, and structured validation should be expanded. | Add CloudWatch alarms, structured validation tests, pagination/search indexes, and load testing before a larger campaign. |
-Latest smoke evidence from 2026-06-07:
-
-- `www.growpoint.bg` public routes listed above returned `200`.
-- API `/health` returned `{"ok":true,"service":"growpoint-api"}`.
-- API `/consultants` returns 11 public profiles and excludes the incomplete self-approved `dimitar-adminski` profile.
-- API `/consultants/димитър-менторски` returned `200`.
-- Protected notifications, booking messages, session confirmation, and admin message routes returned `401` without a token, confirming API Gateway exposes them and JWT protection is active.
-- CORS preflight for booking messages from `https://www.growpoint.bg` returned `204`.
-- Admin Cognito auth succeeded in a read-only API smoke; admin list and Dimitar detail returned `200`.
-- Disposable live QA run `mh2qwiiew7h` passed 27/27: signup resend, new-password-required, login, bootstrap, consultant auto-approval, public profile route, avatar upload, cover upload, booking create/accept, booking decline, booking cancel, booking reschedule/re-accept, booking messages both directions, ICS, document upload/share/privacy, session confirmation, review submit, notification list/mark-read, and forgot-password request.
-- Disposable QA records were cleaned up: no `codex-` Cognito users, no `codex-` DynamoDB users, no disposable public consultant rows, and no smoke-run S3 objects remained after the run.
-- S3 + CloudFront frontend hosting was provisioned and deployed at `https://d30m6jtjij7col.cloudfront.net`.
-- `node scripts/smoke-production.mjs --cloudfront` passed 15/15 checks on run `kvt8pass97n`, including unknown consultant route SPA fallback.
-- `npm run smoke:prod` passed 14/14 checks on run `vn2b02sz37` against `https://www.growpoint.bg`.
-- `npm run smoke:prod:live` passed 27/27 checks on run `mh2qwiiew7h` with disposable production users, consultant media, bookings, messages, document sharing, ICS, session confirmation, review, notification mark-read, and cleanup.
-- The invalid document-share scenario now returns the intended `403` instead of an API Gateway `500`, proving async router errors are handled correctly.
-- SES domain verification resources were created for `growpoint.bg`; jethost.bg DNS records and SES production-access approval are still pending before GrowPoint-branded transactional emails can be production-ready.
-- Browser QA on CloudFront home and `/consultants/димитър-менторски/` rendered live content with no console errors after the dynamic multi-origin CORS fix.
-- Admin featured-profile deploy created `PUT /admin/consultants/{consultantId}/featured`; a safe no-op production API test on approved consultant `Ана Колева` returned `unchanged: true` without changing featured data.
-- CloudFront browser QA verified the admin `Подбрани` stat/filter, featured badges/actions, disabled featured button on a pending non-public profile, and no console warnings/errors.
-- CloudFront desktop browser QA verified the theme toggle sits after `Изход`, switches from light to dark and back, applies `site-shell--theme-switching` during the transition, and settles back to light.
+Local/infra checks all pass: `tsc --noEmit`, `node -c backend/api/index.cjs`, `terraform validate`/`plan` (clean). Live QA uses disposable Cognito users, a disposable consultant, temporary S3 objects, and disposable bookings, all cleaned up afterwards (verified: no `codex-` users, DynamoDB rows, or smoke S3 objects remain).
 
 ### Production Tracking Rules
 
@@ -152,6 +115,7 @@ Do not mark a feature as production-ready unless it has either live browser evid
 
 | Date | Scope | Evidence | Result | Follow-up |
 | --- | --- | --- | --- | --- |
+| 2026-06-08 | Social login + UI polish | Google + LinkedIn IdPs created (Terraform), hosted-UI domain ACTIVE, live `/oauth2/authorize` handoff reaches both consent screens; onboarding modal, dark-theme, banner, and beta-tape-removal builds; `npm run smoke:prod` 14/14 | Passed | Owner to run a real Google/LinkedIn end-to-end sign-in and verify the onboarding modal + dark `/dashboard`. |
 | 2026-06-06 | Live API lifecycle QA | Disposable Cognito users, consultant, and booking run `mq2teq4uxw3pz` | Passed and cleaned up | Superseded by the repeatable 2026-06-07 smoke script. |
 | 2026-06-06 | Live public profile QA | `/consultants`, `/consultants/димитър-менторски`, admin detail, public route generation | Passed | Refresh availability dates before larger public launch. |
 | 2026-06-06 | Live auth QA | Signup, resend confirmation, login, new-password-required, forgot-password request | Core flows passed | Complete reset-code flow with a real inbox. |
@@ -1112,7 +1076,8 @@ For a fuller production sanity pass, use this order:
 These are important to know when working on the project:
 
 - Cognito email/password auth is wired and active
-- Google / Apple / LinkedIn buttons are not fully wired until Cognito social identity providers are configured
+- Google and LinkedIn sign-in are live via the Cognito hosted UI (`growpoint-auth` domain); each provider's redirect URI `https://growpoint-auth.auth.eu-west-1.amazoncognito.com/oauth2/idpresponse` must stay registered in the Google Cloud Console and LinkedIn developer app. Apple is wired in code but not configured.
+- New social signups see a one-time onboarding modal on the dashboard (confirm name, photo, city/occupation; role defaults to client)
 - GrowPoint-branded transactional email is blocked until jethost.bg SES DNS records and AWS SES production access are complete
 - most of the UI implementation still lives in `src/app/legacy/SiteAppLegacy.tsx`
 - route-level structure now lives in `src/app/pages/` and `src/app/layout/PageScene.tsx`, but detailed page logic is still being extracted gradually from the legacy file

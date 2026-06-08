@@ -412,3 +412,54 @@ UNCOMMITTED LOCAL CHANGES (commit when network is stable)
   - README.md (Cloudflare -> jethost.bg + DNS note)
   - infra/terraform/variables.tf (Cloudflare -> jethost.bg)
   - test.txt (this section)
+
+
+==================================================================
+SESSION: SOCIAL LOGIN + UI POLISH (Google/LinkedIn live)
+==================================================================
+Date: 2026-06-08
+
+SHIPPED & DEPLOYED (GitHub Pages + CloudFront)
+  - Google + LinkedIn social login: LIVE via Cognito hosted UI.
+      * Cognito hosted-UI domain growpoint-auth.auth.eu-west-1.amazoncognito.com
+        created (terraform apply) and ACTIVE; Google + LinkedInOIDC identity
+        providers attached to pool eu-west-1_Yl8EDZKFA (app client
+        dtjsjnq6s133c1b04s56sorba).
+      * Each provider's redirect URI in its own console/app:
+        https://growpoint-auth.auth.eu-west-1.amazoncognito.com/oauth2/idpresponse
+      * .env.production: VITE_COGNITO_DOMAIN + VITE_COGNITO_SOCIAL_PROVIDERS=Google,LinkedIn.
+      * Fixed resolveAuthRedirectUrl to a stable app-root URL so login works
+        from any route (avoids redirect_uri_mismatch).
+      * Secrets (Google/LinkedIn client secrets) live ONLY in gitignored
+        infra/terraform/terraform.tfvars; verified never committed.
+  - Social onboarding modal: new social accounts get a one-time dashboard
+    popup (confirm name, upload photo prefilled from provider, city/occupation;
+    role defaults to client). Flag: localStorage careerdoc.social-onboarding-pending.
+  - Dark theme: fixed unreadable dashboard/profile/auth/modal surfaces that
+    hardcoded white/light backgrounds (profile-setup nav, checkbox-row,
+    pattern-chip, modal-card, choice-card, availability/dashboard cards,
+    auth-progress, faq).
+  - Beta "caution tape" banner: removed site-wide (JSX + state + CSS). It had
+    also been intercepting clicks on the вход/регистрация tabs (pointer-events).
+  - Consultant banner: object-fit cover so vertical uploads no longer leave
+    gaps; consolidated conflicting .media-preview-card__cover rules; upload
+    field now states recommended size (1600x700, landscape). Verified fill with
+    a vertical test image in the preview browser.
+  - Repo hygiene: untracked dist/ (now gitignored); added lifecycle
+    ignore_changes to the Google/LinkedIn Cognito IdPs so terraform plan is
+    clean (no phantom perpetual diff). client_id/secret stay tracked.
+
+VERIFICATION
+  - npm run smoke:prod: 14/14 PASS (run zg47az1g0n and others).
+  - Live OAuth handoff (curl /oauth2/authorize): Google -> accounts.google.com,
+    LinkedIn -> linkedin.com, both with no redirect_uri error.
+  - tsc --noEmit, terraform validate, terraform plan (No changes): all pass.
+  - CloudFront + www serve the rebuilt bundles (verified bundle hashes/strings).
+
+STILL NEEDS OWNER VERIFICATION (cannot test without a real sign-in / login)
+  - Real Google AND LinkedIn end-to-end sign-in on www.growpoint.bg, incl. the
+    onboarding modal appearing for a brand-new account.
+  - Dark-mode /dashboard visual check (logged-in pages can't load from
+    localhost due to the production-only API CORS allowlist).
+  - LinkedIn app: confirm "Sign In with LinkedIn using OpenID Connect" product
+    is enabled (needed for openid/profile/email scopes).
