@@ -1029,7 +1029,13 @@ resource "aws_cognito_user_group" "admin" {
 resource "aws_cognito_user_group" "consultants" {
   name         = "consultants"
   user_pool_id = aws_cognito_user_pool.main.id
-  description  = "Members are treated as consultants/mentors: /auth/bootstrap forces role=consultant and creates a consultant draft. Promote a Cognito user with: aws cognito-idp admin-add-user-to-group --user-pool-id <id> --username <email> --group-name consultants (they pick it up on next login). Absence of the group means a regular client."
+  description  = "Members are treated as consultants/mentors: /auth/bootstrap forces role=consultant and creates a consultant draft. Promote a Cognito user with: aws cognito-idp admin-add-user-to-group --user-pool-id <id> --username <email> --group-name consultants (they pick it up on next login). Takes precedence over the clients group."
+}
+
+resource "aws_cognito_user_group" "clients" {
+  name         = "clients"
+  user_pool_id = aws_cognito_user_pool.main.id
+  description  = "Members are treated as regular users (clients): /auth/bootstrap forces role=client. Use this to explicitly designate a manually-created Cognito user as a user, or to demote a consultant. Assign with: aws cognito-idp admin-add-user-to-group --user-pool-id <id> --username <email> --group-name clients (picked up on next login). client is also the default when no group is set."
 }
 
 resource "aws_apigatewayv2_stage" "default" {

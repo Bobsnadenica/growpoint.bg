@@ -96,6 +96,7 @@ const CONSULTANT_PROFILE_STATUSES = new Set(["pending", "approved", "rejected"])
 const VISIBLE_CONSULTANT_STATUSES = new Set(["approved"]);
 const ADMIN_GROUP = "admin";
 const CONSULTANT_GROUP = "consultants";
+const CLIENT_GROUP = "clients";
 
 function response(statusCode, body, extraHeaders = {}) {
   return {
@@ -1896,16 +1897,20 @@ async function bootstrapUser(event) {
   const existing = await getUserBySub(claims.sub);
   const currentPlan = normalizePlanTier(existing?.plan, "free");
   const currentRole = normalizeUserRole(existing?.role, "client");
-  // Cognito group membership is authoritative: an admin can promote any user to
-  // a mentor by adding them to the "consultants" group (picked up on next login),
-  // even if they signed up as a client. Without the group, fall back to the
-  // existing role, then the role chosen at registration, then "client".
-  const inConsultantGroup = getClaimGroups(claims).includes(CONSULTANT_GROUP);
-  const requestedRole = inConsultantGroup
+  // Cognito group membership is authoritative, so a manually-created Cognito user
+  // can be designated by assigning a group (picked up on next login):
+  //   - "consultants" group -> mentor/consultant
+  //   - "clients" group      -> regular user (also lets an admin demote)
+  // If "consultants" wins when both are set. Without either group, fall back to
+  // the existing role, then the role chosen at registration, then "client".
+  const groups = getClaimGroups(claims);
+  const groupRole = groups.includes(CONSULTANT_GROUP)
     ? "consultant"
-    : existing
-      ? currentRole
-      : normalizeUserRole(body.role, currentRole);
+    : groups.includes(CLIENT_GROUP)
+      ? "client"
+      : null;
+  const requestedRole =
+    groupRole || (existing ? currentRole : normalizeUserRole(body.role, currentRole));
   const requestedConsultantProfileType =
     typeof body.consultantProfileType === "undefined"
       ? null
