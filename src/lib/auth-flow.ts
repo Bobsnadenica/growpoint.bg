@@ -2,6 +2,7 @@ import type { ConsultantProfileType, PlanTier, UserRole } from "./types";
 
 const PENDING_BOOTSTRAP_KEY = "careerdoc.pending-bootstrap";
 const SOCIAL_AUTH_INTENT_KEY = "careerdoc.social-auth-intent";
+const SOCIAL_ONBOARDING_KEY = "careerdoc.social-onboarding-pending";
 
 export type SocialAuthProviderKey = "google" | "apple" | "linkedin";
 export type SocialAuthMode = "login" | "register";
@@ -101,4 +102,18 @@ export function writeSocialAuthIntent(value: SocialAuthIntent) {
 
 export function clearSocialAuthIntent() {
   removeStorageItem(SOCIAL_AUTH_INTENT_KEY);
+}
+
+// Set right after a brand-new social account is created so the dashboard can
+// show a one-time onboarding modal (confirm name, photo, city/occupation).
+export function markSocialOnboardingPending() {
+  writeStorageItem(SOCIAL_ONBOARDING_KEY, true);
+}
+
+export function readSocialOnboardingPending() {
+  return readStorageItem<boolean>(SOCIAL_ONBOARDING_KEY) === true;
+}
+
+export function clearSocialOnboardingPending() {
+  removeStorageItem(SOCIAL_ONBOARDING_KEY);
 }

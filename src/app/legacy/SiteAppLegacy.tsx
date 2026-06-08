@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type ChangeEvent,
   FormEvent,
   ReactNode,
   Suspense,
@@ -21,7 +22,9 @@ import { api } from "../../lib/api";
 import { NewPasswordRequiredError, useAuth } from "../../lib/auth";
 import {
   clearPendingBootstrap,
+  clearSocialOnboardingPending,
   readPendingBootstrap,
+  readSocialOnboardingPending,
   socialProviders,
   writePendingBootstrap,
   writeSocialAuthIntent
@@ -3343,6 +3346,7 @@ export function DashboardPage() {
   const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
   const [messageSendingId, setMessageSendingId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [onboardingPending, setOnboardingPending] = useState(readSocialOnboardingPending);
   const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [accountActionLoading, setAccountActionLoading] = useState<
     "export" | "delete" | null
@@ -6087,6 +6091,19 @@ export function DashboardPage() {
       {lightboxImage ? (
         <ImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
       ) : null}
+      {onboardingPending && profile ? (
+        <SocialOnboardingModal
+          token={token}
+          profile={profile}
+          fallbackName={user?.name || ""}
+          fallbackAvatarUrl={user?.avatarUrl || ""}
+          onComplete={(updated) => {
+            setProfile((current) => ({ ...current, ...updated }));
+            setOnboardingPending(false);
+          }}
+          onSkip={() => setOnboardingPending(false)}
+        />
+      ) : null}
       {reviewModalBooking ? (
         <ReviewModal
           booking={reviewModalBooking}
@@ -6407,6 +6424,186 @@ function ProfileSnapshotCard({ consultant }: { consultant: ConsultantProfile }) 
         </div>
       ) : null}
     </section>
+  );
+}
+
+function SocialOnboardingModal({
+  token,
+  profile,
+  fallbackName,
+  fallbackAvatarUrl,
+  onComplete,
+  onSkip
+}: {
+  token: string;
+  profile: UserProfile;
+  fallbackName: string;
+  fallbackAvatarUrl: string;
+  onComplete: (updated: UserProfile) => void;
+  onSkip: () => void;
+}) {
+  const [name, setName] = useState((profile.name || fallbackName || "").trim());
+  const [city, setCity] = useState(profile.city || "");
+  const [occupation, setOccupation] = useState(profile.occupation || "");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState(
+    profile.avatarUrl || fallbackAvatarUrl || ""
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+    setError("");
+  }
+
+  async function handleSave() {
+    if (!name.trim()) {
+      setError("Въведи името си.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const input: {
+        name: string;
+        city: string;
+        occupation: string;
+        avatarStorageKey?: string;
+      } = {
+        name: name.trim(),
+        city: city.trim(),
+        occupation: occupation.trim()
+      };
+
+      if (avatarFile) {
+        const upload = await api.createUserAvatarUpload(token, avatarFile);
+        await uploadFileToSignedUrl(
+          upload.uploadUrl,
+          avatarFile,
+          "профилната снимка"
+        );
+        input.avatarStorageKey = upload.storageKey;
+      }
+
+      const updated = await api.updateMyProfile(token, input);
+      clearSocialOnboardingPending();
+      onComplete(updated);
+    } catch (value) {
+      setError(
+        value instanceof Error ? value.message : "Неуспешно записване на профила."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleSkip() {
+    clearSocialOnboardingPending();
+    onSkip();
+  }
+
+  const initial = (name.trim()[0] || "G").toUpperCase();
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true">
+      <div className="modal-card">
+        <header className="modal-card__head">
+          <p className="eyebrow">Добре дошъл в GrowPoint</p>
+          <h2>Довърши профила си</h2>
+          <p className="form-note">
+            Прегледай името си и добави снимка, за да изглежда профилът ти завършен.
+            Можеш да пропуснеш и да го допълниш по-късно от таблото.
+          </p>
+        </header>
+
+        {error ? <div className="panel panel--error">{error}</div> : null}
+
+        <div className="onboarding-avatar">
+          {avatarPreview ? (
+            <img
+              src={avatarPreview}
+              alt="Профилна снимка"
+              className="onboarding-avatar__image"
+            />
+          ) : (
+            <span className="onboarding-avatar__placeholder" aria-hidden="true">
+              {initial}
+            </span>
+          )}
+          <label className="ghost-button onboarding-avatar__button">
+            {avatarPreview ? "Смени снимката" : "Качи снимка"}
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              disabled={saving}
+              onChange={handleAvatarChange}
+            />
+          </label>
+        </div>
+
+        <label>
+          Име и фамилия
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Иван Петров"
+            autoComplete="name"
+            disabled={saving}
+          />
+        </label>
+
+        <label>
+          Град <span className="form-note">(по избор)</span>
+          <input
+            type="text"
+            value={city}
+            onChange={(event) => setCity(event.target.value)}
+            placeholder="София"
+            disabled={saving}
+          />
+        </label>
+
+        <label>
+          Професия или роля <span className="form-note">(по избор)</span>
+          <input
+            type="text"
+            value={occupation}
+            onChange={(event) => setOccupation(event.target.value)}
+            placeholder="Продуктов мениджър"
+            disabled={saving}
+          />
+        </label>
+
+        <div className="modal-card__actions">
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={handleSkip}
+            disabled={saving}
+          >
+            Ще го направя по-късно
+          </button>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? "Запазваме..." : "Запази"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

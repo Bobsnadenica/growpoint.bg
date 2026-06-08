@@ -7921,6 +7921,36 @@ textarea {
   flex-wrap: wrap;
 }
 
+.onboarding-avatar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.onboarding-avatar__image,
+.onboarding-avatar__placeholder {
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.onboarding-avatar__placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-alt);
+  color: var(--text-soft);
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.onboarding-avatar__button {
+  cursor: pointer;
+}
+
 .image-lightbox {
   position: fixed;
   inset: 0;

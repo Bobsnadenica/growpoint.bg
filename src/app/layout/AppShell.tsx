@@ -5,6 +5,7 @@ import { useAuth } from "../../lib/auth";
 import {
   clearPendingBootstrap,
   clearSocialAuthIntent,
+  markSocialOnboardingPending,
   readPendingBootstrap,
   readSocialAuthIntent
 } from "../../lib/auth-flow";
@@ -332,34 +333,35 @@ export default function AppShell() {
     async function finishSocialSignIn() {
       try {
         const pendingBootstrap = readPendingBootstrap();
+        let profileExists = true;
 
-        if (pendingBootstrap) {
-          await api.bootstrapUser(token, {
-            ...pendingBootstrap,
-            name: pendingBootstrap.name.trim() || user.name,
-            email: pendingBootstrap.email.trim() || user.email,
-            avatarUrl: user.avatarUrl || pendingBootstrap.avatarUrl || ""
-          });
-          clearPendingBootstrap();
-        } else {
-          try {
-            await api.getMyProfile(token);
-          } catch (value) {
-            const message = value instanceof Error ? value.message : "";
+        try {
+          await api.getMyProfile(token);
+        } catch (value) {
+          const message = value instanceof Error ? value.message : "";
 
-            if (!message.includes("Profile not found")) {
-              throw value;
-            }
-
-            await api.bootstrapUser(token, {
-              name: user.name || user.email,
-              email: user.email,
-              role: "client",
-              plan: "free",
-              avatarUrl: user.avatarUrl || ""
-            });
+          if (message.includes("Profile not found")) {
+            profileExists = false;
+          } else {
+            throw value;
           }
         }
+
+        // Only create + flag onboarding for genuinely new social accounts;
+        // returning users skip straight to their dashboard.
+        if (!profileExists) {
+          await api.bootstrapUser(token, {
+            role: "client",
+            plan: "free",
+            ...(pendingBootstrap || {}),
+            name: pendingBootstrap?.name?.trim() || user.name || user.email,
+            email: pendingBootstrap?.email?.trim() || user.email,
+            avatarUrl: user.avatarUrl || pendingBootstrap?.avatarUrl || ""
+          });
+          markSocialOnboardingPending();
+        }
+
+        clearPendingBootstrap();
 
         if (!cancelled) {
           completed = true;
