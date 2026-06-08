@@ -1,4 +1,4 @@
-const CACHE_NAME = 'growpoint-v3';
+const CACHE_NAME = 'growpoint-v4';
 const ASSETS = [
   '/',
   '/index.html',
