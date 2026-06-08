@@ -10325,3 +10325,14 @@ textarea {
 .topbar-popover__item--system .topbar-popover__dot {
   background: #6b8cae;
 }
+
+/* Keep the booking sidebar compact so it doesn't tower over the profile content
+   and leave a large empty gap beside the left column. */
+.profile-aside-stack {
+  align-self: start;
+}
+
+.booking-panel .availability-calendar {
+  max-height: 360px;
+  overflow-y: auto;
+}

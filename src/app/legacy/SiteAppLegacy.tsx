@@ -1902,6 +1902,25 @@ export function ConsultantPage() {
                 </section>
               ) : null}
             </article>
+
+            <article className="panel consultant-detail-panel consultant-detail-panel--wide consultant-page-cta__card">
+              <div>
+                <p className="eyebrow">Още опции</p>
+                <h2>Разгледай и други {getConsultantTypeLabelPlural(consultant)}</h2>
+                <p className="section-caption">
+                  Сравни фокус, формат и свободни часове, за да избереш правилния човек за
+                  следващата си стъпка.
+                </p>
+              </div>
+              <div className="consultant-page-cta__actions">
+                <Link className="primary-button" to="/users">
+                  Към всички профили
+                </Link>
+                <Link className="ghost-button" to="/users?kind=mentor">
+                  Само ментори
+                </Link>
+              </div>
+            </article>
           </div>
 
           <aside className="profile-aside-stack" aria-label="Информация и резервация">
@@ -2079,28 +2098,6 @@ export function ConsultantPage() {
         </div>
       </section>
 
-      <section className="section consultant-page-cta">
-        <div className="container">
-          <div className="panel consultant-page-cta__card">
-            <div>
-              <p className="eyebrow">Още опции</p>
-              <h2>Разгледай и други {getConsultantTypeLabelPlural(consultant)}</h2>
-              <p className="section-caption">
-                Сравни фокус, формат и свободни часове, за да избереш правилния човек за
-                следващата си стъпка.
-              </p>
-            </div>
-            <div className="consultant-page-cta__actions">
-              <Link className="primary-button" to="/users">
-                Към всички профили
-              </Link>
-              <Link className="ghost-button" to="/users?kind=mentor">
-                Само ментори
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
     </>
   );
 }
