@@ -500,6 +500,10 @@ main {
   top: clamp(96px, 13vh, 152px);
   left: 50%;
   z-index: 29;
+  /* Decorative fixed tape: never intercept clicks on the page beneath it
+     (e.g. the вход/регистрация tabs). The visible label pills re-enable
+     pointer events below so the notice stays dismissible. */
+  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -527,6 +531,13 @@ main {
     filter 0.18s ease,
     opacity 0.18s ease,
     transform 0.2s ease;
+}
+
+.beta-notice span,
+.beta-notice small {
+  /* Re-enable clicks on the visible pills so the tape can still be dismissed. */
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .beta-notice span {
@@ -9930,4 +9941,94 @@ textarea {
 
 :root[data-theme="dark"] .primary-button:hover {
   background: #a5cabd;
+}
+
+/* --- Dark mode: dashboard / profile / auth surfaces missed by the rules above.
+   These components hardcode white/light backgrounds, so without an override they
+   render light text on a near-white surface (unreadable in dark mode). --- */
+:root[data-theme="dark"] .profile-setup-shell {
+  border-color: var(--border);
+}
+
+:root[data-theme="dark"] .profile-setup-nav__button {
+  background: rgba(23, 32, 28, 0.92);
+  border-color: var(--border);
+  color: var(--text-soft);
+}
+
+:root[data-theme="dark"] .profile-setup-nav__button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-setup-nav__button--active {
+  background: var(--primary-soft);
+  border-color: rgba(143, 181, 168, 0.58);
+  color: var(--primary-dark);
+}
+
+:root[data-theme="dark"]
+  .profile-setup-nav__button--ready:not(.profile-setup-nav__button--active) {
+  border-color: rgba(117, 199, 141, 0.5);
+  background: rgba(58, 92, 70, 0.4);
+}
+
+:root[data-theme="dark"] .checkbox-row {
+  background: var(--surface-alt);
+  border-color: var(--border);
+}
+
+:root[data-theme="dark"] .choice-card,
+:root[data-theme="dark"] .modal-card,
+:root[data-theme="dark"] .faq-item {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .choice-card--active,
+:root[data-theme="dark"] .mock-panel--active {
+  border-color: rgba(143, 181, 168, 0.55);
+  background:
+    linear-gradient(180deg, rgba(52, 83, 71, 0.5), rgba(31, 43, 38, 0.94)),
+    var(--surface);
+}
+
+:root[data-theme="dark"] .pattern-chip {
+  background: rgba(23, 32, 28, 0.92);
+  border-color: var(--border);
+  color: var(--text-soft);
+}
+
+:root[data-theme="dark"] .pattern-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .pattern-chip--active {
+  border-color: rgba(143, 181, 168, 0.62);
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+:root[data-theme="dark"] .availability-item,
+:root[data-theme="dark"] .dashboard-document-card,
+:root[data-theme="dark"] .dashboard-empty-state,
+:root[data-theme="dark"] .dashboard-metrics > div,
+:root[data-theme="dark"] .auth-progress-list__item {
+  background: var(--surface-alt);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .auth-progress-list__item > span {
+  background: rgba(15, 20, 18, 0.9);
+  border-color: var(--border);
+  color: var(--text-soft);
+}
+
+:root[data-theme="dark"] .profile-documents__shared-chip {
+  background: var(--primary-soft);
+  border-color: rgba(143, 181, 168, 0.4);
+  color: var(--text);
 }
