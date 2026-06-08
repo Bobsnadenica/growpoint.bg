@@ -3936,7 +3936,10 @@ async function getAdminMetrics(event) {
     scanAllItems(env.bookingsTable)
   ]);
 
-  const consultants = consultantRows.filter(isConsultantRecord);
+  // Dedupe by owner: an owner can have several draft rows, which would inflate
+  // the "consultants by status" counts. Use the same canonical-pick logic as the
+  // admin list so the metrics match what admins actually see.
+  const consultants = dedupeConsultantsByOwner(consultantRows);
 
   // Users
   let clientUsers = 0;

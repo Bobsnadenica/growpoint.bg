@@ -9992,13 +9992,11 @@ textarea {
     var(--surface);
 }
 
-/* The hero glow uses a bright white wash that hazes the dark theme; swap it for
-   a subtle green-tinted glow. */
+/* In dark mode the hero glow (a 560×210 rounded rectangle) reads as a stray
+   off-color card on the near-black background; remove it so heroes sit flat. */
 :root[data-theme="dark"] .page-intro::before,
 :root[data-theme="dark"] .auth-copy::before {
-  background:
-    linear-gradient(180deg, rgba(143, 181, 168, 0.1), rgba(143, 181, 168, 0)),
-    radial-gradient(circle at top left, rgba(143, 181, 168, 0.12), transparent 60%);
+  background: none;
 }
 
 /* These cards layer an opaque white wash over var(--surface): the wash paints
