@@ -586,17 +586,23 @@ SHIPPED (built clean: theme guard + tsc + vite all pass)
     and the matches section ("най-добро съвпадение") only shows at 100% profile
     completion.
 
-APPLE SIGN-IN (C) — PREPPED, NOT YET LIVE
-  - Frontend is already correct: the Apple button auto-enables from config and
-    Amplify maps it to the Cognito "SignInWithApple" provider. Terraform has the
-    Apple IdP wired (client/team/key all read from gitignored terraform.tfvars).
-  - BLOCKER: the 10-char Apple **Key ID** (the AuthKey_XXXXXXXXXX.p8 identifier)
-    is still missing. apple_key_id="" -> apple_enabled stays false -> no IdP is
-    created and the button correctly stays "Скоро". The .p8 private key itself is
-    stored only in the gitignored tfvars (never committed, never in docs).
-  - To go live: set apple_key_id in terraform.tfvars, `terraform apply` (creates
-    the Apple IdP), add Apple to VITE_COGNITO_SOCIAL_PROVIDERS, rebuild + deploy.
-    Apple's return URL is already the Cognito .../oauth2/idpresponse.
+APPLE SIGN-IN (C) — CONFIGURED (Cognito live; frontend rebuilt, deploy pending)
+  - Apple IdP created in Cognito (terraform apply: 1 add SignInWithApple + 1
+    change adding it to the app client's supported_identity_providers). Key ID +
+    Team ID + Services ID + .p8 all live ONLY in the gitignored terraform.tfvars.
+  - IMPORTANT FIX: the Cognito web flow needs the **Services ID** as client_id,
+    not the native Bundle ID. Corrected apple_client_id ->
+    com.growpoint.growpointloginservice (the .../growpointlogin Bundle ID would
+    have failed). The Services ID is the public client_id Apple sees in the
+    authorize URL.
+  - Verified live: GET /oauth2/authorize?identity_provider=SignInWithApple -> 302
+    to appleid.apple.com/auth/authorize with client_id=...growpointloginservice
+    and redirect_uri=.../oauth2/idpresponse, no redirect_uri/invalid_client error.
+  - Frontend: VITE_COGNITO_SOCIAL_PROVIDERS=Google,LinkedIn,Apple; rebuilt and
+    confirmed the value inlined into both the GitHub Pages and CloudFront bundles.
+    The Apple button auto-enables (no longer "Скоро") once the new bundle deploys.
+  - Remaining to publish: commit + push (GitHub Pages) and npm run deploy:cloudfront,
+    then a real Apple sign-in once on the live origin.
 
 SECURITY / CORS
   - Local logged-in/public verification used a temporary localhost entry in the
@@ -605,7 +611,8 @@ SECURITY / CORS
     domain only (no localhost). No secrets are in tracked files.
 
 STILL OPEN / OWNER VERIFY
-  - Apple Key ID (only blocker for Apple sign-in — see above).
+  - Apple: real end-to-end Apple sign-in on the live origin after deploy (Cognito
+    side already verified; see APPLE SIGN-IN above).
   - Logged-in visual pass on prod for: the sessions modal, /messages thread+reply,
     the consultant "pick" calendar, and the social complete-profile step (these
     are auth-gated; localhost can't hit the prod API once CORS is reverted).
