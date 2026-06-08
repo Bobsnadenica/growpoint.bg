@@ -3368,16 +3368,25 @@ export function AccountPage() {
 }
 
 async function fetchProfileWithRetry(token: string) {
-  // The dashboard mounts right after register → bootstrap → navigate.
-  // Even with strongly-consistent reads on the backend, the API gateway
-  // + Lambda cold start window can race the PutItem write. One short
-  // retry covers it. Backoff: ~600ms.
+  // The dashboard requires a user profile record. It normally exists after
+  // register → bootstrap, but a Cognito user created manually (e.g. assigned a
+  // role group in the console) has never been bootstrapped, so /me/profile 404s
+  // and the dashboard can't load. If the profile is missing, bootstrap it now —
+  // the backend fills name/email from the JWT claims and applies the
+  // consultants/clients group role — then read it back. This also covers the
+  // brief read-after-write race right after registration. Backoff: ~600ms.
   try {
     return await api.getMyProfile(token);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (!message.toLowerCase().includes("not found")) {
       throw error;
+    }
+    try {
+      await api.bootstrapUser(token, { name: "", email: "", role: "client", plan: "free" });
+    } catch {
+      // A concurrent bootstrap (or a transient error) is fine; the retry read
+      // below still resolves the profile if it now exists.
     }
     await new Promise((resolve) => window.setTimeout(resolve, 600));
     return api.getMyProfile(token);
