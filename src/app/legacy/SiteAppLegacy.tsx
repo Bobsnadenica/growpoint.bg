@@ -1928,6 +1928,8 @@ export function ConsultantPage() {
               ) : null}
             </article>
 
+            <HowItWorksCard />
+
             <article className="panel consultant-detail-panel consultant-detail-panel--wide consultant-page-cta__card">
               <div>
                 <p className="eyebrow">Още опции</p>
@@ -2108,7 +2110,6 @@ export function ConsultantPage() {
             ) : null}
           </form>
           )}
-          <HowItWorksCard />
           </aside>
         </div>
       </section>
