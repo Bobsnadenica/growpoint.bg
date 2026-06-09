@@ -4117,7 +4117,7 @@ export function DashboardPage() {
     buildAvailabilityPreset(2, 11),
     buildAvailabilityPreset(3, 16)
   ];
-  const firstName = profile.name.split(" ")[0] || profile.name;
+  const firstName = (profile.name || "").trim().split(" ")[0] || "";
   const consultantPublicSlug =
     consultantProfile?.slug || slugifyValue(consultantProfile?.name || profile.name);
   const consultantPublicUrl =
@@ -4449,7 +4449,7 @@ export function DashboardPage() {
           >
             <div className="dashboard-overview__head">
               <div>
-                <h2>Добре дошъл, {firstName}.</h2>
+                <h2>{firstName ? `Добре дошъл, ${firstName}.` : "Добре дошъл."}</h2>
                 <p className="section-caption">
                   {profileCompletion >= 80
                     ? "Профилът е добре структуриран."

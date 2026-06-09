@@ -746,3 +746,52 @@ CHECK AFTER FIXES
 DEPLOY STATE
   - Backend (setRole) is LIVE via terraform. The frontend CSS + modal changes are
     staged & built; commit+push (GitHub Pages) + npm run deploy:cloudfront to ship.
+
+
+==================================================================
+PAGE-BY-PAGE QA (web + phone) — owner asked to double-check everything
+==================================================================
+Date: 2026-06-09 (post-launch QA)
+
+METHOD
+  - Temporarily allowed http://localhost:5173 in the API+S3 CORS allowlist
+    (terraform apply) to render real prod data locally, then REVERTED + applied
+    (confirmed: localhost gets no ACAO header; www.growpoint.bg still allowed).
+  - Swept every page at desktop (1280) and phone (375) in the preview browser:
+    measured horizontal overflow, console errors, data load, tap-target sizes,
+    and column balance. A persisted consultant session let me cover the
+    auth-gated pages with live data.
+
+PAGES CHECKED (all: 0 horizontal overflow, 0 console errors, data loads)
+  Public: / , /users (11 cards), /consultants/:slug (calendar), /about, /faq,
+    /contact, /terms, /privacy, /auth, /u/:id, 404.
+  Authed: /dashboard (consultant), Предстоящи сесии modal, /messages,
+    /notifications, /account. Dark mode: surfaces dark, no light leaks.
+  Phone: consultant calendar day cells 41x41px, hour slots 44px tall (good touch
+    targets); modals stay within the viewport; sidebar no longer sticky.
+
+ISSUES FOUND + FIXED
+  [FIXED] Desktop consultant profile had a large empty area bottom-left: the
+    right column (snapshot + booking calendar) ran ~568px taller than the left
+    (bio + expertise + CTA). Moved <HowItWorksCard/> from the right aside into the
+    left column (before the "Разгледай и други" CTA). Columns are now balanced
+    (left 1224px vs right 1228px -> 5px gap). Reads fine in the learn-flow; on
+    phone it simply appears before the booking widget.
+  [FIXED] Dashboard greeting showed "Добре дошъл, ." when the profile name was
+    empty (dangling comma+period). Now renders "Добре дошъл." with no name, and
+    "Добре дошъл, <Име>." when a name exists. (firstName also trimmed/guarded.)
+  [CONFIRMED FIX] Mobile "табло": .dashboard-sidebar computes position:static on
+    phone (the sticky-on-mobile bug from the previous pass is resolved).
+
+NOT A BUG (observed)
+  - A few footer/inline <a> links are ~20-24px tall on phone (acceptable for text
+    links; primary actions/calendar/slots are all >=40px).
+  - The QA consultant account has an empty name and 4% completion — that's why the
+    greeting edge case surfaced; real accounts have names.
+
+CHECK AFTER FIXES
+  - npm run build (theme guard + tsc + vite) ... PASS
+  - CORS reverted + verified (localhost rejected, www allowed)
+
+DEPLOY: frontend changes (gap rebalance + greeting guard) are staged & built;
+  commit+push (GitHub Pages) + npm run deploy:cloudfront to ship.
