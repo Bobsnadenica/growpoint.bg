@@ -6533,6 +6533,7 @@ function SocialOnboardingModal({
   onComplete: (updated: UserProfile) => void;
   onSkip: () => void;
 }) {
+  const [role, setRole] = useState<UserRole>(profile.role || "client");
   const [name, setName] = useState((profile.name || fallbackName || "").trim());
   const [city, setCity] = useState(profile.city || "");
   const [occupation, setOccupation] = useState(profile.occupation || "");
@@ -6562,18 +6563,22 @@ function SocialOnboardingModal({
     setSaving(true);
     setError("");
 
+    const roleChanged = role !== profile.role;
+
     try {
-      const input: {
-        name: string;
-        city: string;
-        occupation: string;
-        avatarStorageKey?: string;
-      } = {
+      // Persist the chosen role first (setRole lets bootstrap update an existing
+      // user's role; choosing "consultant" also creates a consultant draft).
+      await api.bootstrapUser(token, {
+        role,
+        setRole: true,
         name: name.trim(),
+        email: profile.email,
+        plan: "free",
         city: city.trim(),
         occupation: occupation.trim()
-      };
+      });
 
+      let updated: UserProfile;
       if (avatarFile) {
         const upload = await api.createUserAvatarUpload(token, avatarFile);
         await uploadFileToSignedUrl(
@@ -6581,11 +6586,22 @@ function SocialOnboardingModal({
           avatarFile,
           "профилната снимка"
         );
-        input.avatarStorageKey = upload.storageKey;
+        updated = await api.updateMyProfile(token, {
+          avatarStorageKey: upload.storageKey
+        });
+      } else {
+        updated = await api.getMyProfile(token);
       }
 
-      const updated = await api.updateMyProfile(token, input);
       clearSocialOnboardingPending();
+
+      // A role change creates/affects the consultant draft, nav and public-page
+      // links — reload so the whole dashboard reflects the new role cleanly.
+      if (roleChanged && typeof window !== "undefined") {
+        window.location.reload();
+        return;
+      }
+
       onComplete(updated);
     } catch (value) {
       setError(
@@ -6616,6 +6632,30 @@ function SocialOnboardingModal({
         </header>
 
         {error ? <div className="panel panel--error">{error}</div> : null}
+
+        <fieldset className="onboarding-roles">
+          <legend>Как ще използваш GrowPoint?</legend>
+          <div className="auth-choice-grid">
+            {(Object.entries(authRoleChoices) as Array<
+              [UserRole, (typeof authRoleChoices)[UserRole]]
+            >).map(([roleValue, choice]) => (
+              <button
+                key={roleValue}
+                type="button"
+                aria-pressed={role === roleValue}
+                className={`auth-choice-card${
+                  role === roleValue ? " auth-choice-card--active" : ""
+                }`}
+                disabled={saving}
+                onClick={() => setRole(roleValue)}
+              >
+                <span>{choice.badge}</span>
+                <strong>{choice.title}</strong>
+                <p>{choice.text}</p>
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         <div className="onboarding-avatar">
           {avatarPreview ? (

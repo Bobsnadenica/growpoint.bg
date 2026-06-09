@@ -686,3 +686,63 @@ WHAT'S NEXT / ISSUES FOUND (minimalistic)
 NOTHING BROKEN FOUND in the safe checks above. The only "issues" are the
 deploy-pending state and the carry-over backlog items (SES, admin browser QA,
 prerender for member OG, latency, repo hygiene).
+
+
+==================================================================
+POST-LAUNCH FIXES (owner feedback after going live)
+==================================================================
+Date: 2026-06-09 (post-launch)
+
+Owner reported 3 issues after pushing live; all fixed:
+
+  1) Social onboarding popup overflowed its border.
+     - Cause: in the dashboard SocialOnboardingModal, grid/flex children could
+       exceed the card width on narrow screens (fieldset default min-inline-size,
+       grid children without min-width:0, and the long ghost-button label
+       "Ще го направя по-късно" with white-space:nowrap).
+     - Fix (global.css): .modal-card > * { min-width:0 }, modal inputs
+       width/max-width:100% box-sizing, modal-card action buttons white-space:
+       normal (wrap), .onboarding-avatar flex-wrap, and the new .onboarding-roles
+       fieldset reset (border/margin/padding 0, min-inline-size:0).
+     - Verified at 375px in the preview: card 16->359px, 0 overflowing children,
+       no horizontal scroll (markup injected against the real CSS).
+
+  2) Mobile "табло" moved while scrolling.
+     - Cause: .dashboard-sidebar (and the profile/booking/faq asides) stay
+       position:sticky in the single-column mobile layout, so they pin while the
+       content scrolls.
+     - Fix (global.css @media max-width:1120px): .dashboard-sidebar,
+       .profile-stage__aside, .profile-aside-stack, .booking-card,
+       .page-side-card, .faq-aside -> position:static; top:auto; max-height:none;
+       overflow:visible. They now scroll with the page on mobile.
+
+  3) "Виж публичния си профил" / role not assigned for social signups.
+     - Cause: social logins always bootstrap role=client, and the onboarding
+       popup never let them choose; a consultant-intended user stayed a client,
+       so their public profile didn't match.
+     - Fix:
+       * Backend (bootstrapUser): added a `setRole` flag. Cognito group stays
+         authoritative; otherwise a new user OR a request with setRole applies the
+         chosen role, while routine bootstrap calls (no flag) keep an existing
+         user's role (no silent demotion). Choosing "consultant" still creates the
+         consultant draft. Deployed via terraform apply (Lambda updated; /health
+         200).
+       * Frontend: SocialOnboardingModal now shows the user/consultant choice
+         (reuses the auth role cards), saves via bootstrap({ role, setRole:true,
+         name, city, occupation }) then the avatar upload, and reloads on a role
+         change so role/consultant-draft/nav/public-page links are consistent.
+     - NOTE: full Cognito group sync (adding the user to the consultants/clients
+       group) was NOT added — it needs the cognito-idp SDK + IAM + USER_POOL_ID
+       env, which would bloat the committed backend node_modules. The DynamoDB
+       role (authoritative in bootstrap) fully drives app behavior; group sync is
+       deferred (groups remain an admin override). Carried in the backlog.
+
+CHECK AFTER FIXES
+  - npm run build (theme guard + tsc + vite) ... PASS
+  - node --check backend/api/index.cjs ......... PASS
+  - terraform plan/apply ....................... 1 in-place Lambda change, /health 200
+  - Modal overflow + render .................... verified at 375px (preview)
+
+DEPLOY STATE
+  - Backend (setRole) is LIVE via terraform. The frontend CSS + modal changes are
+    staged & built; commit+push (GitHub Pages) + npm run deploy:cloudfront to ship.

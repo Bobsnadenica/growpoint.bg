@@ -8282,10 +8282,52 @@ textarea {
   flex-wrap: wrap;
 }
 
+/* Keep modal content inside the card on narrow screens: grid/flex children must
+   be allowed to shrink, inputs stay full-width, and long button labels wrap. */
+.modal-card > * {
+  min-width: 0;
+}
+
+.modal-card label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.modal-card input:not([type="checkbox"]):not([type="radio"]),
+.modal-card textarea,
+.modal-card select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-card__actions .ghost-button,
+.modal-card__actions .primary-button {
+  white-space: normal;
+}
+
+.onboarding-roles {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  min-inline-size: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-roles legend {
+  padding: 0;
+  font-weight: 800;
+  color: var(--text);
+}
+
 .onboarding-avatar {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .onboarding-avatar__image,
@@ -8978,6 +9020,20 @@ textarea {
   .media-preview-grid,
   .dashboard-checklist {
     grid-template-columns: 1fr;
+  }
+
+  /* In the single-column layout the sidebar/aside cards must scroll with the
+     page — sticky positioning makes them appear to "move"/stay pinned. */
+  .dashboard-sidebar,
+  .profile-stage__aside,
+  .profile-aside-stack,
+  .booking-card,
+  .page-side-card,
+  .faq-aside {
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .persona-grid {

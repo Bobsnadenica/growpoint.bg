@@ -1978,8 +1978,16 @@ async function bootstrapUser(event) {
     : groups.includes(CLIENT_GROUP)
       ? "client"
       : null;
+  // Cognito group membership stays authoritative. Otherwise: a brand-new user
+  // (or an explicit `setRole` request, e.g. the social-onboarding role choice)
+  // applies the requested role; without `setRole`, an existing user keeps their
+  // current role so routine bootstrap calls can never silently demote them.
+  const allowRoleChange = body.setRole === true;
   const requestedRole =
-    groupRole || (existing ? currentRole : normalizeUserRole(body.role, currentRole));
+    groupRole ||
+    (existing && !allowRoleChange
+      ? currentRole
+      : normalizeUserRole(body.role, currentRole));
   const requestedConsultantProfileType =
     typeof body.consultantProfileType === "undefined"
       ? null

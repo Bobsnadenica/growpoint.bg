@@ -28,6 +28,9 @@ type BootstrapInput = {
   occupation?: string;
   headline?: string;
   consultantProfileType?: ConsultantProfileType;
+  // When true, an existing user's role is updated to `role` (used by the
+  // social-onboarding role choice). Cognito group membership still wins.
+  setRole?: boolean;
 };
 
 type UpdateProfileInput = Partial<

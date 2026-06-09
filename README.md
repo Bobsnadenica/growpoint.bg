@@ -75,6 +75,7 @@ Last QA pass: 2026-06-08 on `https://www.growpoint.bg`, the CloudFront test doma
 - **Social onboarding completeness:** the provider sign-up step now prefills name + photo from the provider account and collects optional city/occupation before finishing (passed into `/auth/bootstrap`).
 - **Apple sign-in: configured (deploy pending).** The Apple IdP is now live in Cognito (`terraform apply`), and the live `/oauth2/authorize` handoff reaches `appleid.apple.com` with no `redirect_uri`/`invalid_client` error. Note: Cognito's web flow uses the Apple **Services ID** as `client_id` (`com.growpoint.growpointloginservice`), not the native Bundle ID — this was corrected. `VITE_COGNITO_SOCIAL_PROVIDERS` now includes `Apple`, so the button enables once the rebuilt bundle is deployed. All Apple secrets (Key ID, Team ID, `.p8`) stay only in the gitignored `terraform.tfvars`.
 - **Contact:** channels are `contactus@` (general), `partnership@` (partnerships + ads), and `legal@` (legal + data) `@growpoint.bg`; inbound mail forwards via ImprovMX (see the Mail note above).
+- **Post-launch fixes (after going live):** (1) the social-onboarding dashboard popup no longer overflows its border on mobile; (2) the dashboard sidebar (and profile/booking asides) are no longer `sticky` in the single-column mobile layout, so they scroll with the page; (3) the onboarding popup now lets social signups **choose user vs. consultant** — `bootstrapUser` gained a `setRole` flag so the choice is applied (Cognito group stays authoritative; routine bootstrap calls never demote an existing user), and choosing consultant creates the consultant draft. Full Cognito group sync for social roles is deferred (see backlog).
 
 #### What's next / open issues
 
@@ -85,6 +86,7 @@ Last QA pass: 2026-06-08 on `https://www.growpoint.bg`, the CloudFront test doma
 | Logged-in visual pass on prod | P1 | Sessions modal, `/messages` reply, consultant pick-calendar, social complete-profile, dashboard share, member owner-edit — all auth-gated (can't reach prod API from localhost) |
 | Rich social preview for `/u/:id` | P2 | SPA sets OG client-side; non-JS scrapers won't render the card. Needs static prerender for `/u` routes (like consultants). Currently `noindex` (link-only) by design |
 | Member card privacy toggle | P2 | `/public/users/{id}` exposes safe fields for any user by sub (unlisted). No opt-out flag yet |
+| Cognito group sync for social roles | P2 | role is set in DynamoDB (authoritative in bootstrap); adding users to the `consultants`/`clients` Cognito groups needs the cognito-idp SDK + IAM + `USER_POOL_ID` env — deferred to avoid backend `node_modules` bloat |
 | SES transactional email sender | P1 | Still blocked on DNS + SES production access; app falls back to in-app notifications |
 | Admin destructive-action browser QA | P2 | Approve/reject/delete/message not exercised in a browser this pass |
 | Cold-start API latency (~1–2s first hit) | P2 | Consider a warmer/lighter path |
