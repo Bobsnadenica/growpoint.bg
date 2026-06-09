@@ -23,6 +23,7 @@ import ContactPage from "../pages/ContactPage";
 import FaqPage from "../pages/FaqPage";
 import HomePage from "../pages/HomePage";
 import LegalPage from "../pages/LegalPage";
+import MemberProfilePage from "../pages/MemberProfilePage";
 import MessagesPage from "../pages/MessagesPage";
 import NotificationsPage from "../pages/NotificationsPage";
 import PrivacyPage from "../pages/PrivacyPage";
@@ -820,6 +821,7 @@ export default function AppShell() {
              as a redirect for any bookmarks or external links. */}
           <Route path="/consultants" element={<Navigate to="/users" replace />} />
           <Route path="/consultants/:slug" element={<ConsultantProfilePage />} />
+          <Route path="/u/:id" element={<MemberProfilePage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/faq" element={<FaqPage />} />

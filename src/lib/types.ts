@@ -242,3 +242,21 @@ export interface AuthUser {
   name: string;
   avatarUrl?: string;
 }
+
+// Safe, link-shareable public member card (returned by GET /public/users/{id}).
+// Intentionally omits email, age, goals, keywords, documents, plan, and bookings.
+export interface PublicUserProfile {
+  userId: string;
+  name: string;
+  role: UserRole;
+  avatarUrl: string;
+  city: string;
+  occupation: string;
+  headline: string;
+  bio: string;
+  experienceSummary: string;
+  experienceHighlights: string[];
+  educationHighlights: string[];
+  skills: string[];
+  interests: string[];
+}

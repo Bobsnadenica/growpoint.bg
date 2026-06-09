@@ -618,3 +618,71 @@ STILL OPEN / OWNER VERIFY
     are auth-gated; localhost can't hit the prod API once CORS is reverted).
   - Deploy: rebuild is clean locally; commit + push (GitHub Pages) and
     `npm run deploy:cloudfront` to publish, per the owner's deploy flow.
+
+
+==================================================================
+SPRINT: SHAREABLE MEMBER PROFILES + FULL CHECK
+==================================================================
+Date: 2026-06-09 (later)
+
+SHIPPED
+  - Shareable member profile for EVERY user. New public, link-only card at
+    /u/:userId backed by a new public endpoint GET /public/users/{id}.
+      * Backend (backend/api/index.cjs): getPublicUser returns ONLY safe fields
+        (userId, name, role, avatar [signed], city, occupation, headline, bio,
+        experienceSummary, experience/education highlights, skills, interests).
+        Never email/age/goals/keywords/documents/plan/bookings. id = Cognito sub
+        (a UUID) so the card is effectively unlisted — resolvable only via the
+        share link. 60s public cache like /consultants.
+      * Terraform: added route GET /public/users/{id} (no auth) + applied (Lambda
+        repackaged, route created). Also added an ignore_changes lifecycle to the
+        Apple IdP so plans no longer show a phantom in-place diff (matches the
+        Google/LinkedIn pattern; private_key is write-only so it is ignored —
+        rotate with `apply -replace`).
+      * Frontend: new MemberProfilePage (/u/:id), api.getPublicUser, a
+        PublicUserProfile type, applyMemberProfileSeo (noindex, ProfilePage OG +
+        avatar). Dashboard overview now has a "Сподели профила" button
+        (consultants -> /consultants/:slug, clients -> /u/:id) and a "Виж
+        публичния си профил" link; the card shows an owner "Редактирай профила"
+        button (-> /dashboard#profile-basics) when you view your own. Avatar has
+        an initials fallback when no picture is set.
+
+FULL CHECK (this pass)
+  - Frontend tsc --noEmit ............................ PASS
+  - npm run build (theme guard + tsc + vite) ........ PASS (Dark-theme check OK)
+  - Backend node --check backend/api/index.cjs ...... PASS
+  - terraform validate .............................. Success
+  - terraform fmt -check -recursive ................. clean
+  - npm run smoke:prod .............................. 14/14 PASS (run p0p78jtr90k)
+  - CORS posture: localhost Origin -> NO ACAO header (rejected); www.growpoint.bg
+    -> allowed. Prod is secured (no localhost).
+  - GET /public/users/{unknown} -> handler 404 "Profile not found." (distinct
+    from API-GW "Not Found", proving route+handler wired).
+  - Apple: GET /oauth2/authorize?identity_provider=SignInWithApple -> 302
+    appleid.apple.com (client_id = Services ID, correct idpresponse redirect).
+  - Member page render: verified in the preview browser (route mounts; graceful
+    "Профилът не е намерен" on API failure; happy path via a stubbed response
+    renders name, SEO title, avatar initials, share button, 6 expertise chips,
+    "Опит" + "Експертиза и интереси" sections; no console errors).
+
+WHAT'S NEXT / ISSUES FOUND (minimalistic)
+  PRIORITY | ITEM                                   | NOTE
+  -------- | -------------------------------------- | ------------------------------
+  P0       | Deploy frontend bundle                 | commit+push + deploy:cloudfront;
+           |                                        | backend/Cognito/CORS already live
+  P1       | Real Apple sign-in on live origin      | Cognito handoff verified only
+  P1       | Logged-in visual pass on prod          | sessions modal, /messages reply,
+           |                                        | pick-calendar, social step, member
+           |                                        | owner-edit (auth-gated)
+  P1       | SES transactional email sender         | blocked on DNS + SES prod access
+  P2       | Rich social preview for /u/:id          | SPA OG only; needs static prerender
+           |                                        | (currently noindex/link-only)
+  P2       | Member card privacy opt-out toggle     | no opt-out flag yet (safe fields,
+           |                                        | unlisted by UUID)
+  P2       | Admin destructive-action browser QA    | approve/reject/delete/message
+  P2       | Cold-start API latency (~1-2s)          | warmer/lighter path
+  P2       | backend/api/node_modules committed     | repo hygiene
+
+NOTHING BROKEN FOUND in the safe checks above. The only "issues" are the
+deploy-pending state and the carry-over backlog items (SES, admin browser QA,
+prerender for member OG, latency, repo hygiene).

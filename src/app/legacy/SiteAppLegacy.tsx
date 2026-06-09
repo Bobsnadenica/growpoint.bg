@@ -4479,17 +4479,41 @@ export function DashboardPage() {
                 >
                   Предстоящи сесии{bookings.length ? ` (${bookings.length})` : ""}
                 </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => {
+                    const publicPath =
+                      profile.role === "consultant" && consultantProfile
+                        ? `/consultants/${consultantProfile.slug}`
+                        : `/u/${profile.userId}`;
+                    const url =
+                      typeof window !== "undefined"
+                        ? `${window.location.origin}${publicPath}`
+                        : publicPath;
+                    if (typeof navigator !== "undefined" && navigator.share) {
+                      void navigator.share({ title: profile.name, url }).catch(() => {});
+                    } else if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                      void navigator.clipboard
+                        .writeText(url)
+                        .then(() => setMessage("Линкът към профила ти беше копиран."))
+                        .catch(() => {});
+                    }
+                  }}
+                >
+                  Сподели профила
+                </button>
                 <Link
                   className="primary-button"
                   to={
                     profile.role === "consultant" && consultantProfile
                       ? `/consultants/${consultantProfile.slug}`
-                      : "/users"
+                      : `/u/${profile.userId}`
                   }
                 >
                   {profile.role === "consultant" && consultantProfile
                     ? "Виж публичната страница"
-                    : "Търси консултант"}
+                    : "Виж публичния си профил"}
                 </Link>
               </div>
             </div>

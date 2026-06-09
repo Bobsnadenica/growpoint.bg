@@ -238,6 +238,23 @@ resource "aws_cognito_identity_provider" "apple" {
     email = "email"
     name  = "name"
   }
+
+  lifecycle {
+    # AWS auto-populates the Apple endpoint/identifier fields after creation, and
+    # private_key is write-only (read back empty). Ignore them so plans don't show
+    # a phantom in-place diff on every run. client_id/team_id/key_id stay tracked.
+    # To rotate the .p8 key, update terraform.tfvars and `terraform apply -replace`
+    # this resource.
+    ignore_changes = [
+      attribute_mapping["username"],
+      provider_details["attributes_url_add_attributes"],
+      provider_details["authorize_url"],
+      provider_details["oidc_issuer"],
+      provider_details["token_request_method"],
+      provider_details["token_url"],
+      provider_details["private_key"],
+    ]
+  }
 }
 
 resource "aws_cognito_identity_provider" "linkedin" {
@@ -824,6 +841,13 @@ resource "aws_apigatewayv2_route" "consultants_list" {
 resource "aws_apigatewayv2_route" "consultants_slug" {
   api_id    = aws_apigatewayv2_api.http.id
   route_key = "GET /consultants/{slug}"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
+# Public, link-shareable member card (safe fields only; no auth).
+resource "aws_apigatewayv2_route" "public_user" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "GET /public/users/{id}"
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 

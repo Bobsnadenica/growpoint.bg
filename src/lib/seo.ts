@@ -206,6 +206,43 @@ export function applyRouteSeo(pathname: string) {
   upsertStructuredData(route);
 }
 
+export function applyMemberProfileSeo(member: {
+  userId: string;
+  name?: string;
+  headline?: string;
+  bio?: string;
+  occupation?: string;
+  avatarUrl?: string;
+}) {
+  const canonicalPath = `/u/${member.userId}`;
+  const headline = member.headline?.trim() || member.occupation?.trim();
+  const summary = member.bio?.trim() || headline;
+  const title = member.name
+    ? `${member.name}${headline ? ` — ${headline}` : ""} | GrowPoint`
+    : "Профил в GrowPoint";
+  const description = summary
+    ? summary.slice(0, 170)
+    : "Публичен профил на потребител в GrowPoint.";
+  const image = member.avatarUrl || seoData.defaultImage;
+  const canonicalUrl = absoluteUrl(canonicalPath);
+
+  document.title = title;
+  upsertMeta("name", "description", description);
+  // Link-only sharing: keep member cards out of the search index by default.
+  upsertMeta("name", "robots", "noindex,follow");
+  upsertMeta("property", "og:type", "profile");
+  upsertMeta("property", "og:url", canonicalUrl);
+  upsertMeta("property", "og:title", title);
+  upsertMeta("property", "og:description", description);
+  upsertMeta("property", "og:image", image);
+  upsertMeta("name", "twitter:card", "summary_large_image");
+  upsertMeta("name", "twitter:url", canonicalUrl);
+  upsertMeta("name", "twitter:title", title);
+  upsertMeta("name", "twitter:description", description);
+  upsertMeta("name", "twitter:image", image);
+  upsertLink("canonical", canonicalUrl);
+}
+
 export function applyConsultantProfileSeo(consultant: ConsultantSeoProfile) {
   const slug = consultant.slug || "";
   const canonicalPath = slug ? `/consultants/${slug}` : "/users";

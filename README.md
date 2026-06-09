@@ -71,9 +71,24 @@ Last QA pass: 2026-06-08 on `https://www.growpoint.bg`, the CloudFront test doma
 - **Dedicated `/messages` and `/notifications` pages.** The header message/notification popover (and its "Виж всички" link) now deep-link to these pages. `/notifications` is a full, category-colour-coded list with mark-all-read that syncs the header badge; `/messages` is a conversations-by-booking inbox (list → thread → reply) for confirmed sessions. Both show a login prompt when signed out.
 - **Interactive booking calendar.** A new shared month-grid component (`src/app/legacy/AvailabilityCalendar.tsx`) replaces the flat slot list. Users pick a day → see free hours → select; consultants tap day+hour to add/remove availability. The weekly-pattern bulk composer is kept under a collapsible section.
 - **Profile:** top action buttons (Документи / Свободни часове / Предстоящи сесии) in the dashboard overview; the public consultant profile detects the owner (`ownerUserId`) and shows an owner note plus per-section "Редактирай" links back to the dashboard editor.
+- **Shareable member profiles (NEW):** every user now has a public, link-shareable card at `/u/:userId`, backed by `GET /public/users/{id}` (safe fields only — name, avatar, city, occupation, headline, bio, experience, skills, interests; never email/age/goals/documents). The dashboard has a "Сподели профила" button (consultants share their `/consultants/:slug`, clients share `/u/:id`) and a "Виж публичния си профил" link; the card shows an owner "Редактирай профила" button when you view your own. Profiles are unlisted (`noindex`, resolvable only via the share link).
 - **Social onboarding completeness:** the provider sign-up step now prefills name + photo from the provider account and collects optional city/occupation before finishing (passed into `/auth/bootstrap`).
 - **Apple sign-in: configured (deploy pending).** The Apple IdP is now live in Cognito (`terraform apply`), and the live `/oauth2/authorize` handoff reaches `appleid.apple.com` with no `redirect_uri`/`invalid_client` error. Note: Cognito's web flow uses the Apple **Services ID** as `client_id` (`com.growpoint.growpointloginservice`), not the native Bundle ID — this was corrected. `VITE_COGNITO_SOCIAL_PROVIDERS` now includes `Apple`, so the button enables once the rebuilt bundle is deployed. All Apple secrets (Key ID, Team ID, `.p8`) stay only in the gitignored `terraform.tfvars`.
 - **Contact:** channels are `contactus@` (general), `partnership@` (partnerships + ads), and `legal@` (legal + data) `@growpoint.bg`; inbound mail forwards via ImprovMX (see the Mail note above).
+
+#### What's next / open issues
+
+| Item | Priority | Status / note |
+| --- | --- | --- |
+| Deploy frontend bundle (commit+push + `npm run deploy:cloudfront`) | P0 | All 2026-06-09 UI is staged & built; backend, Cognito (incl. Apple) and CORS are already live via Terraform |
+| Real Apple sign-in on the live origin | P1 | Cognito side verified (handoff → `appleid.apple.com`); a real Apple account sign-in not yet done |
+| Logged-in visual pass on prod | P1 | Sessions modal, `/messages` reply, consultant pick-calendar, social complete-profile, dashboard share, member owner-edit — all auth-gated (can't reach prod API from localhost) |
+| Rich social preview for `/u/:id` | P2 | SPA sets OG client-side; non-JS scrapers won't render the card. Needs static prerender for `/u` routes (like consultants). Currently `noindex` (link-only) by design |
+| Member card privacy toggle | P2 | `/public/users/{id}` exposes safe fields for any user by sub (unlisted). No opt-out flag yet |
+| SES transactional email sender | P1 | Still blocked on DNS + SES production access; app falls back to in-app notifications |
+| Admin destructive-action browser QA | P2 | Approve/reject/delete/message not exercised in a browser this pass |
+| Cold-start API latency (~1–2s first hit) | P2 | Consider a warmer/lighter path |
+| Repo bloat: `backend/api/node_modules` committed | P2 | Hygiene |
 
 ### 2026-06-08 pass (social login + UI polish)
 
@@ -129,7 +144,7 @@ Do not mark a feature as production-ready unless it has either live browser evid
 
 | Date | Scope | Evidence | Result | Follow-up |
 | --- | --- | --- | --- | --- |
-| 2026-06-09 | Engagement features + Apple sign-in | Sessions popup (both roles), `/messages` + `/notifications` pages, interactive book/pick calendar, profile owner-edit + top buttons, social complete-profile step; Apple IdP created in Cognito (Services-ID client_id corrected) with the live `/oauth2/authorize` handoff verified to `appleid.apple.com`; `npm run build` clean (theme guard + tsc + vite); public calendar + both new pages verified in the preview browser | Passed (build + public render + Apple handoff) | Owner to deploy, then do a logged-in pass (sessions modal, messages reply, consultant pick-calendar, social complete-profile) and a real Apple sign-in. |
+| 2026-06-09 | Engagement features + Apple + shareable member profiles | Sessions popup (both roles), `/messages` + `/notifications` pages, interactive book/pick calendar, profile owner-edit + top buttons, social complete-profile step, Apple IdP live in Cognito (Services-ID `client_id` corrected, handoff verified to `appleid.apple.com`), new public `/u/:id` member card + `GET /public/users/{id}`; full check: `tsc`/`node --check`/`terraform validate`+`fmt`/`npm run build` all pass, `npm run smoke:prod` 14/14 (run `p0p78jtr90k`), CORS rejects localhost, member page verified in preview browser | Passed (build + smoke + public render + Apple handoff) | Owner to deploy, then a logged-in pass (sessions modal, messages reply, pick-calendar, social step, member owner-edit) and a real Apple sign-in. |
 | 2026-06-08 | Social login + UI polish | Google + LinkedIn IdPs created (Terraform), hosted-UI domain ACTIVE, live `/oauth2/authorize` handoff reaches both consent screens; onboarding modal, dark-theme, banner, and beta-tape-removal builds; `npm run smoke:prod` 14/14 | Passed | Owner to run a real Google/LinkedIn end-to-end sign-in and verify the onboarding modal + dark `/dashboard`. |
 | 2026-06-06 | Live API lifecycle QA | Disposable Cognito users, consultant, and booking run `mq2teq4uxw3pz` | Passed and cleaned up | Superseded by the repeatable 2026-06-07 smoke script. |
 | 2026-06-06 | Live public profile QA | `/consultants`, `/consultants/димитър-менторски`, admin detail, public route generation | Passed | Refresh availability dates before larger public launch. |
@@ -269,6 +284,7 @@ Routes include:
 - `/users`
 - `/consultants`
 - `/consultants/:slug`
+- `/u/:id` (public, link-shareable member card)
 - `/auth`
 - `/dashboard`
 - `/messages`
@@ -420,12 +436,14 @@ These do not require a token:
 
 - `GET /consultants`
 - `GET /consultants/{slug}`
+- `GET /public/users/{id}` (safe public member card; id = Cognito sub)
 
 Used for:
 
 - public directory
 - home page spotlight / top profiles
 - consultant detail page
+- shareable member card (`/u/:id`)
 
 ### 6.2 Protected API Calls
 

@@ -1906,6 +1906,58 @@ async function getConsultant(event) {
   );
 }
 
+// Public, link-shareable member card. Returns ONLY safe public fields — never
+// email, age, goals, keywords, documents, plan, or booking data. The id is the
+// user's Cognito sub (a UUID), so the profile is effectively unlisted: only
+// someone with the share link can resolve it.
+async function getPublicUser(event) {
+  const id =
+    event.pathParameters?.id ||
+    decodeURIComponent(String(event.rawPath || event.path || "").split("/").pop() || "");
+
+  if (!id) {
+    return badRequest("User id is required.");
+  }
+
+  if (id.startsWith("system#")) {
+    return notFound("Profile not found.");
+  }
+
+  const user = await getUserBySub(id);
+
+  if (!user || !user.name || String(user.userId || "").startsWith("system#")) {
+    return notFound("Profile not found.");
+  }
+
+  const avatarUrl = user.avatarStorageKey
+    ? await getSignedObjectUrl(user.avatarStorageKey)
+    : user.avatarUrl || "";
+
+  return response(
+    200,
+    {
+      userId: user.userId,
+      name: user.name || "",
+      role: normalizeUserRole(user.role, "client"),
+      avatarUrl,
+      city: user.city || "",
+      occupation: user.occupation || "",
+      headline: user.headline || "",
+      bio: user.bio || "",
+      experienceSummary: user.experienceSummary || "",
+      experienceHighlights: normalizeStringList(user.experienceHighlights, []),
+      educationHighlights: normalizeStringList(user.educationHighlights, []),
+      skills: normalizeStringList(user.skills, []),
+      interests: normalizeStringList(user.interests, [])
+    },
+    {
+      // Same short public cache as /consultants; signed avatar URL lives 3600s,
+      // longer than the max served age, so cached responses never go stale.
+      "Cache-Control": "public, max-age=60, stale-while-revalidate=300"
+    }
+  );
+}
+
 async function bootstrapUser(event) {
   const claims = requireAuth(event);
   const body = parseBody(event);
@@ -4422,6 +4474,7 @@ exports.handler = async (event) => {
     if (method === "GET" && path === "/consultants/me") return await getMyConsultant(event);
     if (method === "PUT" && path === "/consultants/me") return await updateMyConsultant(event);
     if (method === "GET" && /^\/consultants\/[^/]+$/.test(path)) return await getConsultant(event);
+    if (method === "GET" && /^\/public\/users\/[^/]+$/.test(path)) return await getPublicUser(event);
     if (method === "POST" && path === "/auth/bootstrap") return await bootstrapUser(event);
     if (method === "GET" && path === "/me/profile") return await getMeProfile(event);
     if (method === "GET" && path === "/me/data-export") return await exportMyData(event);

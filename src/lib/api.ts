@@ -12,6 +12,7 @@ import type {
   ConsultantProfileType,
   NotificationItem,
   PlanTier,
+  PublicUserProfile,
   UploadedDocument,
   UserProfile,
   UserRole
@@ -178,6 +179,11 @@ export const api = {
   async getConsultant(slug: string) {
     requireBackend();
     return request<ConsultantProfile>(`/consultants/${encodeURIComponent(slug)}`);
+  },
+
+  async getPublicUser(id: string) {
+    requireBackend();
+    return request<PublicUserProfile>(`/public/users/${encodeURIComponent(id)}`);
   },
 
   async bootstrapUser(token: string, input: BootstrapInput) {
