@@ -795,3 +795,42 @@ CHECK AFTER FIXES
 
 DEPLOY: frontend changes (gap rebalance + greeting guard) are staged & built;
   commit+push (GitHub Pages) + npm run deploy:cloudfront to ship.
+
+
+==================================================================
+CI: GITHUB ACTIONS — SECRET SCAN + BUILD GATE
+==================================================================
+Date: 2026-06-09 (CI)
+
+ADDED .github/workflows/ci.yml (runs on push to main, pull_request, manual):
+  - secret-scan job (HARD GATE so no sensitive info gets pushed):
+      * scripts/check-secrets.sh (npm run check:secrets) — fails if:
+        - a secret-bearing file is tracked: terraform.tfvars(.json), .env/.env.*
+          (except the public .env.production), *.p8/*.pem/*.key/*.p12/*.pfx,
+          id_rsa* (guards against `git add -f`);
+        - high-signal secret values appear in tracked source: GOCSPX- (Google),
+          WPL_AP1. (LinkedIn), AKIA/ASIA… (AWS), BEGIN … PRIVATE KEY,
+          aws_secret_access_key=, xox?- (Slack);
+        - .env.production gains a secret-looking entry;
+        - .gitignore loses a required rule (*.tfvars/*.p8/*.pem/*.key/.env).
+        Excludes docs (*.md, test.txt), *.example, package-lock.json, vendored
+        node_modules, dist/, assets/.
+      * gitleaks (gitleaks/gitleaks-action@v2 + .gitleaks.toml) — generic/entropy
+        secret detection over the pushed/PR commits; vendored deps, build output,
+        docs and templates allowlisted.
+  - build job: npm ci + npm run build (theme guard + tsc + vite) + node --check
+    backend/api/index.cjs.
+  - terraform job: fmt -check + init -backend=false + validate (no AWS creds).
+
+TESTS RUN LOCALLY
+  - scripts/check-secrets.sh on the clean tree -> PASS (exit 0).
+  - Negative test: force-added a file with GOCSPX-… and AKIA… -> guard FAILED
+    (exit 1) listing the hits; cleaned up -> PASS again.
+  - Negative test: force-added a __*.p8 -> guard FAILED on tracked secret file;
+    cleaned up -> PASS.
+  - ci.yml: no tabs, all three jobs present; .gitleaks.toml valid TOML.
+
+NOTE: gitleaks-action is free for personal accounts / public repos (only GitHub
+  *organizations* need GITLEAKS_LICENSE). If the repo ever moves to an org, set
+  that secret or switch to the gitleaks binary; the custom guard stays the
+  authoritative project-specific gate either way.

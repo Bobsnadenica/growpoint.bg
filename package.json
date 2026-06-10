@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "check:secrets": "bash scripts/check-secrets.sh",
     "theme:check": "node scripts/check-theme.mjs",
     "build": "node scripts/check-theme.mjs && tsc --noEmit && node scripts/site-build.mjs build",
     "build:cloudfront": "node scripts/check-theme.mjs && tsc --noEmit && node scripts/site-build.mjs cloudfront",

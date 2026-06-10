@@ -112,6 +112,18 @@ This repository is public, so no secrets are committed:
 - The only tracked env file is `.env.production`, which contains **public** client configuration only (API base URL plus the Cognito user-pool and app-client IDs). These values already ship inside the built frontend bundle and are not secret.
 - Backend AWS credentials are never stored in the repo; the Lambda uses its IAM role and local tooling uses your own AWS CLI profile.
 
+### Continuous Integration (GitHub Actions)
+
+`.github/workflows/ci.yml` runs automatically on every push to `main`, on pull requests, and on manual dispatch. Three jobs gate the repo:
+
+- **Secret scan** — a hard gate so no sensitive material is ever pushed:
+  - `scripts/check-secrets.sh` (also `npm run check:secrets`) fails the build if any secret-bearing file is tracked (`terraform.tfvars`, `.env`/`.env.*` except the public `.env.production`, `*.p8`/`*.pem`/`*.key`/`*.p12`/`*.pfx`, `id_rsa*` — guards against `git add -f`), if high-signal secret values appear in tracked source (Google `GOCSPX-`, LinkedIn `WPL_AP1.`, AWS `AKIA…`, `BEGIN … PRIVATE KEY`, `aws_secret_access_key`, Slack tokens), if `.env.production` gains a secret-looking entry, or if `.gitignore` loses a required rule.
+  - **gitleaks** (`gitleaks/gitleaks-action@v2`, config `.gitleaks.toml`) scans the pushed/PR commits for generic/high-entropy secrets, with vendored deps, build output, docs and templates allowlisted.
+- **Build & type-check** — `npm ci` + `npm run build` (dark-theme guard + `tsc --noEmit` + Vite production build) + `node --check backend/api/index.cjs`.
+- **Terraform validate** — `terraform fmt -check` + `init -backend=false` + `validate` (no AWS credentials needed).
+
+Run the secret guard locally before pushing with `npm run check:secrets`.
+
 ### What was tested and how
 
 | Area | Result | How it was verified |

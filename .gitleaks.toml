@@ -1,0 +1,26 @@
+title = "GrowPoint gitleaks config"
+
+# Start from gitleaks' built-in rule set (AWS keys, private keys, generic
+# high-entropy tokens, provider secrets, etc.).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public client config, vendored deps, build output, docs and templates"
+# These paths never contain real secrets:
+#  - .env.production: PUBLIC client config only (API URL + Cognito pool/app IDs).
+#  - *.example / templates: placeholders.
+#  - README.md / test.txt: docs that may quote secret-shaped patterns in prose.
+#  - node_modules / dist / assets: vendored deps and build output.
+paths = [
+  '''backend/api/node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)assets/''',
+  '''\.env\.production$''',
+  '''\.example$''',
+  '''(^|/)README\.md$''',
+  '''(^|/)test\.txt$''',
+  '''(^|/)package-lock\.json$''',
+  '''\.gitleaks\.toml$''',
+  '''scripts/check-secrets\.sh$''',
+]
