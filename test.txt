@@ -834,3 +834,59 @@ NOTE: gitleaks-action is free for personal accounts / public repos (only GitHub
   *organizations* need GITLEAKS_LICENSE). If the repo ever moves to an org, set
   that secret or switch to the gitleaks binary; the custom guard stays the
   authoritative project-specific gate either way.
+
+
+==================================================================
+LINKEDIN LOGIN — "enter password, bounces back, nothing happens"
+==================================================================
+Date: 2026-06-09
+
+SYMPTOM (owner): after entering the LinkedIn password the flow just redirects
+  back to the app and nothing happens (not signed in).
+
+WHAT IS CORRECT (ruled out)
+  - The /oauth2/authorize handoff is correct: 302 -> linkedin.com with
+    client_id=77aubzwzstkkab, redirect_uri=...cognito.../oauth2/idpresponse,
+    scope="openid profile email", response_type=code. Reaching the LinkedIn
+    password screen also proves the redirect_uri is registered correctly.
+  - The Cognito LinkedIn OIDC provider config matches AWS' documented setup
+    (issuer https://www.linkedin.com, authorize/token/userinfo/jwks URLs,
+    GET userinfo, attribute_mapping email/name/picture). So the failure is AFTER
+    LinkedIn auth — in Cognito's token/userinfo exchange or user creation.
+
+ROOT-CAUSE DIAGNOSIS (most likely): EMAIL COLLISION / no account linking.
+  - The user pool uses username_attributes=["email"] (email is the unique
+    sign-in key) and has NO PreSignUp Lambda trigger. So if the LinkedIn email
+    already belongs to another sign-in method (email/password, or a prior Google
+    federation with the same address), Cognito refuses to create a second
+    account ("Already found an entry for username …") and the hosted UI bounces
+    back with ?error_description=… — i.e. exactly "nothing happens".
+  - Alternative causes if the email is brand-new: the LinkedIn client secret has
+    expired (LinkedIn secrets expire ~1 yr) or the "Sign In with LinkedIn using
+    OpenID Connect" product / email scope isn't fully enabled on the LinkedIn app.
+
+BUG FIXED THIS PASS (the "nothing happens" part)
+  - The frontend silently swallowed OAuth failures: the Amplify Hub
+    `signInWithRedirect_failure` handler only did setLoading(false), and the
+    `?error_description=` returned in the redirect URL was ignored. Now
+    (src/lib/auth.tsx): on mount we parse the error from the URL (and strip it so
+    a refresh doesn't re-show it), the Hub failure handler captures the message,
+    and describeOAuthError() maps it to clear Bulgarian — e.g. a collision shows
+    "Вече има профил с този имейл. Влез по начина, с който си се регистрирал(а)
+    първоначално (имейл и парола или Google), след което можеш да добавиш и
+    LinkedIn." Surfaced as a dismissible banner on /auth (AuthPage). Verified in
+    the preview browser with a simulated collision redirect (banner shows, URL
+    cleaned, no console errors). tsc + build pass.
+
+NEXT STEP TO MAKE LINKEDIN WORK FOR EXISTING EMAILS (proposed, not yet built)
+  - Add a PreSignUp Lambda trigger that, on triggerSource ==
+    "PreSignUp_ExternalProvider", finds the existing user by email and calls
+    AdminLinkProviderForUser to link the LinkedIn identity to it (auto-confirm +
+    verify). Native signups (PreSignUp_SignUp) return unchanged -> zero blast
+    radius for normal registration. Needs @aws-sdk/client-cognito-identity-
+    provider in the Lambda + IAM (cognito-idp:ListUsers, AdminLinkProviderForUser)
+    + USER_POOL_ID env + lifecycle on the pool's lambda_config.
+  - Owner to confirm which cause it is by retrying LinkedIn once the error banner
+    is deployed (commit+push + deploy:cloudfront): "Вече има профил…" => collision
+    (build the linking trigger); a scope/secret message => fix the LinkedIn app
+    (rotate secret / enable the OpenID Connect product + email).

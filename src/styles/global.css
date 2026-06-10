@@ -7208,6 +7208,17 @@ textarea {
   margin-bottom: 0;
 }
 
+.auth-oauth-error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.auth-oauth-error .text-button {
+  flex: 0 0 auto;
+}
+
 .auth-social-prefill {
   display: flex;
   align-items: center;

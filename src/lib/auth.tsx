@@ -60,6 +60,8 @@ type AuthContextValue = {
     newPassword: string
   ) => Promise<void>;
   logout: () => Promise<void>;
+  oauthError: string;
+  clearOauthError: () => void;
 };
 
 function extractGroups(claims: Record<string, unknown> | undefined): string[] {
@@ -141,11 +143,57 @@ if (isCognitoConfigured) {
   });
 }
 
+// Turn a raw Cognito/IdP federation error into a clear, user-facing message.
+// The most common cause with username_attributes=["email"] is an email that
+// already belongs to another sign-in method (email/password or another social
+// provider) — Cognito refuses to create a second account and bounces back.
+function describeOAuthError(raw: string): string {
+  const text = (raw || "").toLowerCase();
+  if (
+    text.includes("already found an entry") ||
+    text.includes("already exists") ||
+    text.includes("account exists") ||
+    text.includes("presignup failed")
+  ) {
+    return "Вече има профил с този имейл. Влез по начина, с който си се регистрирал(а) първоначално (имейл и парола или Google), след което можеш да добавиш и LinkedIn.";
+  }
+  if (text.includes("email") && (text.includes("required") || text.includes("attribute"))) {
+    return "Доставчикът не сподели имейл адрес. Разреши достъп до имейла си при входа и опитай отново.";
+  }
+  if (text.includes("invalid_scope") || text.includes("scope")) {
+    return "Входът с този доставчик не е напълно конфигуриран (обхвати). Опитай по-късно или използвай друг метод.";
+  }
+  if (!raw) {
+    return "Входът с външния профил не беше завършен. Опитай отново или използвай имейл и парола.";
+  }
+  return `Входът с външния профил не беше завършен: ${raw}`;
+}
+
+function readOAuthErrorFromUrl(): string {
+  if (typeof window === "undefined") return "";
+  const fromSearch = new URLSearchParams(window.location.search);
+  const fromHash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const desc =
+    fromSearch.get("error_description") ||
+    fromHash.get("error_description") ||
+    fromSearch.get("error") ||
+    fromHash.get("error") ||
+    "";
+  if (desc && typeof window.history?.replaceState === "function") {
+    // Strip the error params so a refresh doesn't re-show the message.
+    const url = new URL(window.location.href);
+    ["error", "error_description", "state"].forEach((k) => url.searchParams.delete(k));
+    window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+  }
+  return desc ? describeOAuthError(decodeURIComponent(desc)) : "";
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState("");
   const [groups, setGroups] = useState<string[]>([]);
+  const [oauthError, setOauthError] = useState("");
 
   async function refreshSignedInSession(userIdFallback: string) {
     const session = await fetchAuthSession();
@@ -164,6 +212,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+
+    // Surface an OAuth error returned in the redirect URL (e.g. Cognito bounced
+    // the federation back with ?error_description=...).
+    const urlError = readOAuthErrorFromUrl();
+    if (urlError) {
+      setOauthError(urlError);
+    }
 
     async function restoreSession() {
       if (!isCognitoConfigured) {
@@ -214,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         payload.event === "customOAuthState" ||
         payload.event === "tokenRefresh"
       ) {
+        setOauthError("");
         setLoading(true);
         void restoreSession();
         return;
@@ -227,10 +283,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (
-        payload.event === "signInWithRedirect_failure" ||
-        payload.event === "tokenRefresh_failure"
-      ) {
+      if (payload.event === "signInWithRedirect_failure") {
+        const data = (payload as { data?: unknown }).data as
+          | { error?: { message?: string }; message?: string }
+          | undefined;
+        const message = data?.error?.message || data?.message || "";
+        setOauthError(describeOAuthError(message));
+        setLoading(false);
+        return;
+      }
+
+      if (payload.event === "tokenRefresh_failure") {
         setLoading(false);
       }
     });
@@ -252,6 +315,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       availableSocialProviders: socialProviders
         .filter((provider) => config.cognito.socialProviders.includes(provider.label))
         .map((provider) => provider.key),
+      oauthError,
+      clearOauthError() {
+        setOauthError("");
+      },
       async register(input) {
         if (!isCognitoConfigured) {
           throw new Error(AUTH_NOT_READY_MESSAGE);
@@ -359,7 +426,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setGroups([]);
       }
     }),
-    [groups, loading, token, user]
+    [groups, loading, token, user, oauthError]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

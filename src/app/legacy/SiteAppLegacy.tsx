@@ -2178,7 +2178,9 @@ export function AuthPage() {
     completeNewPassword,
     loginWithProvider,
     requestPasswordReset,
-    completePasswordReset
+    completePasswordReset,
+    oauthError,
+    clearOauthError
   } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -2688,6 +2690,18 @@ export function AuthPage() {
           </div>
           <div role="alert" aria-live="assertive">
             {error ? <div className="panel panel--error">{error}</div> : null}
+            {oauthError ? (
+              <div className="panel panel--error auth-oauth-error">
+                <span>{oauthError}</span>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => clearOauthError()}
+                >
+                  Скрий
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {showSocial ? (
