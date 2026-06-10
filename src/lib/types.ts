@@ -1,5 +1,10 @@
 export type UserRole = "client" | "consultant";
 export type PlanTier = "free" | "pro";
+
+// Paid visibility packages for expert profiles (Стр. 6 of the designer doc).
+// Missing/legacy profiles are treated as "start" (grandfathered).
+export type ConsultantPackageTier = "start" | "grow" | "spotlight";
+export type ConsultantPackageSource = "purchased" | "granted";
 export type BookingStatus = "pending" | "confirmed" | "declined" | "cancelled";
 export type ConsultantProfileType = "consultant" | "mentor";
 export type ConsultantProfileTheme = "violet" | "sky" | "rose" | "mint" | "amber";
@@ -34,6 +39,8 @@ export interface AdminConsultantSummary {
   profileStatus: ConsultantProfileStatus | "active";
   isPublic: boolean;
   featured: boolean;
+  packageTier?: ConsultantPackageTier;
+  packageSource?: string;
   membershipTier: string;
   avatarUrl: string;
   experienceYears: number;
@@ -132,6 +139,8 @@ export interface ConsultantProfile {
   consultationTopics?: string[];
   workApproach?: string;
   sessionLengthMinutes?: number;
+  packageTier?: ConsultantPackageTier;
+  packageSource?: ConsultantPackageSource;
 }
 
 export interface UserProfile {

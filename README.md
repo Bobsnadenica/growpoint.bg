@@ -65,6 +65,18 @@ Important SEO nuance:
 
 Last QA pass: 2026-06-08 on `https://www.growpoint.bg`, the CloudFront test domain, and the live AWS API. Controlled live QA runs use disposable Cognito users, a disposable consultant profile, temporary S3 objects, and disposable bookings, all removed afterwards (cleanup verified).
 
+### 2026-06-10 pass (Sprint R1 — designer/tester change-request doc)
+
+Executed the full "Webpage - text" change document from the testers/designers:
+
+- **New positioning copy site-wide (verbatim from the doc):** nav "За хората, които търсят"; home hero "Понякога една среща променя живота" / "Растежът започва от правилния човек." + new lede; choice cards "Търся насока" („Намери GrowPoint човек") and "Аз съм правилният човек" („Стани част от GrowPoint"); auth role cards "Търся правилния човек" / "Помагам на други да растат"; directory labels "Какво търсиш?" (+ new placeholder) and "Търся".
+- **Области rework (/users):** the 6 archetypes became the doc's **7 области** (Кариера и лидерство, Бизнес и предприемачество, AI и технологии, Комуникация и личностно развитие, Здраве и спорт, Финанси, Творчески и практически умения) with new descriptions, tags and 3 new icons; compact hero so the области fit above the fold; selecting one **auto-scrolls to the results**.
+- **Package model (Start / Grow / Spotlight):** new `packageTier` + `packageSource` on consultant profiles (legacy profiles grandfathered as Start — verified live); catalog orders Spotlight → Grow first; **package badges on photos** („Препоръчан експерт" for Grow, „GrowPoint суперзвезди" for Spotlight); new admin endpoint `PUT /admin/consultants/{id}/package` + admin UI select so a package can be **granted promotionally without payment**. The "public only with package" gate is deliberately deferred until Stripe is live (would empty the directory today).
+- **Directory:** „Препоръчани профили" (rating ≥ 4.5) and „Водещи профили" (package-first) buttons; card photos ~50% shorter so text fits without scroll.
+- **Pricing UI (dashboard, consultants):** „Развий своя GrowPoint профил" with the 3 doc plans (9.99 / 29.99 / 99.99 € / месец), full feature lists, current tier marked; pay buttons disabled until Stripe (handoff: Цецо — webhook should apply `setConsultantPackage` with `packageSource: "purchased"`).
+- **Home:** the showcase row prefers Spotlight (then Grow) profiles; same smaller photos.
+- **Post-login polish:** modal heights use `dvh` (mobile-safe centering); bigger onboarding avatar; табло stats alignment fixed; the stale **CareerLane ad banner replaced with a code-rendered GrowPoint banner** (both provided ad images are CareerLane-branded — a GrowPoint og-image asset is still needed from the designers).
+
 ### 2026-06-09 pass (engagement features + Apple prep)
 
 - **"Предстоящи сесии" is now a popup** for both consultants and users — opened from a top action button in the dashboard overview and the sidebar nav, instead of living inline in the profile body.
@@ -81,7 +93,10 @@ Last QA pass: 2026-06-08 on `https://www.growpoint.bg`, the CloudFront test doma
 
 | Item | Priority | Status / note |
 | --- | --- | --- |
-| Deploy frontend bundle (commit+push + `npm run deploy:cloudfront`) | P0 | All 2026-06-09 UI is staged & built; backend, Cognito (incl. Apple) and CORS are already live via Terraform |
+| Deploy frontend bundle (commit+push + `npm run deploy:cloudfront`) | P0 | All 2026-06-09 + 2026-06-10 UI is staged & built; backend (incl. package endpoint), Cognito and CORS are already live via Terraform |
+| Stripe checkout for packages (Цецо) | P0 | Buttons disabled until then; webhook should apply `setConsultantPackage` with `packageSource: "purchased"`; then enable the visibility gate per the doc |
+| GrowPoint-branded og-image + ad assets | P1 | Both provided ad images are CareerLane-branded; dashboard banner now code-rendered, but `assets/advertisement/3.jpg` remains the SEO og-image fallback for demo profiles |
+| Package visibility gate ("public only with package/approval") | P1 | Deferred until Stripe is live — enforcing now would empty the directory; admin grant path already works |
 | Real Apple sign-in on the live origin | P1 | Cognito side verified (handoff → `appleid.apple.com`); a real Apple account sign-in not yet done |
 | Logged-in visual pass on prod | P1 | Sessions modal, `/messages` reply, consultant pick-calendar, social complete-profile, dashboard share, member owner-edit — all auth-gated (can't reach prod API from localhost) |
 | Rich social preview for `/u/:id` | P2 | SPA sets OG client-side; non-JS scrapers won't render the card. Needs static prerender for `/u` routes (like consultants). Currently `noindex` (link-only) by design |
@@ -158,6 +173,7 @@ Do not mark a feature as production-ready unless it has either live browser evid
 
 | Date | Scope | Evidence | Result | Follow-up |
 | --- | --- | --- | --- | --- |
+| 2026-06-10 | Sprint R1 — designer/tester doc | New copy site-wide (verbatim DOM-checked), 7 области + auto-scroll, package model Start/Grow/Spotlight (grandfathered, catalog ordering live, admin grant endpoint + UI), directory Препоръчани (≥4.5, verified min 4.6)/Водещи buttons, photo badges, −50% card photos, 3-tier pricing card with current tier marked, CareerLane banner eliminated; 0 overflow / 0 console errors at 1280+375; build/fmt/secret-scan/`node --check` all pass; CORS temp-enabled for QA then reverted & re-verified | Passed (build + live backend + preview verification) | Owner to deploy frontend; Цецо to wire Stripe; designers to deliver GrowPoint og-image/ad assets. |
 | 2026-06-09 | Engagement features + Apple + shareable member profiles | Sessions popup (both roles), `/messages` + `/notifications` pages, interactive book/pick calendar, profile owner-edit + top buttons, social complete-profile step, Apple IdP live in Cognito (Services-ID `client_id` corrected, handoff verified to `appleid.apple.com`), new public `/u/:id` member card + `GET /public/users/{id}`; full check: `tsc`/`node --check`/`terraform validate`+`fmt`/`npm run build` all pass, `npm run smoke:prod` 14/14 (run `p0p78jtr90k`), CORS rejects localhost, member page verified in preview browser | Passed (build + smoke + public render + Apple handoff) | Owner to deploy, then a logged-in pass (sessions modal, messages reply, pick-calendar, social step, member owner-edit) and a real Apple sign-in. |
 | 2026-06-08 | Social login + UI polish | Google + LinkedIn IdPs created (Terraform), hosted-UI domain ACTIVE, live `/oauth2/authorize` handoff reaches both consent screens; onboarding modal, dark-theme, banner, and beta-tape-removal builds; `npm run smoke:prod` 14/14 | Passed | Owner to run a real Google/LinkedIn end-to-end sign-in and verify the onboarding modal + dark `/dashboard`. |
 | 2026-06-06 | Live API lifecycle QA | Disposable Cognito users, consultant, and booking run `mq2teq4uxw3pz` | Passed and cleaned up | Superseded by the repeatable 2026-06-07 smoke script. |
@@ -521,6 +537,7 @@ The Lambda does all of the following:
 | `POST` | `/bookings` | Yes | create booking request |
 | `GET` | `/admin/metrics` | Admin | platform monitoring aggregates (users, registrations/day, consultants by status, bookings, messages, reviews, visits) |
 | `GET` | `/admin/consultants` | Admin | moderation list (all consultant profiles) |
+| `PUT` | `/admin/consultants/{consultantId}/package` | Admin | grant/revoke a visibility package (`start`/`grow`/`spotlight`, recorded as `granted`) |
 
 ### 7.3 Lambda Request Handling Step by Step
 

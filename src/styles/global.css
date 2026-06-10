@@ -1975,6 +1975,29 @@ textarea {
   text-align: center;
 }
 
+/* Compact hero (Стр. 2): smaller heading + tighter spacing so the области
+   below are visible and selectable without scrolling. */
+.hero--compact {
+  padding-top: 34px;
+  padding-bottom: 8px;
+}
+
+.hero--compact .hero__copy h1 {
+  font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+  line-height: 1.12;
+  max-width: 26ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero--compact .hero__lede {
+  font-size: 0.98rem;
+  margin-top: 10px;
+  max-width: 68ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .hero--centered .hero__copy,
 .hero--centered .page-intro {
   text-align: center;
@@ -4841,16 +4864,129 @@ textarea {
     var(--profile-theme-soft, rgba(245, 247, 245, 1));
 }
 
+/* Designer doc (Стр. 1.1 + 3): photos reduced ~50% in height so the card text
+   is visible without scrolling — 4/5 portrait became a 8/5 landscape crop. */
 .consultant-card__avatar {
   display: block;
   width: 100%;
   max-width: 380px;
   height: auto;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 8 / 5;
   border-radius: 0;
   object-fit: cover;
   object-position: center 28%;
   margin: 0 auto;
+}
+
+.consultant-card__avatar-wrap {
+  position: relative;
+  display: block;
+}
+
+.package-badge {
+  position: absolute;
+  left: 0;
+  bottom: 10px;
+  padding: 4px 12px;
+  border-radius: 0 999px 999px 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: var(--primary);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.22);
+}
+
+.package-badge--spotlight {
+  background: linear-gradient(100deg, #8a5a00, #c98a00 55%, #8a5a00);
+}
+
+/* ─── Пакети за експерти (Стр. 6) ───────────────────────────────────── */
+.package-plans {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.package-plan {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.package-plan--current {
+  border-color: var(--primary);
+  box-shadow: 0 10px 26px rgba(75, 106, 96, 0.16);
+}
+
+.package-plan--spotlight {
+  border-color: rgba(201, 138, 0, 0.45);
+}
+
+.package-plan__head {
+  display: grid;
+  gap: 2px;
+}
+
+.package-plan__head h3 {
+  margin: 0;
+}
+
+.package-plan p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+}
+
+.package-plan__features {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.88rem;
+  color: var(--text-soft);
+}
+
+.package-plan__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+
+.package-plan__footer strong {
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.admin-card__package-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.admin-card__package-control select {
+  width: auto;
+  min-height: 42px;
+  padding: 0 10px;
+}
+
+@media (max-width: 900px) {
+  .package-plans {
+    grid-template-columns: 1fr;
+  }
 }
 
 .consultant-card__status-row {
@@ -7486,6 +7622,7 @@ textarea {
 .dashboard-sidebar__stats > div {
   display: grid;
   gap: 2px;
+  align-content: start;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -7508,6 +7645,7 @@ textarea {
   font-size: 1.15rem;
   font-weight: 800;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .dashboard-stat-link {
@@ -8246,7 +8384,8 @@ textarea {
 
 .modal-card {
   width: min(540px, 100%);
-  max-height: 90vh;
+  /* dvh (not vh) so mobile browser UI bars don't push the popup off-centre. */
+  max-height: calc(100dvh - 40px);
   overflow-y: auto;
   display: grid;
   gap: 16px;
@@ -8343,12 +8482,16 @@ textarea {
 
 .onboarding-avatar__image,
 .onboarding-avatar__placeholder {
-  width: 72px;
-  height: 72px;
+  width: 84px;
+  height: 84px;
   border-radius: 999px;
   flex: 0 0 auto;
   object-fit: cover;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
+}
+
+.onboarding-avatar__button {
+  align-self: center;
 }
 
 .onboarding-avatar__placeholder {
@@ -9376,7 +9519,7 @@ textarea {
     width: 100%;
     max-width: 380px;
     height: auto;
-    aspect-ratio: 4 / 5;
+    aspect-ratio: 8 / 5;
     margin: 0 auto;
   }
 
@@ -10794,6 +10937,43 @@ textarea {
   width: 100%;
   max-height: 180px;
   object-fit: cover;
+}
+
+/* Code-rendered branded banner — replaces the stale third-party ad image. */
+.dashboard-ad__placeholder {
+  display: grid;
+  gap: 4px;
+  padding: 22px 20px;
+  line-height: 1.45;
+  background:
+    radial-gradient(circle at 88% 18%, rgba(127, 143, 137, 0.3), transparent 42%),
+    linear-gradient(110deg, var(--primary-dark), var(--primary) 75%);
+  color: #ffffff;
+}
+
+.dashboard-ad__brand {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.dashboard-ad__placeholder strong {
+  font-size: 1.08rem;
+}
+
+.dashboard-ad__placeholder p {
+  margin: 0;
+  font-size: 0.88rem;
+  opacity: 0.92;
+}
+
+.dashboard-ad__placeholder em {
+  font-style: normal;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-top: 4px;
 }
 
 .dashboard-ad__tag {

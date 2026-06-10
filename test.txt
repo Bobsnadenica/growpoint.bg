@@ -890,3 +890,113 @@ NEXT STEP TO MAKE LINKEDIN WORK FOR EXISTING EMAILS (proposed, not yet built)
     is deployed (commit+push + deploy:cloudfront): "Вече има профил…" => collision
     (build the linking trigger); a scope/secret message => fix the LinkedIn app
     (rotate secret / enable the OpenID Connect product + email).
+
+
+==================================================================
+SPRINT R1: "ПРАВИЛНИЯТ ЧОВЕК" — designer/tester change-request doc
+==================================================================
+Date: 2026-06-10
+
+Source: "Webpage - text.docx" from the testers/designers (6 pages of changes).
+All items executed and verified; owner decisions applied as proposed in the
+sprint plan (grandfathering; no paywall gate yet; Stripe = Цецо).
+
+SHIPPED — COPY (Стр. 1, 2, 3, 4) — all verbatim from the document
+  - Nav: "За потребители" -> "За хората, които търсят" (header nav).
+  - Home hero: eyebrow "Понякога една среща променя живота"; H1 "Растежът
+    започва от правилния човек."; new lede (платформа, която свързва хора с
+    ментори, обучители, консултанти и експерти...).
+  - Home choice cards: 01 "Търся насока" + ново описание + CTA "Намери
+    GrowPoint човек"; 02 "Аз съм правилният човек" + описание + CTA "Стани
+    част от GrowPoint".
+  - /users: compact hero (new .hero--compact — smaller H1/lede so областите
+    се виждат без скрол), H1 "Намери правилния човек за това, което искаш да
+    постигнеш." + new lede ("В какво искаш да се развиваш?").
+  - Directory: "Ключова дума" -> "Какво търсиш?"; placeholder "AI, интервю,
+    фитнес, инвестиции, лидерство…"; "Тип профил" -> "Търся".
+  - Auth register: role cards "Търся правилния човек" / "Помагам на други да
+    растат" + new texts (same cards reused by the social onboarding popup).
+
+SHIPPED — ОБЛАСТИ (Стр. 2)
+  - The 6 archetypes replaced with the 7 области from the doc (Кариера и
+    лидерство / Бизнес и предприемачество / AI и технологии / Комуникация и
+    личностно развитие / Здраве и спорт / Финанси / Творчески и практически
+    умения), each with doc description + 3 visible tags + extra matching
+    keywords; 3 new SVG icons (health/finance/creative). Области are now
+    role-agnostic (PersonaPreset.type optional).
+  - Selecting an област auto-scrolls to the results (#directory-results).
+
+SHIPPED — DIRECTORY (Стр. 3)
+  - Buttons: "Препоръчани профили" (filters rating >= 4.5 — verified live:
+    10/11 profiles qualify, min 4.6) and "Водещи профили" (Grow & Spotlight
+    first; same package-first ordering applies inside an област).
+  - Card photos ~50% shorter (aspect 4/5 -> 8/5) so text fits without scroll.
+  - Package badges on photos: Grow -> "Препоръчан експерт", Spotlight ->
+    "GrowPoint суперзвезди" (gold).
+
+SHIPPED — PACKAGE BACKBONE (Start/Grow/Spotlight)
+  - ConsultantProfile.packageTier ("start"|"grow"|"spotlight") +
+    packageSource ("purchased"|"granted"); legacy/missing tier = "start"
+    (GRANDFATHERED — no data migration, current 11 public profiles verified
+    live as "start"). packageSource/audit fields hidden from public payload.
+  - Public catalog ordering: Spotlight > Grow > featured > reviews > rating
+    (deployed; /health 200).
+  - NEW admin endpoint PUT /admin/consultants/{id}/package (+ explicit API GW
+    route via terraform) — admin grants/revokes a package without payment
+    (the promo path from Стр. 6); audited (packageUpdatedBy/At/Email).
+  - Admin UI: package select (Start/Grow/Spotlight) per consultant card +
+    "Пакет" meta row showing "(предоставен)" for granted ones.
+  - NOT enforced: the "public only after approval or purchased package" gate
+    — deliberately deferred until Stripe is live so the directory doesn't go
+    empty (current profiles stay public as Start).
+
+SHIPPED — PRICING UI (Стр. 6)
+  - Dashboard upgrade card (consultants) replaced: "Развий своя GrowPoint
+    профил" + doc sub-copy + 3 plan cards (Старт 9.99 / Grow 29.99 /
+    Spotlight 99.99 € / месец) with full doc feature lists; current tier
+    marked "Текущ пакет"; pay buttons disabled "Очаквай скоро" + contact
+    fallback. STRIPE HANDOFF (Цецо): wire each button to a Stripe Checkout
+    session for the tier; on webhook success apply the same update as
+    PUT /admin/consultants/{id}/package but with packageSource:"purchased"
+    (backend handler: setConsultantPackage in backend/api/index.cjs).
+  - Client dashboard keeps the old Pro teaser (doc page covers expert packages).
+
+SHIPPED — HOME SPOTLIGHT ROW (Стр. 1.1)
+  - The "Подбрани профили" showcase now ranks Spotlight (then Grow) packages
+    before admin-featured/top-rated; photos -50% via the shared card style.
+
+SHIPPED — POST-LOGIN POLISH (Стр. 5)
+  - Popup positioning: modal max-height now uses dvh (mobile URL-bar safe) —
+    the "малко нагоре" effect came from vh on mobile.
+  - Onboarding avatar 72->84px + aligned "Смени снимката" button.
+  - Табло: stats cells align-content:start + overflow-wrap so the email cell
+    no longer misaligns.
+  - CareerLane banner ELIMINATED: both provided ad images (3.jpg/4.jpg) are
+    CareerLane-branded, so the dashboard ad is now a code-rendered GrowPoint
+    banner ("Рекламно пространство за партньори" -> /contact). NOTE: 3.jpg is
+    still the SEO og:image fallback for demo profiles — needs a GrowPoint-
+    branded replacement asset from the designers (carried in backlog).
+  - "Как да използваш" табчета: wording inherited automatically from the
+    updated authRoleChoices (same source).
+
+VERIFIED (preview browser, desktop 1280 + mobile 375, live data)
+  - All new copy renders verbatim (home/users/auth/directory) — checked DOM.
+  - 7 области render with icons + tags, visible above the fold; selecting one
+    sets ?persona=, shows "Област: …" chip and auto-scrolls.
+  - "Препоръчани профили" -> only rating >= 4.5 (10 cards, min 4.6).
+  - Pricing card: 3 plans, correct prices, 5/5/7 features, "Текущ пакет"
+    marked, disabled pay buttons; stacks 1-col on mobile.
+  - Ad banner: no <img>, branded placeholder text correct.
+  - 0 horizontal overflow on /, /users, /dashboard, /auth at 375px; 0 console
+    errors. Backend: packageTier present in live /consultants (all "start").
+  - CORS: temporary localhost entry used for verification, then REVERTED and
+    re-verified (no ACAO for localhost; www allowed). Initial post-revert curl
+    still showed localhost due to API GW propagation lag (~20s) — re-checked
+    and confirmed secured.
+  - Gates: npm run build (theme guard + tsc + vite) PASS; node --check PASS;
+    terraform fmt clean; secret scan PASS.
+
+DEPLOY STATE
+  - LIVE via terraform: catalog package ordering, packageTier in public
+    payload, admin package endpoint + route.
+  - STAGED (commit+push + npm run deploy:cloudfront): all frontend changes.

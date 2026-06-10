@@ -5,11 +5,18 @@ import { useAuth } from "../../lib/auth";
 import type {
   AdminConsultantSummary,
   AdminMetrics,
+  ConsultantPackageTier,
   ConsultantProfileStatus
 } from "../../lib/types";
 import PageScene from "../layout/PageScene";
 
 type Filter = "pending" | "featured" | "approved" | "rejected" | "all";
+
+const PACKAGE_TIER_LABELS: Record<ConsultantPackageTier, string> = {
+  start: "Start",
+  grow: "Grow",
+  spotlight: "Spotlight"
+};
 
 function statusLabel(status: AdminConsultantSummary["profileStatus"]) {
   if (status === "approved" || status === "active") return "Одобрен";
@@ -58,6 +65,7 @@ export default function AdminPage() {
   const [filter, setFilter] = useState<Filter>("pending");
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [featuredActionId, setFeaturedActionId] = useState<string | null>(null);
+  const [packageActionId, setPackageActionId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [messageTargetId, setMessageTargetId] = useState<string | null>(null);
   const [adminMessageText, setAdminMessageText] = useState("");
@@ -223,6 +231,41 @@ export default function AdminPage() {
       setError(value instanceof Error ? value.message : "Неуспешно обновяване на подбран профил.");
     } finally {
       setFeaturedActionId(null);
+    }
+  }
+
+  async function setPackage(
+    item: AdminConsultantSummary,
+    nextTier: ConsultantPackageTier
+  ) {
+    if (!token || nextTier === (item.packageTier || "start")) return;
+
+    setPackageActionId(item.consultantId);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      await api.adminSetConsultantPackage(token, item.consultantId, nextTier);
+      setItems((currentItems) =>
+        currentItems.map((current) =>
+          current.consultantId === item.consultantId
+            ? {
+                ...current,
+                packageTier: nextTier,
+                packageSource: nextTier === "start" ? "" : "granted"
+              }
+            : current
+        )
+      );
+      setSuccessMessage(
+        `${item.name}: пакетът е сменен на ${PACKAGE_TIER_LABELS[nextTier]}${
+          nextTier === "start" ? "." : " (предоставен от админ, без плащане)."
+        }`
+      );
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешна смяна на пакет.");
+    } finally {
+      setPackageActionId(null);
     }
   }
 
@@ -563,6 +606,13 @@ export default function AdminPage() {
                         <dt>Начална</dt>
                         <dd>{item.featured ? "Подбран" : "Не"}</dd>
                       </div>
+                      <div>
+                        <dt>Пакет</dt>
+                        <dd>
+                          {PACKAGE_TIER_LABELS[item.packageTier || "start"]}
+                          {item.packageSource === "granted" ? " (предоставен)" : ""}
+                        </dd>
+                      </div>
                     </dl>
 
                     {(item.specializations.length || item.languages.length || item.sessionModes.length) ? (
@@ -650,6 +700,24 @@ export default function AdminPage() {
                             ? "Махни от подбрани"
                             : "Подбери за начална"}
                       </button>
+                      <label className="admin-card__package-control">
+                        Пакет
+                        <select
+                          value={item.packageTier || "start"}
+                          disabled={packageActionId === item.consultantId}
+                          onChange={(event) =>
+                            setPackage(item, event.target.value as ConsultantPackageTier)
+                          }
+                        >
+                          {(Object.keys(PACKAGE_TIER_LABELS) as ConsultantPackageTier[]).map(
+                            (tier) => (
+                              <option key={tier} value={tier}>
+                                {PACKAGE_TIER_LABELS[tier]}
+                              </option>
+                            )
+                          )}
+                        </select>
+                      </label>
                       {!isApproved ? (
                         <button
                           className="ghost-button"

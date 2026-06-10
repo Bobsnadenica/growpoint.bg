@@ -6,11 +6,16 @@ export type PersonaIcon =
   | "transition"
   | "product"
   | "data"
-  | "communication";
+  | "communication"
+  | "health"
+  | "finance"
+  | "creative";
 
 export type PersonaPreset = {
   id: string;
-  type: ConsultantProfileType;
+  // Optional: the new области span both consultants and mentors. When unset the
+  // directory does not narrow by profile type.
+  type?: ConsultantProfileType;
   code: string;
   icon: PersonaIcon;
   name: string;
@@ -18,82 +23,147 @@ export type PersonaPreset = {
   tags: string[];
 };
 
+// Области per the 2026-06 designer/tester copy document. The first 3 tags are
+// displayed as chips on the card (exact copy from the document); the rest are
+// lowercase matching keywords used for ranking.
 export const personaPresets: PersonaPreset[] = [
   {
-    id: "cv-interview",
-    type: "consultant",
-    code: "CV",
-    icon: "document",
-    name: "CV и интервю",
-    description:
-      "Преглед на CV и LinkedIn и подготовка за конкретно интервю в близките седмици.",
-    tags: ["cv", "linkedin", "interview", "интервю", "review", "позициониране"]
-  },
-  {
-    id: "leadership-positioning",
-    type: "consultant",
-    code: "LP",
+    id: "career-leadership",
+    code: "КЛ",
     icon: "leadership",
-    name: "Leadership позициониране",
+    name: "Кариера и лидерство",
     description:
-      "Executive CV и подготовка за senior, директорски и management роли.",
+      "Развий кариерата си, подготви се за следващата роля и усъвършенствай своите лидерски умения.",
     tags: [
-      "executive",
+      "Кариера",
+      "Лидерство",
+      "Интервюта",
+      "career",
       "leadership",
+      "interview",
+      "cv",
+      "linkedin",
       "management",
-      "senior",
-      "мениджърски",
-      "директор"
+      "executive",
+      "мениджърски"
     ]
   },
   {
-    id: "career-transition",
-    type: "consultant",
-    code: "КП",
-    icon: "transition",
-    name: "Кариерна промяна",
-    description:
-      "Стратегия за смяна на посока, индустрия или ниво и подреждане на план за кандидатстване.",
-    tags: ["career", "transition", "промяна", "преход", "switch", "стратегия", "search"]
-  },
-  {
-    id: "product-mentor",
-    type: "mentor",
-    code: "PM",
+    id: "business-entrepreneurship",
+    code: "БП",
     icon: "product",
-    name: "Product и стартъпи",
+    name: "Бизнес и предприемачество",
     description:
-      "Дългосрочна посока за product, ownership и стартъп роли.",
-    tags: ["product", "management", "startup", "growth", "ownership"]
-  },
-  {
-    id: "tech-data-mentor",
-    type: "mentor",
-    code: "TD",
-    icon: "data",
-    name: "Tech и Data",
-    description:
-      "Кариерен растеж в инженерни, аналитични и data роли.",
-    tags: ["data", "analytics", "engineering", "tech", "software", "developer", "analyst"]
-  },
-  {
-    id: "soft-skills-mentor",
-    type: "mentor",
-    code: "СК",
-    icon: "communication",
-    name: "Увереност и комуникация",
-    description:
-      "Soft skills, нетуъркинг и подготовка за стресови или презентационни интервюта.",
+      "Стартирай, развивай и мащабирай своя бизнес с помощта на хора, които вече са извървели този път.",
     tags: [
+      "Бизнес",
+      "Продажби",
+      "Растеж",
+      "business",
+      "startup",
+      "growth",
+      "sales",
+      "предприемачество",
+      "product"
+    ]
+  },
+  {
+    id: "ai-technology",
+    code: "AI",
+    icon: "data",
+    name: "AI и технологии",
+    description:
+      "Овладей новите технологии, изкуствения интелект и дигиталните инструменти, които променят начина на работа.",
+    tags: [
+      "AI",
+      "Технологии",
+      "Данни",
+      "ai",
+      "tech",
+      "data",
+      "analytics",
+      "engineering",
+      "software",
+      "developer",
+      "технологии"
+    ]
+  },
+  {
+    id: "communication-growth",
+    code: "КР",
+    icon: "communication",
+    name: "Комуникация и личностно развитие",
+    description:
+      "Изгради увереност, подобри комуникацията си и развий уменията, които отварят нови възможности.",
+    tags: [
+      "Комуникация",
+      "Увереност",
+      "Презентации",
+      "communication",
       "confidence",
-      "увереност",
+      "presentation",
       "soft",
       "skills",
-      "anxiety",
-      "тревожност",
       "networking",
-      "комуникация",
-      "presentation"
+      "увереност"
+    ]
+  },
+  {
+    id: "health-sport",
+    code: "ЗС",
+    icon: "health",
+    name: "Здраве и спорт",
+    description:
+      "Постигни целите си чрез правилен подход към тренировките, храненето и изграждането на устойчиви навици.",
+    tags: [
+      "Фитнес",
+      "Хранене",
+      "Навици",
+      "fitness",
+      "health",
+      "nutrition",
+      "habits",
+      "sport",
+      "тренировки",
+      "здраве"
+    ]
+  },
+  {
+    id: "finance",
+    code: "ФИ",
+    icon: "finance",
+    name: "Финанси",
+    description:
+      "Научи как по-добре да управляваш парите си, да планираш бъдещето си и да вземаш информирани финансови решения.",
+    tags: [
+      "Инвестиции",
+      "Бюджет",
+      "Финанси",
+      "finance",
+      "investing",
+      "budget",
+      "money",
+      "финанси",
+      "инвестиции"
+    ]
+  },
+  {
+    id: "creative-practical",
+    code: "ТУ",
+    icon: "creative",
+    name: "Творчески и практически умения",
+    description:
+      "Учи се от практици в области като фризьорство, грим, фотография, дизайн и други приложими умения.",
+    tags: [
+      "Дизайн",
+      "Фотография",
+      "Фризьорство",
+      "design",
+      "photography",
+      "creative",
+      "грим",
+      "фризьорство",
+      "умения"
     ]
   }
 ];

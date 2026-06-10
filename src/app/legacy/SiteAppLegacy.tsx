@@ -136,33 +136,97 @@ type QuestionSuggestionOption = string | { label: string; value: string };
 const homeRoleChoices = [
   {
     step: "01",
-    title: "Търся консултация или менторство",
-    text: "Разгледай активни профили, сравни фокус, формат и свободни часове и избери правилния човек за следващата си стъпка.",
-    ctaLabel: "Намери консултант",
+    title: "Търся насока",
+    text: "Открий правилния човек за своето развитие – независимо дали става дума за кариера, бизнес, умения, здраве или личностно израстване.",
+    ctaLabel: "Намери GrowPoint човек",
     ctaTo: "/users"
   },
   {
     step: "02",
-    title: "Аз съм консултант или ментор",
-    text: "Създай публичен профил с ясна експертиза, снимка, теми и наличности, за да могат хората да те откриват и резервират.",
-    ctaLabel: "Създай профил",
+    title: "Аз съм правилният човек",
+    text: "Създай публичен профил и превърни своя опит и знания в реална стойност за хората, които ги търсят.",
+    ctaLabel: "Стани част от GrowPoint",
     ctaTo: "/auth?tab=register&role=consultant"
   }
 ] as const;
+
+// Expert visibility packages (Стр. 6 of the designer doc). Payments go through
+// Stripe later (handoff: Цецо) — until then buttons are disabled and admins can
+// grant a package from the admin panel.
+const PACKAGE_PLANS: Array<{
+  tier: "start" | "grow" | "spotlight";
+  level: string;
+  name: string;
+  tagline: string;
+  description: string;
+  features: string[];
+  price: string;
+}> = [
+  {
+    tier: "start",
+    level: "Ниво 1 · Старт",
+    name: "GrowPoint Start",
+    tagline: "Това е стандартният профил",
+    description:
+      "Създай своя профил, управлявай календара си и започни да приемаш заявки.",
+    features: [
+      "Публичен профил",
+      "Резервации и календар",
+      "Отзиви и оценки",
+      "Представяне на теми и услуги",
+      "Минимум 1 безплатна сесия месечно"
+    ],
+    price: "9.99 € / месец"
+  },
+  {
+    tier: "grow",
+    level: "Ниво 2 · Grow",
+    name: "GrowPoint Grow",
+    tagline: "Повече видимост и повече заявки",
+    description:
+      "Изведи профила си пред повече хора и увеличи шансовете си да бъдеш избран.",
+    features: [
+      "Всичко от Старт",
+      "По-предно позициониране в каталога",
+      "Приоритетно показване на началната страница",
+      "Значка „Препоръчан експерт“",
+      "Повече видимост при търсене"
+    ],
+    price: "29.99 € / месец"
+  },
+  {
+    tier: "spotlight",
+    level: "Ниво 3 · Spotlight",
+    name: "GrowPoint Spotlight",
+    tagline: "Премиум пакет",
+    description:
+      "Изгради личен бранд и бъди сред най-видимите експерти в платформата.",
+    features: [
+      "Всичко от Grow",
+      "Собствен банер на началната страница",
+      "Персонализирано представяне с визия и послание",
+      "Приоритетно позициониране навсякъде в платформата",
+      "Участие в подкасти и рубрики на GrowPoint",
+      "Представяне в специални кампании",
+      "Ползване на зала за събития веднъж на тримесечие"
+    ],
+    price: "99.99 € / месец"
+  }
+];
 
 const authRoleChoices: Record<
   UserRole,
   { title: string; text: string; meta: string; badge: string }
 > = {
   client: {
-    title: "Търся консултация",
-    text: "Създай личен професионален контекст, за да сравняваш профили и да заявяваш консултации по-точно.",
+    title: "Търся правилния човек",
+    text: "Пълното създаване на личния ти профил ще помогне за намирането.",
     meta: "Без членска такса",
     badge: "Потребител"
   },
   consultant: {
-    title: "Създавам експертен профил",
-    text: "Стартирай публична експертна страница с ясни теми, формат и първа наличност.",
+    title: "Помагам на други да растат",
+    text: "Сподели своя опит и достигни до хора, които активно търсят знания и подкрепа.",
     meta: "Публичен профил",
     badge: "Експерт"
   }
@@ -301,23 +365,46 @@ function buildDirectoryFilterLabels({
   query,
   city,
   kind,
-  topOnly
+  topOnly,
+  recommendedOnly
 }: {
   query: string;
   city: string;
   kind: string;
   topOnly: boolean;
+  recommendedOnly: boolean;
 }) {
   return [
     query ? `Търсене: ${query}` : "",
     city ? `Град: ${city}` : "",
     getDirectoryKindLabel(kind),
-    topOnly ? "Само водещи профили" : ""
+    topOnly ? "Водещи профили" : "",
+    recommendedOnly ? "Препоръчани профили (4.5+)" : ""
   ].filter(Boolean);
 }
 
 function getConsultantProfileType(consultant: ConsultantProfile) {
   return consultant.profileType || "consultant";
+}
+
+// Visibility packages (Стр. 6): legacy profiles without a tier count as Start.
+function getConsultantPackageTier(consultant: ConsultantProfile) {
+  return consultant.packageTier || "start";
+}
+
+function getConsultantPackageRank(consultant: ConsultantProfile) {
+  const tier = getConsultantPackageTier(consultant);
+  return tier === "spotlight" ? 2 : tier === "grow" ? 1 : 0;
+}
+
+const PACKAGE_BADGES: Record<string, string | null> = {
+  start: null,
+  grow: "Препоръчан експерт",
+  spotlight: "GrowPoint суперзвезди"
+};
+
+function getConsultantPackageBadge(consultant: ConsultantProfile) {
+  return PACKAGE_BADGES[getConsultantPackageTier(consultant)] || null;
 }
 
 function getConsultantThemeVisual(theme?: ConsultantProfile["theme"]) {
@@ -926,6 +1013,30 @@ function renderPersonaIcon(icon: PersonaIcon) {
           <path d="M8.5 11h7M8.5 14.5h4" />
         </svg>
       );
+    case "health":
+      return (
+        <svg {...common}>
+          <path d="M20.4 12.6a5.5 5.5 0 0 0-8.4-7 5.5 5.5 0 0 0-8.4 7L12 21z" />
+          <path d="M4 12h4l2-3 3 6 2-3h5" />
+        </svg>
+      );
+    case "finance":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M14.8 9.3a3 3 0 0 0-2.8-1.8c-1.7 0-3 1-3 2.2s1 1.8 3 2.2 3 1 3 2.2-1.3 2.2-3 2.2a3 3 0 0 1-2.8-1.8" />
+          <path d="M12 5.8v1.7M12 16.5v1.7" />
+        </svg>
+      );
+    case "creative":
+      return (
+        <svg {...common}>
+          <path d="M12 21a9 9 0 1 1 9-9c0 2-1.5 3-3 3h-2a2 2 0 0 0-1.5 3.3c.4.5.5 1.2.1 1.7-.6.7-1.6 1-2.6 1z" />
+          <circle cx="7.5" cy="11.5" r="0.6" />
+          <circle cx="10.5" cy="7.5" r="0.6" />
+          <circle cx="15" cy="8.5" r="0.6" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -936,7 +1047,7 @@ function getPersonaMatch(persona: PersonaPreset | null, consultant: ConsultantPr
     return null;
   }
 
-  if (getConsultantProfileType(consultant) !== persona.type) {
+  if (persona.type && getConsultantProfileType(consultant) !== persona.type) {
     return null;
   }
 
@@ -1187,6 +1298,14 @@ export function HomePage() {
     () =>
       [...homeConsultants]
         .sort((left, right) => {
+          // Стр. 1.1: the home showcase belongs to SPOTLIGHT-package profiles
+          // first (then Grow), before the admin-featured and top-rated ones.
+          const packageDiff =
+            getConsultantPackageRank(right) - getConsultantPackageRank(left);
+          if (packageDiff !== 0) {
+            return packageDiff;
+          }
+
           if (left.featured !== right.featured) {
             return left.featured ? -1 : 1;
           }
@@ -1206,11 +1325,12 @@ export function HomePage() {
       <section className="hero">
         <div className="container home-hero">
           <div className="hero__copy">
-            <p className="eyebrow">Консултации и менторство за кариера</p>
-            <h1>Избери своята следваща кариерна стъпка.</h1>
+            <p className="eyebrow">Понякога една среща променя живота</p>
+            <h1>Растежът започва от правилния човек.</h1>
             <p className="hero__lede">
-              GrowPoint свързва професионалисти с консултанти и ментори в подреден
-              каталог с ясни профили, фокус и свободни часове.
+              GrowPoint е платформа, която свързва хора с ментори, обучители,
+              консултанти и експерти от различни сфери. Разгледай профили, избери
+              подходящия специалист и резервирай среща според твоите цели.
             </p>
 
             <div className="hero-choice-grid" aria-label="Избери как искаш да използваш GrowPoint">
@@ -1269,6 +1389,7 @@ export function UsersPage() {
   const city = searchParams.get("city") || "";
   const kind = searchParams.get("kind") || "all";
   const topOnly = searchParams.get("top") === "1";
+  const recommendedOnly = searchParams.get("recommended") === "1";
   const persona = getPersonaById(searchParams.get("persona"));
   const { user } = useAuth();
   const { profile } = useViewerProfile();
@@ -1307,14 +1428,15 @@ export function UsersPage() {
   const rankedConsultants = useMemo(() => {
     return consultants
       .filter((consultant) => {
-        if (persona && getConsultantProfileType(consultant) !== persona.type) {
+        if (persona?.type && getConsultantProfileType(consultant) !== persona.type) {
           return false;
         }
         const matchesType =
           kind === "all" ||
           getConsultantProfileType(consultant) === kind;
-        const matchesTop = !topOnly || consultant.featured;
-        return matchesType && matchesTop;
+        // "Препоръчани профили": only profiles rated above 4.5 (per the doc).
+        const matchesRecommended = !recommendedOnly || consultant.rating >= 4.5;
+        return matchesType && matchesRecommended;
       })
       .map((consultant) => ({
         consultant,
@@ -1323,6 +1445,17 @@ export function UsersPage() {
           : getConsultantMatch(profile, consultant)
       }))
       .sort((left, right) => {
+        // "Водещи профили" / избрана област: Grow & Spotlight packages come
+        // before the rest (per the designer doc), Spotlight ahead of Grow.
+        if (topOnly || persona) {
+          const packageDiff =
+            getConsultantPackageRank(right.consultant) -
+            getConsultantPackageRank(left.consultant);
+          if (packageDiff !== 0) {
+            return packageDiff;
+          }
+        }
+
         const leftScore = left.match?.score || 0;
         const rightScore = right.match?.score || 0;
 
@@ -1336,14 +1469,17 @@ export function UsersPage() {
 
         return right.consultant.rating - left.consultant.rating;
       });
-  }, [consultants, kind, persona, profile, topOnly]);
+  }, [consultants, kind, persona, profile, recommendedOnly, topOnly]);
   const visibleConsultants = rankedConsultants;
   const hasActiveFilters = Boolean(
-    query || city || kind !== "all" || topOnly || persona
+    query || city || kind !== "all" || topOnly || recommendedOnly || persona
   );
   const activeFilterLabels = persona
-    ? [`Архетип: ${persona.name}`, ...buildDirectoryFilterLabels({ query, city, kind, topOnly })]
-    : buildDirectoryFilterLabels({ query, city, kind, topOnly });
+    ? [
+        `Област: ${persona.name}`,
+        ...buildDirectoryFilterLabels({ query, city, kind, topOnly, recommendedOnly })
+      ]
+    : buildDirectoryFilterLabels({ query, city, kind, topOnly, recommendedOnly });
   const profileCtaTo = user ? "/dashboard" : "/auth?tab=register";
   const isConsultantViewer = profile?.role === "consultant";
 
@@ -1352,12 +1488,14 @@ export function UsersPage() {
     city?: string;
     kind?: string;
     topOnly?: boolean;
+    recommendedOnly?: boolean;
     persona?: string | null;
   }) {
     const nextQuery = nextFilters.query ?? query;
     const nextCity = nextFilters.city ?? city;
     const nextKind = nextFilters.kind ?? kind;
     const nextTopOnly = nextFilters.topOnly ?? topOnly;
+    const nextRecommended = nextFilters.recommendedOnly ?? recommendedOnly;
     const nextPersona = nextFilters.persona ?? persona?.id ?? null;
 
     const params: Record<string, string> = {};
@@ -1365,6 +1503,7 @@ export function UsersPage() {
     if (nextCity) params.city = nextCity;
     if (nextKind !== "all") params.kind = nextKind;
     if (nextTopOnly) params.top = "1";
+    if (nextRecommended) params.recommended = "1";
     if (nextPersona) params.persona = nextPersona;
     return params;
   }
@@ -1378,6 +1517,7 @@ export function UsersPage() {
     city?: string;
     kind?: string;
     topOnly?: boolean;
+    recommendedOnly?: boolean;
     persona?: string | null;
   }) {
     setSearchParams(buildSearchParams(nextFilters));
@@ -1388,22 +1528,30 @@ export function UsersPage() {
       applyDirectoryFilters({ persona: null });
       return;
     }
-    applyDirectoryFilters({ persona: next.id, kind: next.type });
+    applyDirectoryFilters({ persona: next.id, kind: next.type || "all" });
+    // Per the designer doc: selecting an област scrolls straight to the results.
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        document
+          .getElementById("directory-results")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
+    }
   }
 
   return (
     <>
-      <section className="hero hero--centered">
+      <section className="hero hero--centered hero--compact">
         <div className="container">
           <div className="hero__copy">
-            <p className="eyebrow">За потребители</p>
-            <h1>Избираш консултант по съвпадение, тема и наличност.</h1>
+            <p className="eyebrow">За хората, които търсят</p>
+            <h1>Намери правилния човек за това, което искаш да постигнеш.</h1>
             <p className="hero__lede">
               {isConsultantViewer
                 ? "Това е потребителският изглед на GrowPoint. Подходящите професионалисти за теб се подреждат в профила и таблото ти."
                 : persona
-                  ? `Каталогът показва ${persona.type === "mentor" ? "ментори" : "консултанти"} за „${persona.name}".`
-                  : "Избери архетип по-долу или попълни профила си, за да виждаш по-подходящите експерти."}
+                  ? `Каталогът показва профили за „${persona.name}".`
+                  : "Избери област и разгледай специалистите, които могат да ти помогнат с конкретна цел, умение или предизвикателство. В какво искаш да се развиваш?"}
             </p>
           </div>
         </div>
@@ -1427,7 +1575,11 @@ export function UsersPage() {
                       {renderPersonaIcon(preset.icon)}
                     </span>
                     <span className="persona-card__type">
-                      {preset.type === "mentor" ? "Ментор" : "Консултант"}
+                      {preset.type
+                        ? preset.type === "mentor"
+                          ? "Ментор"
+                          : "Консултант"
+                        : "Област"}
                     </span>
                   </div>
                   <strong>{preset.name}</strong>
@@ -1446,18 +1598,18 @@ export function UsersPage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section" id="directory-results">
         <div className="container">
           <div className="directory-controls">
             <div className="filter-bar directory-filter-bar">
               <label>
-                Ключова дума
+                Какво търсиш?
                 <input
                   value={query}
                   onChange={(event) =>
                     applyPresetQuery(event.target.value)
                   }
-                  placeholder="Executive CV, интервю, leadership, кариерна промяна..."
+                  placeholder="AI, интервю, фитнес, инвестиции, лидерство…"
                 />
               </label>
               <label>
@@ -1473,7 +1625,7 @@ export function UsersPage() {
             </div>
 
             <div className="search-shortcuts directory-switches">
-              <span className="search-shortcuts__label">Тип профил</span>
+              <span className="search-shortcuts__label">Търся</span>
               <div className="search-shortcuts__list">
                 {(
                   [
@@ -1494,11 +1646,20 @@ export function UsersPage() {
                   </button>
                 ))}
                 <button
+                  className={`shortcut-chip ${recommendedOnly ? "shortcut-chip--active" : ""}`}
+                  type="button"
+                  onClick={() =>
+                    applyDirectoryFilters({ recommendedOnly: !recommendedOnly })
+                  }
+                >
+                  Препоръчани профили
+                </button>
+                <button
                   className={`shortcut-chip ${topOnly ? "shortcut-chip--active" : ""}`}
                   type="button"
                   onClick={() => applyDirectoryFilters({ topOnly: !topOnly })}
                 >
-                  Само водещи профили
+                  Водещи профили
                 </button>
               </div>
             </div>
@@ -1516,7 +1677,7 @@ export function UsersPage() {
                   <button
                     className="ghost-button"
                     type="button"
-                    onClick={() => applyDirectoryFilters({ query: "", city: "", kind: "all", topOnly: false, persona: null })}
+                    onClick={() => applyDirectoryFilters({ query: "", city: "", kind: "all", topOnly: false, recommendedOnly: false, persona: null })}
                     disabled={!hasActiveFilters}
                   >
                     Изчисти филтрите
@@ -1550,7 +1711,7 @@ export function UsersPage() {
               title="Няма съвпадения за избраните филтри"
               message="Разшири търсенето или изчисти филтрите."
               actionLabel="Изчисти филтрите"
-              onAction={() => applyDirectoryFilters({ query: "", city: "", kind: "all", topOnly: false, persona: null })}
+              onAction={() => applyDirectoryFilters({ query: "", city: "", kind: "all", topOnly: false, recommendedOnly: false, persona: null })}
             />
           ) : null}
 
@@ -4446,11 +4607,14 @@ export function DashboardPage() {
 
           <Link className="dashboard-ad" to="/contact" aria-label="Рекламно пространство">
             <span className="dashboard-ad__tag">Реклама</span>
-            <img
-              src={resolvePublicUrl("/assets/advertisement/4.jpg")}
-              alt=""
-              loading="lazy"
-            />
+            <div className="dashboard-ad__placeholder">
+              <span className="dashboard-ad__brand" aria-hidden="true">
+                GrowPoint
+              </span>
+              <strong>Рекламно пространство за партньори</strong>
+              <p>Представи своя бранд пред хората, които активно търсят развитие.</p>
+              <em>Свържи се с нас →</em>
+            </div>
           </Link>
 
           {profile.role === "consultant" && consultantProfile ? (
@@ -4574,9 +4738,69 @@ export function DashboardPage() {
             </div>
           </section>
 
-          {profile.plan !== "pro" ? (
+          {profile.role === "consultant" ? (
             <section
-              className={`panel upgrade-preview-card upgrade-preview-card--${profile.role}`}
+              className="panel upgrade-preview-card upgrade-preview-card--consultant"
+              id="upgrade"
+              aria-label="Развий своя GrowPoint профил"
+            >
+              <p className="eyebrow">Пакети за експерти</p>
+              <h2>Развий своя GrowPoint профил</h2>
+              <p className="section-caption">
+                Покажи експертизата си пред повече хора и отключи допълнителни
+                възможности за представяне и позициониране.
+              </p>
+              <div className="package-plans">
+                {PACKAGE_PLANS.map((plan) => {
+                  const isCurrent =
+                    (consultantProfile?.packageTier || "start") === plan.tier;
+                  return (
+                    <article
+                      className={`package-plan package-plan--${plan.tier} ${
+                        isCurrent ? "package-plan--current" : ""
+                      }`}
+                      key={plan.tier}
+                    >
+                      <header className="package-plan__head">
+                        <p className="eyebrow">{plan.level}</p>
+                        <h3>{plan.name}</h3>
+                        <p className="form-note">{plan.tagline}</p>
+                      </header>
+                      <p>{plan.description}</p>
+                      <ul className="package-plan__features">
+                        {plan.features.map((feature) => (
+                          <li key={feature}>{feature}</li>
+                        ))}
+                      </ul>
+                      <div className="package-plan__footer">
+                        <strong>{plan.price}</strong>
+                        {isCurrent ? (
+                          <span className="status-badge status-badge--success">
+                            Текущ пакет
+                          </span>
+                        ) : (
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            disabled
+                            title="Онлайн плащането се подготвя — пиши ни на contactus@growpoint.bg за активиране."
+                          >
+                            Очаквай скоро
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+              <p className="form-note">
+                Онлайн плащането се подготвя. За активиране на пакет междувременно —{" "}
+                <Link to="/contact">свържи се с нас</Link>.
+              </p>
+            </section>
+          ) : profile.plan !== "pro" ? (
+            <section
+              className="panel upgrade-preview-card upgrade-preview-card--client"
               id="upgrade"
               aria-label="Надграждане до GrowPoint Pro"
             >
@@ -4584,31 +4808,18 @@ export function DashboardPage() {
                 <span>Скоро</span>
               </span>
               <p className="eyebrow">Скоро · GrowPoint Pro</p>
-              <h2>
-                {profile.role === "consultant"
-                  ? "Надгради до Pro профил за повече видимост"
-                  : "Надгради до GrowPoint Pro"}
-              </h2>
+              <h2>Надгради до GrowPoint Pro</h2>
               <p className="section-caption">
-                {profile.role === "consultant"
-                  ? "Pro профилите се открояват в каталога и отключват повече начини за представяне."
-                  : "Pro акаунтът ще ти даде повече инструменти, за да намериш правилния консултант по-бързо."}
+                Pro акаунтът ще ти даде повече инструменти, за да намериш правилния
+                консултант по-бързо.
               </p>
               <div className="upgrade-preview-card__benefits">
-                {(profile.role === "consultant"
-                  ? [
-                      "Подреждане над стандартните профили",
-                      "Цветова тема на профила",
-                      "Повече снимки и разширено представяне",
-                      "Значка за доверен профил"
-                    ]
-                  : [
-                      "Запазени и приоритетни консултанти",
-                      "Разширена история на сесиите",
-                      "По-бърза връзка с консултанти",
-                      "Ранен достъп до нови функции"
-                    ]
-                ).map((benefit) => (
+                {[
+                  "Запазени и приоритетни консултанти",
+                  "Разширена история на сесиите",
+                  "По-бърза връзка с консултанти",
+                  "Ранен достъп до нови функции"
+                ].map((benefit) => (
                   <span className="chip chip--soft" key={benefit}>
                     {benefit}
                   </span>
@@ -6962,11 +7173,20 @@ function ConsultantCard({
     >
       <div className="consultant-card__body">
         <div className="consultant-card__portrait">
-          <AvatarMedia
-            className="consultant-card__avatar"
-            src={consultant.avatarUrl}
-            name={consultant.name}
-          />
+          <span className="consultant-card__avatar-wrap">
+            <AvatarMedia
+              className="consultant-card__avatar"
+              src={consultant.avatarUrl}
+              name={consultant.name}
+            />
+            {getConsultantPackageBadge(consultant) ? (
+              <span
+                className={`package-badge package-badge--${getConsultantPackageTier(consultant)}`}
+              >
+                {getConsultantPackageBadge(consultant)}
+              </span>
+            ) : null}
+          </span>
           <div className="chip-row consultant-card__status-row">
             <span className="plan-pill">
               {formatConsultantTypeLabel(getConsultantProfileType(consultant))}

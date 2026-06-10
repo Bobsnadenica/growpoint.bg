@@ -7,6 +7,7 @@ import type {
   Booking,
   BookingMessage,
   ConsultantMediaKind,
+  ConsultantPackageTier,
   ConsultantProfile,
   ConsultantProfileStatus,
   ConsultantProfileType,
@@ -515,6 +516,24 @@ export const api = {
     }>(
       `/admin/consultants/${encodeURIComponent(consultantId)}/featured`,
       { method: "PUT", body: JSON.stringify({ featured }) },
+      token
+    );
+  },
+
+  async adminSetConsultantPackage(
+    token: string,
+    consultantId: string,
+    packageTier: ConsultantPackageTier
+  ) {
+    return request<{
+      consultantId: string;
+      packageTier: ConsultantPackageTier;
+      packageSource?: string;
+      packageUpdatedAt?: string;
+      packageUpdatedByEmail?: string;
+    }>(
+      `/admin/consultants/${encodeURIComponent(consultantId)}/package`,
+      { method: "PUT", body: JSON.stringify({ packageTier }) },
       token
     );
   },

@@ -43,7 +43,7 @@ function brandMark() {
 
 const primaryNavigation = [
   { to: "/", label: "Начало" },
-  { to: "/users", label: "За потребители" }
+  { to: "/users", label: "За хората, които търсят" }
 ] as const;
 
 const footerLinks = [

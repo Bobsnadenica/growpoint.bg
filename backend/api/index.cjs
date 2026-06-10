@@ -1348,8 +1348,27 @@ const PUBLIC_CONSULTANT_HIDDEN_FIELDS = [
   "deletionScheduledAt",
   "avatarStorageKey",
   "heroStorageKey",
-  "priceBgn"
+  "priceBgn",
+  // Package business internals stay private; only the tier itself is public.
+  "packageSource",
+  "packageUpdatedAt",
+  "packageUpdatedBy",
+  "packageUpdatedByEmail"
 ];
+
+// Visibility packages (Start / Grow / Spotlight). Profiles created before the
+// package model (or never assigned one) are grandfathered as "start".
+const CONSULTANT_PACKAGE_TIERS = ["start", "grow", "spotlight"];
+
+function normalizeConsultantPackageTier(value, fallback = "start") {
+  const tier = String(value || "").trim().toLowerCase();
+  return CONSULTANT_PACKAGE_TIERS.includes(tier) ? tier : fallback;
+}
+
+function getConsultantPackageRank(item) {
+  const tier = normalizeConsultantPackageTier(item?.packageTier);
+  return tier === "spotlight" ? 2 : tier === "grow" ? 1 : 0;
+}
 
 function stripSensitiveConsultantFields(consultant) {
   if (!consultant) return consultant;
@@ -1357,6 +1376,7 @@ function stripSensitiveConsultantFields(consultant) {
   for (const key of PUBLIC_CONSULTANT_HIDDEN_FIELDS) {
     delete cleaned[key];
   }
+  cleaned.packageTier = normalizeConsultantPackageTier(cleaned.packageTier);
   return cleaned;
 }
 
@@ -1844,6 +1864,12 @@ async function listConsultants(event) {
   });
 
   const orderedItems = [...items].sort((left, right) => {
+    // Paid visibility first: Spotlight ahead of Grow ahead of Start (Стр. 6 —
+    // "по-предно позициониране в каталога" / "приоритетно позициониране").
+    const packageDiff = getConsultantPackageRank(right) - getConsultantPackageRank(left);
+    if (packageDiff !== 0) {
+      return packageDiff;
+    }
     if (left.featured !== right.featured) {
       return left.featured ? -1 : 1;
     }
@@ -4176,6 +4202,8 @@ async function listConsultantsForAdmin(event) {
         profileStatus: item.profileStatus || "approved",
         isPublic: item.isPublic !== false,
         featured: Boolean(item.featured),
+        packageTier: normalizeConsultantPackageTier(item.packageTier),
+        packageSource: item.packageSource || "",
         membershipTier: item.membershipTier || "standard",
         avatarUrl,
         experienceYears: item.experienceYears || 0,
@@ -4321,6 +4349,62 @@ async function setConsultantStatus(event) {
     statusUpdatedBy: updated.statusUpdatedBy,
     statusUpdatedByEmail: updated.statusUpdatedByEmail,
     statusSelfApproved: updated.statusSelfApproved
+  });
+}
+
+// Admin-assigned visibility package (Стр. 6). Until Stripe checkout exists this
+// is the only way a profile gets Grow/Spotlight — the admin grants it (e.g. a
+// promotional arrangement), recorded as packageSource: "granted".
+async function setConsultantPackage(event) {
+  const claims = requireAdmin(event);
+  const body = parseBody(event);
+  const consultantId = event.pathParameters?.consultantId;
+
+  if (!consultantId) {
+    return badRequest("consultantId is required.");
+  }
+
+  const packageTier = normalizeConsultantPackageTier(body.packageTier, null);
+
+  if (!packageTier) {
+    return badRequest("packageTier must be one of: start, grow, spotlight.");
+  }
+
+  const existing = await dynamo.send(
+    new GetCommand({
+      TableName: env.consultantsTable,
+      Key: { consultantId }
+    })
+  );
+
+  if (!existing.Item) {
+    return notFound("Consultant not found.");
+  }
+
+  const now = new Date().toISOString();
+  const updated = {
+    ...existing.Item,
+    packageTier,
+    packageSource: packageTier === "start" ? "" : "granted",
+    packageUpdatedAt: now,
+    packageUpdatedBy: claims.sub,
+    packageUpdatedByEmail: claims.email || "",
+    updatedAt: now
+  };
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: env.consultantsTable,
+      Item: updated
+    })
+  );
+
+  return response(200, {
+    consultantId: updated.consultantId,
+    packageTier: updated.packageTier,
+    packageSource: updated.packageSource,
+    packageUpdatedAt: updated.packageUpdatedAt,
+    packageUpdatedByEmail: updated.packageUpdatedByEmail
   });
 }
 
@@ -4560,6 +4644,12 @@ exports.handler = async (event) => {
     if (method === "PUT" && adminFeaturedMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), consultantId: adminFeaturedMatch[1] };
       return await setConsultantFeatured(event);
+    }
+
+    const adminPackageMatch = /^\/admin\/consultants\/([^/]+)\/package$/.exec(path);
+    if (method === "PUT" && adminPackageMatch) {
+      event.pathParameters = { ...(event.pathParameters || {}), consultantId: adminPackageMatch[1] };
+      return await setConsultantPackage(event);
     }
 
     const adminGetMatch = /^\/admin\/consultants\/([^/]+)$/.exec(path);
