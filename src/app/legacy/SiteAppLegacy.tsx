@@ -6959,14 +6959,15 @@ function ConsultantCard({
               </span>
             ) : null}
           </span>
-          <div className="chip-row consultant-card__status-row">
-            <span className="plan-pill">
-              {formatConsultantTypeLabel(getConsultantProfileType(consultant))}
-            </span>
-            {consultant.featured ? <span className="status-badge">Подбран</span> : null}
-            {consultant.isExample ? <ExampleBadge /> : null}
-            {match ? <span className="plan-pill">{match.score}%</span> : null}
-          </div>
+        </div>
+
+        <div className="chip-row consultant-card__status-row">
+          <span className="plan-pill">
+            {formatConsultantTypeLabel(getConsultantProfileType(consultant))}
+          </span>
+          {consultant.featured ? <span className="status-badge">Подбран</span> : null}
+          {consultant.isExample ? <ExampleBadge /> : null}
+          {match ? <span className="plan-pill">{match.score}%</span> : null}
         </div>
 
         <div className="consultant-card__identity">

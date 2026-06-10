@@ -4994,19 +4994,10 @@ textarea {
   }
 }
 
+/* The type/featured/example chips sit in a neat row below the photo
+   (owner request) instead of overlaying it. */
 .consultant-card__status-row {
-  position: absolute;
-  inset: auto 12px 12px;
-  margin: 0;
-  pointer-events: none;
-}
-
-.consultant-card__status-row > * {
-  pointer-events: auto;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  background-color: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  margin: -6px 0 10px;
 }
 
 .consultant-card__status-row .status-badge {
