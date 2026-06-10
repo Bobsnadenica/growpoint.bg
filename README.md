@@ -63,60 +63,32 @@ Important SEO nuance:
 
 ## Production Feature Status and Roadmap
 
-Last QA pass: 2026-06-08 on `https://www.growpoint.bg`, the CloudFront test domain, and the live AWS API. Controlled live QA runs use disposable Cognito users, a disposable consultant profile, temporary S3 objects, and disposable bookings, all removed afterwards (cleanup verified).
+**Current status (2026-06-10):** the platform is live on `https://www.growpoint.bg` (GitHub Pages) with a CloudFront test domain ready for the DNS cutover. Social login works via the Cognito hosted UI (**Google, LinkedIn, Apple**). The expert **package model Start / Grow / Spotlight** is live (admin-grantable; Stripe checkout pending — Цецо). The June designer/tester change-request document is fully implemented (new copy, 7 области, package badges/ordering, 3-tier pricing card). Every push runs CI (secret scan + build + terraform validate).
 
-### 2026-06-10 pass (Sprint R1 — designer/tester change-request doc)
+### Changelog (June 2026, condensed)
 
-Executed the full "Webpage - text" change document from the testers/designers:
+- **2026-06-10 · owner feedback round 2:** overlays (photo lightbox + all modals) fixed — they now render via a portal to `<body>` so they are true fullscreen popups above the sticky header (previously a CSS specificity bug pinned them into the page); form field pairs top-aligned (Име/Имейл); age limited to **18–95** (input + backend); **Документи moved out of the profile** to a header files icon + dedicated `/files` page with upload and share-with-consultants; the dashboard ad box now rotates the real creatives from `assets/advertisement/`; the in-profile Известия panel removed (header bell + `/notifications` cover it).
+- **2026-06-10 · Sprint R1 (designer/tester doc):** new positioning copy site-wide (hero „Растежът започва от правилния човек.", nav „За хората, които търсят", choice cards, auth role cards, directory labels); the 6 archetypes became **7 области** with auto-scroll to results; **package model** `packageTier`/`packageSource` (legacy profiles grandfathered as Start), catalog orders Spotlight → Grow first, photo badges („Препоръчан експерт" / „GrowPoint суперзвезди"), admin grant endpoint `PUT /admin/consultants/{id}/package` + admin UI; directory „Препоръчани (≥4.5)" / „Водещи" buttons + 50% shorter card photos; 3-tier pricing card (9.99 / 29.99 / 99.99 €/мес) with current tier marked and Stripe buttons stubbed.
+- **2026-06-09:** sessions popup (both roles); dedicated `/messages` + `/notifications` pages; interactive booking **calendar** (users pick day → hour; consultants toggle availability on the same grid); public consultant profile owner-edit links; **shareable member cards** `/u/:id` backed by `GET /public/users/{id}` (safe fields, unlisted/noindex); social onboarding role choice (`setRole` in bootstrap — group stays authoritative, no silent demotion) + provider prefill + city/occupation step; **Apple sign-in configured** (Services-ID `client_id`; handoff verified to `appleid.apple.com`); mobile fixes (sticky табло, popup overflow); contact channels `contactus@`/`partnership@`/`legal@` (ImprovMX inbound).
+- **2026-06-08:** Google + LinkedIn login live (Cognito hosted UI); social onboarding modal; `consultants`/`clients` Cognito groups authoritative in bootstrap; dark-theme fixes; beta tape removed; archetype icons; repo hygiene (`dist/` untracked, clean `terraform plan`).
+- **2026-06-06/07:** CloudFront per-route SEO + function; public-API cache headers; demo-availability refresher; 27/27 live lifecycle QA (signup → booking → messages → reviews) with disposable data cleaned up; `.gitignore` secrets hardening.
 
-- **New positioning copy site-wide (verbatim from the doc):** nav "За хората, които търсят"; home hero "Понякога една среща променя живота" / "Растежът започва от правилния човек." + new lede; choice cards "Търся насока" („Намери GrowPoint човек") and "Аз съм правилният човек" („Стани част от GrowPoint"); auth role cards "Търся правилния човек" / "Помагам на други да растат"; directory labels "Какво търсиш?" (+ new placeholder) and "Търся".
-- **Области rework (/users):** the 6 archetypes became the doc's **7 области** (Кариера и лидерство, Бизнес и предприемачество, AI и технологии, Комуникация и личностно развитие, Здраве и спорт, Финанси, Творчески и практически умения) with new descriptions, tags and 3 new icons; compact hero so the области fit above the fold; selecting one **auto-scrolls to the results**.
-- **Package model (Start / Grow / Spotlight):** new `packageTier` + `packageSource` on consultant profiles (legacy profiles grandfathered as Start — verified live); catalog orders Spotlight → Grow first; **package badges on photos** („Препоръчан експерт" for Grow, „GrowPoint суперзвезди" for Spotlight); new admin endpoint `PUT /admin/consultants/{id}/package` + admin UI select so a package can be **granted promotionally without payment**. The "public only with package" gate is deliberately deferred until Stripe is live (would empty the directory today).
-- **Directory:** „Препоръчани профили" (rating ≥ 4.5) and „Водещи профили" (package-first) buttons; card photos ~50% shorter so text fits without scroll.
-- **Pricing UI (dashboard, consultants):** „Развий своя GrowPoint профил" with the 3 doc plans (9.99 / 29.99 / 99.99 € / месец), full feature lists, current tier marked; pay buttons disabled until Stripe (handoff: Цецо — webhook should apply `setConsultantPackage` with `packageSource: "purchased"`).
-- **Home:** the showcase row prefers Spotlight (then Grow) profiles; same smaller photos.
-- **Post-login polish:** modal heights use `dvh` (mobile-safe centering); bigger onboarding avatar; табло stats alignment fixed; the stale **CareerLane ad banner replaced with a code-rendered GrowPoint banner** (both provided ad images are CareerLane-branded — a GrowPoint og-image asset is still needed from the designers).
+### What's next / open issues (single consolidated list)
 
-### 2026-06-09 pass (engagement features + Apple prep)
-
-- **"Предстоящи сесии" is now a popup** for both consultants and users — opened from a top action button in the dashboard overview and the sidebar nav, instead of living inline in the profile body.
-- **Dedicated `/messages` and `/notifications` pages.** The header message/notification popover (and its "Виж всички" link) now deep-link to these pages. `/notifications` is a full, category-colour-coded list with mark-all-read that syncs the header badge; `/messages` is a conversations-by-booking inbox (list → thread → reply) for confirmed sessions. Both show a login prompt when signed out.
-- **Interactive booking calendar.** A new shared month-grid component (`src/app/legacy/AvailabilityCalendar.tsx`) replaces the flat slot list. Users pick a day → see free hours → select; consultants tap day+hour to add/remove availability. The weekly-pattern bulk composer is kept under a collapsible section.
-- **Profile:** top action buttons (Документи / Свободни часове / Предстоящи сесии) in the dashboard overview; the public consultant profile detects the owner (`ownerUserId`) and shows an owner note plus per-section "Редактирай" links back to the dashboard editor.
-- **Shareable member profiles (NEW):** every user now has a public, link-shareable card at `/u/:userId`, backed by `GET /public/users/{id}` (safe fields only — name, avatar, city, occupation, headline, bio, experience, skills, interests; never email/age/goals/documents). The dashboard has a "Сподели профила" button (consultants share their `/consultants/:slug`, clients share `/u/:id`) and a "Виж публичния си профил" link; the card shows an owner "Редактирай профила" button when you view your own. Profiles are unlisted (`noindex`, resolvable only via the share link).
-- **Social onboarding completeness:** the provider sign-up step now prefills name + photo from the provider account and collects optional city/occupation before finishing (passed into `/auth/bootstrap`).
-- **Apple sign-in: configured (deploy pending).** The Apple IdP is now live in Cognito (`terraform apply`), and the live `/oauth2/authorize` handoff reaches `appleid.apple.com` with no `redirect_uri`/`invalid_client` error. Note: Cognito's web flow uses the Apple **Services ID** as `client_id` (`com.growpoint.growpointloginservice`), not the native Bundle ID — this was corrected. `VITE_COGNITO_SOCIAL_PROVIDERS` now includes `Apple`, so the button enables once the rebuilt bundle is deployed. All Apple secrets (Key ID, Team ID, `.p8`) stay only in the gitignored `terraform.tfvars`.
-- **Contact:** channels are `contactus@` (general), `partnership@` (partnerships + ads), and `legal@` (legal + data) `@growpoint.bg`; inbound mail forwards via ImprovMX (see the Mail note above).
-- **Post-launch fixes (after going live):** (1) the social-onboarding dashboard popup no longer overflows its border on mobile; (2) the dashboard sidebar (and profile/booking asides) are no longer `sticky` in the single-column mobile layout, so they scroll with the page; (3) the onboarding popup now lets social signups **choose user vs. consultant** — `bootstrapUser` gained a `setRole` flag so the choice is applied (Cognito group stays authoritative; routine bootstrap calls never demote an existing user), and choosing consultant creates the consultant draft. Full Cognito group sync for social roles is deferred (see backlog).
-
-#### What's next / open issues
-
-| Item | Priority | Status / note |
+| Item | Priority | Note |
 | --- | --- | --- |
-| Deploy frontend bundle (commit+push + `npm run deploy:cloudfront`) | P0 | All 2026-06-09 + 2026-06-10 UI is staged & built; backend (incl. package endpoint), Cognito and CORS are already live via Terraform |
-| Stripe checkout for packages (Цецо) | P0 | Buttons disabled until then; webhook should apply `setConsultantPackage` with `packageSource: "purchased"`; then enable the visibility gate per the doc |
-| GrowPoint-branded og-image + ad assets | P1 | Both provided ad images are CareerLane-branded; dashboard banner now code-rendered, but `assets/advertisement/3.jpg` remains the SEO og-image fallback for demo profiles |
+| CloudFront DNS cutover (`www` + apex) | P0 | jethost.bg ACM validation + alias switch; also brings HTTP security headers (HSTS/X-Frame-Options) that GitHub Pages cannot send |
+| Stripe checkout for packages (Цецо) | P0 | Buttons disabled until then; webhook should call `setConsultantPackage` with `packageSource: "purchased"`; afterwards enable the visibility gate from the designer doc |
+| SES transactional email sender | P0 | Blocked on jethost.bg DNS records + SES production access; app falls back to in-app notifications |
 | Package visibility gate ("public only with package/approval") | P1 | Deferred until Stripe is live — enforcing now would empty the directory; admin grant path already works |
-| Real Apple sign-in on the live origin | P1 | Cognito side verified (handoff → `appleid.apple.com`); a real Apple account sign-in not yet done |
-| Logged-in visual pass on prod | P1 | Sessions modal, `/messages` reply, consultant pick-calendar, social complete-profile, dashboard share, member owner-edit — all auth-gated (can't reach prod API from localhost) |
-| Rich social preview for `/u/:id` | P2 | SPA sets OG client-side; non-JS scrapers won't render the card. Needs static prerender for `/u` routes (like consultants). Currently `noindex` (link-only) by design |
-| Member card privacy toggle | P2 | `/public/users/{id}` exposes safe fields for any user by sub (unlisted). No opt-out flag yet |
-| Cognito group sync for social roles | P2 | role is set in DynamoDB (authoritative in bootstrap); adding users to the `consultants`/`clients` Cognito groups needs the cognito-idp SDK + IAM + `USER_POOL_ID` env — deferred to avoid backend `node_modules` bloat |
-| SES transactional email sender | P1 | Still blocked on DNS + SES production access; app falls back to in-app notifications |
-| Admin destructive-action browser QA | P2 | Approve/reject/delete/message not exercised in a browser this pass |
-| Cold-start API latency (~1–2s first hit) | P2 | Consider a warmer/lighter path |
-| Repo bloat: `backend/api/node_modules` committed | P2 | Hygiene |
-
-### 2026-06-08 pass (social login + UI polish)
-
-- **Social login is live:** Google and LinkedIn sign-in work through the Cognito hosted UI (`growpoint-auth.auth.eu-west-1.amazoncognito.com`). The live `/oauth2/authorize` handoff for both providers reaches the provider consent screen with no `redirect_uri` error. Apple is wired in code but not configured (its button shows "Скоро").
-- **Social onboarding:** brand-new Google/LinkedIn accounts get a one-time dashboard modal to confirm their name, upload a profile photo, and add city/occupation (role defaults to client). Returning users and email/password signups are unaffected.
-- **UI fixes:** the beta "caution tape" banner was removed site-wide; dark-mode readability was fixed across the dashboard/profile/modal surfaces; the consultant banner now fills its area (`object-fit: cover`) so vertical uploads no longer leave gaps, and the upload field states the recommended size (1600×700, landscape).
-- **Repo hygiene:** `dist/` build output is no longer tracked, and the Cognito Google/LinkedIn identity-provider Terraform resources no longer show a phantom perpetual diff (`terraform plan` is clean).
-- **Roles & groups:** added `consultants` and `clients` Cognito groups; `/auth/bootstrap` treats group membership as authoritative — `consultants` → mentor (+ consultant draft), `clients` → regular user (also demotes), `consultants` wins if both are set. So a manually-created Cognito user can be designated either way by assigning a group (picked up on next login). `admin` remains a separate group; no group falls back to the registration choice / `client`.
-- **UI polish:** the 6 archetype cards on the users page now use distinct icons (document, leadership, transition, product, data, communication) instead of letter codes; dark-mode readability fixed on the personal-profile sidebar/overview/documents zone (they layered an opaque white gradient) and the hero glow; consultant banner fills (object-fit cover) with an upload-size hint.
-
-Earlier passes (2026-06-07) shipped CloudFront per-route SEO, public-API cache headers (`max-age=60, stale-while-revalidate=300`), demo-availability refresh, and a full 27/27 live lifecycle suite (signup, login, consultant profile, media, booking lifecycle, messages, documents, reviews, notifications) with disposable data cleaned up.
+| LinkedIn login for emails that already have an account | P1 | The auth page now shows the exact error; if it is the collision case, add a PreSignUp account-linking trigger (owner to confirm from the banner text) |
+| Real Apple sign-in on the live origin | P1 | Cognito handoff verified; a real Apple account sign-in not yet done |
+| Admin browser QA (approve/reject/delete/message) + quality checklist | P1 | Admin is the production safety gate; destructive actions still need a browser pass with a disposable profile |
+| CloudWatch alarms + API Gateway throttling/concurrency cap | P1 | Monitoring/rate-limiting are thin; public endpoints unthrottled |
+| GrowPoint-branded og-image + stable public image derivatives | P2 | `assets/advertisement/3.jpg` (a CareerLane creative) is the SEO og-image fallback; real avatars are short-lived signed URLs |
+| `/u/:id` rich social preview + member-card privacy opt-out | P2 | OG set client-side only (link-only by design); no opt-out flag yet |
+| Cognito group sync for social roles | P2 | Role lives in DynamoDB (authoritative); group mirroring needs cognito-idp SDK + IAM |
+| Reminder-timing observation; directory pagination/search indexes; mobile notification sheet; cold-start latency; `backend/api/node_modules` in repo | P2 | Operational/scale carry-overs |
 
 ### Security and Secrets (public repository)
 
@@ -173,6 +145,7 @@ Do not mark a feature as production-ready unless it has either live browser evid
 
 | Date | Scope | Evidence | Result | Follow-up |
 | --- | --- | --- | --- | --- |
+| 2026-06-10 | Owner feedback round 2 + push | Overlay portal fix (lightbox/modals fullscreen above header — CSS specificity root-caused + reproduced), form alignment fix (Име/Имейл measured equal), age 18–95 (frontend+backend, Lambda redeployed), `/files` page + header icon verified with live data, ad asset rotation, Известия panel removed; all gates green (build/tsc/`node --check`/fmt/secret scan); CORS temp-QA reverted & verified | Passed | Owner to retest LinkedIn (error banner now explains the cause); Цецо on Stripe. |
 | 2026-06-10 | Sprint R1 — designer/tester doc | New copy site-wide (verbatim DOM-checked), 7 области + auto-scroll, package model Start/Grow/Spotlight (grandfathered, catalog ordering live, admin grant endpoint + UI), directory Препоръчани (≥4.5, verified min 4.6)/Водещи buttons, photo badges, −50% card photos, 3-tier pricing card with current tier marked, CareerLane banner eliminated; 0 overflow / 0 console errors at 1280+375; build/fmt/secret-scan/`node --check` all pass; CORS temp-enabled for QA then reverted & re-verified | Passed (build + live backend + preview verification) | Owner to deploy frontend; Цецо to wire Stripe; designers to deliver GrowPoint og-image/ad assets. |
 | 2026-06-09 | Engagement features + Apple + shareable member profiles | Sessions popup (both roles), `/messages` + `/notifications` pages, interactive book/pick calendar, profile owner-edit + top buttons, social complete-profile step, Apple IdP live in Cognito (Services-ID `client_id` corrected, handoff verified to `appleid.apple.com`), new public `/u/:id` member card + `GET /public/users/{id}`; full check: `tsc`/`node --check`/`terraform validate`+`fmt`/`npm run build` all pass, `npm run smoke:prod` 14/14 (run `p0p78jtr90k`), CORS rejects localhost, member page verified in preview browser | Passed (build + smoke + public render + Apple handoff) | Owner to deploy, then a logged-in pass (sessions modal, messages reply, pick-calendar, social step, member owner-edit) and a real Apple sign-in. |
 | 2026-06-08 | Social login + UI polish | Google + LinkedIn IdPs created (Terraform), hosted-UI domain ACTIVE, live `/oauth2/authorize` handoff reaches both consent screens; onboarding modal, dark-theme, banner, and beta-tape-removal builds; `npm run smoke:prod` 14/14 | Passed | Owner to run a real Google/LinkedIn end-to-end sign-in and verify the onboarding modal + dark `/dashboard`. |
@@ -195,31 +168,6 @@ Do not mark a feature as production-ready unless it has either live browser evid
 | 2026-06-07 | Theme transition polish | CloudFront desktop browser, admin header | Passed; toggle is far-right after `Изход`, transition class appears and clears | Re-test on mobile after the next dashboard/admin UI pass. |
 | 2026-06-07 | CloudFront safe smoke | `node scripts/smoke-production.mjs --cloudfront`, run `kvt8pass97n` | Passed 15/15 | Re-test after custom-domain DNS cutover. |
 | 2026-06-07 | `www` safe smoke | `npm run smoke:prod`, run `vn2b02sz37` | Passed 14/14 | Continue until DNS cutover, then point the same smoke at CloudFront aliases. |
-
-### Needs Testing Next
-
-| Priority | Area | Test Needed | Why It Matters |
-| --- | --- | --- | --- |
-| P0 | CloudFront DNS cutover | Add ACM validation records in jethost.bg, attach the issued certificate to CloudFront aliases, then point `www` and apex to CloudFront | Users may type the apex domain directly, and CloudFront is needed for live SPA fallback. |
-| P0 | Email DNS, SES production access, and inbox content | Add SES verification/DKIM DNS records, obtain SES production access, set GrowPoint sender variables, then inspect real verification, reset, booking, admin message, and reminder emails | API acceptance and in-app notifications do not prove transactional email delivery or professional inbox rendering. |
-| P1 | Admin actions | Browser-test approve, reject, preview, message, and delete with a disposable consultant | Admin is the production safety gate for profile quality. |
-| P1 | Documents sharing UI | Browser-test upload, share after confirmed booking, consultant access, and unrelated-user rejection from the visible dashboard UI | API privacy is verified; real users still need a polished, understandable UI path. |
-| P1 | Mobile logged-in UX | Test dashboard, notifications, messages, booking actions, and profile pages on phone widths | Most real users may interact from phones. |
-| P2 | Reminder timing | Observe reminder notifications/emails around a real upcoming confirmed session | Time-based workflows are hard to prove through immediate smoke tests. |
-| P2 | Media browser preview | Consultant avatar/cover public display, lightbox, and admin preview with a real photo | Profile trust depends heavily on real photos. |
-
-### Improvement Backlog
-
-| Priority | Improvement | Current Gap |
-| --- | --- | --- |
-| P0 | Finish CloudFront custom-domain cutover | AWS S3/CloudFront hosting is prepared, but jethost.bg DNS validation/cutover is still required. |
-| P0 | Finish GrowPoint SES sender setup | Terraform can output SES domain verification/DKIM records, but jethost.bg DNS and SES production access are still required before backend emails can send reliably from `contactus@growpoint.bg`. |
-| P1 | Add CloudWatch alarms and API Gateway throttling | MVP infrastructure works, but production monitoring is thin. |
-| P1 | Expand repeatable production smoke scripts | Core public, CloudFront, media, documents, booking lifecycle, messages, reviews, admin featured selection, and cleanup are covered; admin approve/reject/delete browser flows, mobile visual checks, email inbox checks, and reminders still need coverage. |
-| P1 | Add stable public profile image derivatives | SEO/social metadata avoids signed URLs by using a fallback image. |
-| P1 | Add admin quality checklist and rights hardening | Incomplete/self-approved profiles are hidden, and homepage featuring exists, but admin needs stronger publishing guidance, delete flow QA, finer-grained permissions, and clearer audit views. |
-| P2 | Add mobile notification sheet | Desktop top-bar popovers work; mobile still depends on dashboard navigation. |
-| P2 | Add pagination/search indexes for consultants | Current directory is fine for MVP volume, not for large-scale search. |
 
 ## 2. Repository Structure
 
@@ -319,6 +267,7 @@ Routes include:
 - `/dashboard`
 - `/messages`
 - `/notifications`
+- `/files` (header files icon — upload + share documents)
 - `/about`
 - `/faq`
 - `/contact`
