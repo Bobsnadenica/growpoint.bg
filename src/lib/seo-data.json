@@ -268,6 +268,33 @@
       "renderStatic": true
     },
     {
+      "path": "/messages",
+      "title": "Съобщения | GrowPoint",
+      "description": "Разговори по потвърдените сесии в GrowPoint.",
+      "schemaType": "WebPage",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
+    },
+    {
+      "path": "/notifications",
+      "title": "Известия | GrowPoint",
+      "description": "Център за известия в GrowPoint.",
+      "schemaType": "WebPage",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
+    },
+    {
+      "path": "/files",
+      "title": "Моите файлове | GrowPoint",
+      "description": "Лични документи и споделяне с консултанти в GrowPoint.",
+      "schemaType": "WebPage",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
+    },
+    {
       "path": "/admin",
       "title": "Админ | GrowPoint",
       "description": "Административна секция на GrowPoint.",
