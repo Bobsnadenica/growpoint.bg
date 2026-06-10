@@ -10,6 +10,7 @@ import {
   useRef,
   useState
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Link,
   Navigate,
@@ -578,6 +579,15 @@ const AVAILABILITY_WEEKDAYS = [
 
 const AVAILABILITY_HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 – 20:00
 
+// Рекламното каре в таблото показва ротация от наличните рекламни активи
+// (owner-provided creatives in assets/advertisement/).
+const DASHBOARD_AD_ASSETS = [
+  "/assets/advertisement/1.mp4",
+  "/assets/advertisement/2.mp4",
+  "/assets/advertisement/3.jpg",
+  "/assets/advertisement/4.jpg"
+];
+
 function tokenizeText(value: string) {
   return value
     .toLowerCase()
@@ -693,6 +703,16 @@ type LightboxImage = {
   alt: string;
 };
 
+// Overlays must escape .page-scene's stacking context (isolation: isolate),
+// otherwise the sticky site header paints above them. Rendering to <body> via
+// a portal guarantees fullscreen popups regardless of where they're declared.
+function OverlayPortal({ children }: { children: ReactNode }) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  return createPortal(children, document.body);
+}
+
 function ImageLightbox({
   image,
   onClose
@@ -726,27 +746,29 @@ function ImageLightbox({
   }, [onClose]);
 
   return (
-    <div
-      className="image-lightbox"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Преглед на снимка"
-      onClick={onClose}
-    >
-      <button
-        ref={closeButtonRef}
-        className="image-lightbox__close"
-        type="button"
-        aria-label="Затвори снимката"
+    <OverlayPortal>
+      <div
+        className="image-lightbox"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Преглед на снимка"
         onClick={onClose}
       >
-        ×
-      </button>
-      <figure className="image-lightbox__figure" onClick={(event) => event.stopPropagation()}>
-        <img src={image.src} alt={image.alt} decoding="async" />
-        <figcaption>{image.alt}</figcaption>
-      </figure>
-    </div>
+        <button
+          ref={closeButtonRef}
+          className="image-lightbox__close"
+          type="button"
+          aria-label="Затвори снимката"
+          onClick={onClose}
+        >
+          ×
+        </button>
+        <figure className="image-lightbox__figure" onClick={(event) => event.stopPropagation()}>
+          <img src={image.src} alt={image.alt} decoding="async" />
+          <figcaption>{image.alt}</figcaption>
+        </figure>
+      </div>
+    </OverlayPortal>
   );
 }
 
@@ -3500,7 +3522,6 @@ export function DashboardPage() {
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
   const [decidingBookingId, setDecidingBookingId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [notificationsBusy, setNotificationsBusy] = useState(false);
   const [reviewModalBooking, setReviewModalBooking] = useState<Booking | null>(null);
   const [rescheduleModalBooking, setRescheduleModalBooking] = useState<Booking | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
@@ -3511,6 +3532,10 @@ export function DashboardPage() {
   const [messageSendingId, setMessageSendingId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const dashboardAdAsset = useMemo(
+    () => DASHBOARD_AD_ASSETS[Math.floor(Math.random() * DASHBOARD_AD_ASSETS.length)],
+    []
+  );
   const [onboardingPending, setOnboardingPending] = useState(readSocialOnboardingPending);
   const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [accountActionLoading, setAccountActionLoading] = useState<
@@ -3922,25 +3947,6 @@ export function DashboardPage() {
     }
   }
 
-  async function markNotificationsReadAction() {
-    if (!token || notificationsBusy) return;
-    setNotificationsBusy(true);
-    try {
-      await api.markMyNotificationsRead(token);
-      const readAt = new Date().toISOString();
-      setNotifications((current) =>
-        current.map((n) => (n.readAt ? n : { ...n, readAt }))
-      );
-      window.dispatchEvent(
-        new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, { detail: { readAt } })
-      );
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "Неуспешно маркиране на известията.");
-    } finally {
-      setNotificationsBusy(false);
-    }
-  }
-
   async function deleteMyAccountAction() {
     if (!token || accountActionLoading) return;
     setAccountActionLoading("delete");
@@ -3967,6 +3973,13 @@ export function DashboardPage() {
     }
 
     const formData = new FormData(event.currentTarget);
+
+    const ageValue = Number(formData.get("age") || 0) || null;
+    if (ageValue !== null && (ageValue < 18 || ageValue > 95)) {
+      setError("Възрастта трябва да е между 18 и 95 години.");
+      return;
+    }
+
     const avatarLink = String(formData.get("avatarUrl") || "").trim();
     const avatarFile = formData.get("avatarFile");
     let avatarStorageKey = avatarLink ? "" : profile.avatarStorageKey;
@@ -3986,7 +3999,7 @@ export function DashboardPage() {
         avatarStorageKey,
         city: String(formData.get("city") || ""),
         occupation: String(formData.get("occupation") || ""),
-        age: Number(formData.get("age") || 0) || null,
+        age: ageValue,
         headline: String(formData.get("headline") || ""),
         bio: String(formData.get("bio") || ""),
         experienceSummary: String(formData.get("experienceSummary") || ""),
@@ -4003,127 +4016,6 @@ export function DashboardPage() {
       setMessage("Профилът е записан.");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно записване.");
-    }
-  }
-
-  async function uploadDocument(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setMessage("");
-
-    if (!profile) {
-      return;
-    }
-
-    const formElement = event.currentTarget;
-    const formData = new FormData(formElement);
-    const file = formData.get("document") as File | null;
-
-    if (!file || !file.name) {
-      setError("Избери файл за качване.");
-      return;
-    }
-
-    const validationError = getDocumentUploadValidationError(file);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
-    if ((profile.documents || []).length >= DOCUMENT_UPLOAD_MAX_COUNT) {
-      setError(`Достигна лимита от ${DOCUMENT_UPLOAD_MAX_COUNT} документа.`);
-      return;
-    }
-
-    try {
-      const contentType = file.type || "application/octet-stream";
-      const result = await api.createDocumentUpload(token, file);
-      await uploadFileToSignedUrl(result.uploadUrl, file, "документа", contentType);
-
-      const doc: UploadedDocument = {
-        ...(result.document as UploadedDocument),
-        sizeBytes: file.size || undefined
-      };
-
-      const updated = await api.updateMyProfile(token, {
-        documents: [...(profile.documents || []), doc]
-      });
-
-      setProfile(updated);
-      setMessage("Документът е качен.");
-      formElement.reset();
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "Неуспешно качване.");
-    }
-  }
-
-  async function removeDocument(storageKey: string) {
-    if (typeof window !== "undefined" && !window.confirm("Да премахна документа?")) {
-      return;
-    }
-    setError("");
-    setMessage("");
-
-    if (!profile) {
-      return;
-    }
-    try {
-      const isCurrentCv = profile.cvDocument?.storageKey === storageKey;
-      const updated = isCurrentCv
-        ? await api.updateMyProfile(token, { cvDocument: null })
-        : await api.updateMyProfile(token, {
-            documents: (profile.documents || []).filter((d) => d.storageKey !== storageKey)
-          });
-      setProfile(updated);
-      setMessage("Документът е премахнат.");
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "Неуспешно премахване.");
-    }
-  }
-
-  async function downloadDocument(storageKey: string, fileName: string) {
-    if (!token) return;
-    setError("");
-    setMessage("");
-    try {
-      const result = await api.getMyDocumentDownloadUrl(token, storageKey);
-      const link = document.createElement("a");
-      link.href = result.downloadUrl;
-      link.download = fileName || "document";
-      link.rel = "noreferrer";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "Неуспешно сваляне на документа.");
-    }
-  }
-
-  async function updateDocumentSharing(storageKey: string, sharedWithConsultantIds: string[]) {
-    setError("");
-    setMessage("");
-
-    if (!profile) {
-      return;
-    }
-
-    try {
-      const updateSharedIds = (doc: UploadedDocument) =>
-        doc.storageKey === storageKey ? { ...doc, sharedWithConsultantIds } : doc;
-      const isCurrentCv = profile.cvDocument?.storageKey === storageKey;
-      const updated = isCurrentCv
-        ? await api.updateMyProfile(token, {
-            cvDocument: profile.cvDocument
-              ? updateSharedIds(profile.cvDocument)
-              : profile.cvDocument
-          })
-        : await api.updateMyProfile(token, {
-            documents: (profile.documents || []).map(updateSharedIds)
-          });
-      setProfile(updated);
-      setMessage("Достъпът до документа е обновен.");
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "Неуспешно обновяване на споделянето.");
     }
   }
 
@@ -4273,18 +4165,6 @@ export function DashboardPage() {
           }))
           .sort((left, right) => (right.match?.score || 0) - (left.match?.score || 0))
           .slice(0, 3)
-      : [];
-  const confirmedSessionConsultantIds = new Set(
-    bookings
-      .filter((booking) => booking.status === "confirmed")
-      .map((booking) => booking.consultantId)
-      .filter(Boolean)
-  );
-  const confirmedSessionShareTargets =
-    profile.role === "client"
-      ? directoryConsultants.filter((consultant) =>
-          confirmedSessionConsultantIds.has(consultant.consultantId)
-        )
       : [];
   const availabilityPresetOptions = [
     buildAvailabilityPreset(1, 9),
@@ -4559,16 +4439,7 @@ export function DashboardPage() {
             <button type="button" onClick={() => scrollToDashboardSection("overview")}>
               Преглед
             </button>
-            {notifications.length ? (
-              <button type="button" onClick={() => scrollToDashboardSection("notifications")}>
-                Известия
-                {notifications.filter((n) => !n.readAt).length ? (
-                  <span className="notifications-panel__badge notifications-panel__badge--inline">
-                    {notifications.filter((n) => !n.readAt).length}
-                  </span>
-                ) : null}
-              </button>
-            ) : null}
+            <Link to="/notifications">Известия</Link>
             {profile.role === "consultant" ? (
               <button type="button" onClick={() => scrollToDashboardSection("consultant-profile")}>
                 Публичен профил
@@ -4578,9 +4449,7 @@ export function DashboardPage() {
                 Основен профил
               </button>
             )}
-            <button type="button" onClick={() => scrollToDashboardSection("documents")}>
-              Документи
-            </button>
+            <Link to="/files">Файлове</Link>
             {profile.role !== "consultant" ? (
               <button type="button" onClick={() => scrollToDashboardSection("matches")}>
                 Подходящи консултанти
@@ -4607,14 +4476,19 @@ export function DashboardPage() {
 
           <Link className="dashboard-ad" to="/contact" aria-label="Рекламно пространство">
             <span className="dashboard-ad__tag">Реклама</span>
-            <div className="dashboard-ad__placeholder">
-              <span className="dashboard-ad__brand" aria-hidden="true">
-                GrowPoint
-              </span>
-              <strong>Рекламно пространство за партньори</strong>
-              <p>Представи своя бранд пред хората, които активно търсят развитие.</p>
-              <em>Свържи се с нас →</em>
-            </div>
+            {dashboardAdAsset.endsWith(".mp4") ? (
+              <video
+                src={resolvePublicUrl(dashboardAdAsset)}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                aria-hidden="true"
+              />
+            ) : (
+              <img src={resolvePublicUrl(dashboardAdAsset)} alt="" loading="lazy" />
+            )}
           </Link>
 
           {profile.role === "consultant" && consultantProfile ? (
@@ -4635,13 +4509,9 @@ export function DashboardPage() {
                 </p>
               </div>
               <div className="dashboard-overview__actions">
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => scrollToDashboardSection("documents")}
-                >
-                  Документи
-                </button>
+                <Link className="ghost-button" to="/files">
+                  Файлове
+                </Link>
                 {profile.role === "consultant" ? (
                   <button
                     className="ghost-button"
@@ -4832,12 +4702,6 @@ export function DashboardPage() {
               </div>
             </section>
           ) : null}
-
-          <NotificationsPanel
-            notifications={notifications}
-            busy={notificationsBusy}
-            onMarkAllRead={markNotificationsReadAction}
-          />
 
           {profile.role === "client" && profileCompletion >= 100 ? (
             <section className="panel" id="matches">
@@ -5035,7 +4899,8 @@ export function DashboardPage() {
                     <input
                       name="age"
                       type="number"
-                      min="16"
+                      min="18"
+                      max="95"
                       defaultValue={profile.age || ""}
                       placeholder="Например: 32"
                     />
@@ -5300,44 +5165,6 @@ export function DashboardPage() {
             </div>
           </form>
           ) : null}
-
-          <section className="panel form-stack" id="documents">
-            <header className="dashboard-form-head">
-              <p className="eyebrow">Документи</p>
-              <h2>Дръж всички материали на едно място.</h2>
-              <p className="section-caption">
-                Файловете са лични за акаунта ти. Споделяш конкретен документ само с избран
-                консултант или ментор.
-              </p>
-            </header>
-
-            <div className="documents-zone">
-              <form className="documents-upload" onSubmit={uploadDocument}>
-                <label className="dashboard-upload-field">
-                  <span>Избери файл</span>
-                  <input
-                    name="document"
-                    type="file"
-                    accept={DOCUMENT_UPLOAD_ACCEPT}
-                    required
-                  />
-                  <span className="form-note">{DOCUMENT_UPLOAD_FORMAT_LABEL}</span>
-                </label>
-                <button className="primary-button" type="submit">
-                  Качи документ
-                </button>
-              </form>
-
-              <UserDocumentList
-                cvDocument={profile.cvDocument}
-                documents={profile.documents || []}
-                shareTargets={confirmedSessionShareTargets}
-                onDownload={downloadDocument}
-                onRemove={removeDocument}
-                onShareChange={updateDocumentSharing}
-              />
-            </div>
-          </section>
 
           {profile.role === "consultant" ? (
             <form
@@ -6298,6 +6125,7 @@ export function DashboardPage() {
 
             if (!sessionsOpen) return null;
             return (
+              <OverlayPortal>
               <div
                 className="modal-backdrop"
                 role="dialog"
@@ -6384,6 +6212,7 @@ export function DashboardPage() {
                 )}
                 </div>
               </div>
+              </OverlayPortal>
             );
           })()}
 
@@ -6472,71 +6301,6 @@ function formatRelativeBg(iso: string) {
   if (diffSec < 86400) return `преди ${Math.round(diffSec / 3600)} ч`;
   if (diffSec < 7 * 86400) return `преди ${Math.round(diffSec / 86400)} дни`;
   return formatDate(iso);
-}
-
-function NotificationsPanel({
-  notifications,
-  busy,
-  onMarkAllRead
-}: {
-  notifications: NotificationItem[];
-  busy: boolean;
-  onMarkAllRead: () => void | Promise<void>;
-}) {
-  const sorted = [...notifications].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-  const unreadCount = sorted.filter((n) => !n.readAt).length;
-  const visible = sorted.slice(0, 10);
-
-  return (
-    <section className="panel notifications-panel" id="notifications">
-      <header className="notifications-panel__head">
-        <div>
-          <p className="eyebrow">Известия</p>
-          <h2>
-            Какво се случи скоро{" "}
-            {unreadCount ? (
-              <span className="notifications-panel__badge">{unreadCount}</span>
-            ) : null}
-          </h2>
-        </div>
-        {unreadCount ? (
-          <button
-            className="ghost-button"
-            type="button"
-            onClick={() => onMarkAllRead()}
-            disabled={busy}
-          >
-            {busy ? "Маркираме..." : "Маркирай като прочетени"}
-          </button>
-        ) : null}
-      </header>
-      {visible.length ? (
-        <ul className="notifications-list" aria-label="Списък с известия">
-          {visible.map((n) => (
-          <li
-            key={n.id}
-            className={`notifications-item notifications-item--${getNotificationCategory(n.type)} ${n.readAt ? "" : "notifications-item--unread"}`}
-          >
-            <span className="notifications-item__icon" aria-hidden="true">
-              {NOTIFICATION_ICONS[n.type] || "🔔"}
-            </span>
-            <div className="notifications-item__body">
-              <strong>{n.title}</strong>
-              <p>{n.body}</p>
-              <span className="form-note">{formatRelativeBg(n.createdAt)}</span>
-            </div>
-          </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="form-note">
-          Все още няма известия. Нови резервации, съобщения и админ съобщения ще се показват тук.
-        </p>
-      )}
-    </section>
-  );
 }
 
 function BookingMessages({
@@ -6629,6 +6393,7 @@ function DeleteProfileModal({
     confirmationText.trim().toUpperCase() === "ИЗТРИЙ";
 
   return (
+    <OverlayPortal>
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal-card delete-profile-modal">
         <header className="modal-card__head">
@@ -6680,6 +6445,7 @@ function DeleteProfileModal({
         </div>
       </div>
     </div>
+    </OverlayPortal>
   );
 }
 
@@ -6846,6 +6612,7 @@ function SocialOnboardingModal({
   const initial = (name.trim()[0] || "G").toUpperCase();
 
   return (
+    <OverlayPortal>
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal-card">
         <header className="modal-card__head">
@@ -6961,6 +6728,7 @@ function SocialOnboardingModal({
         </div>
       </div>
     </div>
+    </OverlayPortal>
   );
 }
 
@@ -6979,6 +6747,7 @@ function ReviewModal({
   const [comment, setComment] = useState("");
 
   return (
+    <OverlayPortal>
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal-card">
         <header className="modal-card__head">
@@ -7032,6 +6801,7 @@ function ReviewModal({
         </div>
       </div>
     </div>
+    </OverlayPortal>
   );
 }
 
@@ -7074,6 +6844,7 @@ function RescheduleModal({
   };
 
   return (
+    <OverlayPortal>
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal-card">
         <header className="modal-card__head">
@@ -7142,6 +6913,7 @@ function RescheduleModal({
         </div>
       </div>
     </div>
+    </OverlayPortal>
   );
 }
 
@@ -7360,6 +7132,230 @@ function ProfileCompletionMeter({
         ))}
       </div>
     </div>
+  );
+}
+
+// Dedicated "Моите файлове" page (reached from the header files icon). Holds
+// the document upload/list/share flow that used to live inside the dashboard.
+export function FilesPageBody() {
+  const { user, token, loading: authLoading } = useAuth();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [shareTargets, setShareTargets] = useState<ConsultantProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    if (!token) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([
+      api.getMyProfile(token).catch(() => null),
+      api.listBookings(token).catch(() => [] as Booking[]),
+      api.listConsultants().catch(() => [] as ConsultantProfile[])
+    ])
+      .then(([profileResult, bookings, consultants]) => {
+        if (!mounted) return;
+        setProfile(profileResult);
+        // Share targets: only consultants the user has a confirmed session with
+        // (same privacy rule as the API enforces).
+        const confirmedIds = new Set(
+          (Array.isArray(bookings) ? bookings : [])
+            .filter((booking) => booking.status === "confirmed")
+            .map((booking) => booking.consultantId)
+            .filter(Boolean)
+        );
+        setShareTargets(
+          profileResult?.role === "client"
+            ? consultants.filter((consultant) => confirmedIds.has(consultant.consultantId))
+            : []
+        );
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
+
+  async function uploadDocument(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    if (!profile) return;
+
+    const formElement = event.currentTarget;
+    const file = new FormData(formElement).get("document") as File | null;
+    if (!file || !file.name) {
+      setError("Избери файл за качване.");
+      return;
+    }
+    const validationError = getDocumentUploadValidationError(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    if ((profile.documents || []).length >= DOCUMENT_UPLOAD_MAX_COUNT) {
+      setError(`Достигна лимита от ${DOCUMENT_UPLOAD_MAX_COUNT} документа.`);
+      return;
+    }
+
+    try {
+      const contentType = file.type || "application/octet-stream";
+      const result = await api.createDocumentUpload(token, file);
+      await uploadFileToSignedUrl(result.uploadUrl, file, "документа", contentType);
+      const doc: UploadedDocument = {
+        ...(result.document as UploadedDocument),
+        sizeBytes: file.size || undefined
+      };
+      const updated = await api.updateMyProfile(token, {
+        documents: [...(profile.documents || []), doc]
+      });
+      setProfile(updated);
+      setMessage("Документът е качен.");
+      formElement.reset();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно качване.");
+    }
+  }
+
+  async function removeDocument(storageKey: string) {
+    if (typeof window !== "undefined" && !window.confirm("Да премахна документа?")) {
+      return;
+    }
+    setError("");
+    setMessage("");
+    if (!profile) return;
+    try {
+      const isCurrentCv = profile.cvDocument?.storageKey === storageKey;
+      const updated = isCurrentCv
+        ? await api.updateMyProfile(token, { cvDocument: null })
+        : await api.updateMyProfile(token, {
+            documents: (profile.documents || []).filter((d) => d.storageKey !== storageKey)
+          });
+      setProfile(updated);
+      setMessage("Документът е премахнат.");
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно премахване.");
+    }
+  }
+
+  async function downloadDocument(storageKey: string, fileName: string) {
+    if (!token) return;
+    setError("");
+    setMessage("");
+    try {
+      const result = await api.getMyDocumentDownloadUrl(token, storageKey);
+      const link = document.createElement("a");
+      link.href = result.downloadUrl;
+      link.download = fileName || "document";
+      link.rel = "noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно сваляне на документа.");
+    }
+  }
+
+  async function updateDocumentSharing(storageKey: string, sharedWithConsultantIds: string[]) {
+    setError("");
+    setMessage("");
+    if (!profile) return;
+    try {
+      const updateSharedIds = (doc: UploadedDocument) =>
+        doc.storageKey === storageKey ? { ...doc, sharedWithConsultantIds } : doc;
+      const isCurrentCv = profile.cvDocument?.storageKey === storageKey;
+      const updated = isCurrentCv
+        ? await api.updateMyProfile(token, {
+            cvDocument: profile.cvDocument
+              ? updateSharedIds(profile.cvDocument)
+              : profile.cvDocument
+          })
+        : await api.updateMyProfile(token, {
+            documents: (profile.documents || []).map(updateSharedIds)
+          });
+      setProfile(updated);
+      setMessage("Достъпът до документа е обновен.");
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно обновяване на споделянето.");
+    }
+  }
+
+  if (!authLoading && !user) {
+    return (
+      <section className="section">
+        <div className="container">
+          <div className="panel">
+            <h1>Моите файлове</h1>
+            <p className="form-note">Файловете са достъпни само за вписани потребители.</p>
+            <Link className="primary-button" to="/auth?redirect=/files">
+              Вход / Регистрация
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="section">
+      <div className="container files-page">
+        <section className="panel form-stack">
+          <header className="dashboard-form-head">
+            <p className="eyebrow">Файлове</p>
+            <h1>Дръж всички материали на едно място.</h1>
+            <p className="section-caption">
+              Файловете са лични за акаунта ти. Споделяш конкретен документ само с
+              консултант или ментор, с когото имаш потвърдена сесия.
+            </p>
+          </header>
+
+          <div role="status" aria-live="polite">
+            {message ? <div className="panel panel--success">{message}</div> : null}
+          </div>
+          <div role="alert" aria-live="assertive">
+            {error ? <div className="panel panel--error">{error}</div> : null}
+          </div>
+
+          {loading || !profile ? (
+            <p className="form-note">Зареждаме файловете...</p>
+          ) : (
+            <div className="documents-zone">
+              <form className="documents-upload" onSubmit={uploadDocument}>
+                <label className="dashboard-upload-field">
+                  <span>Избери файл</span>
+                  <input
+                    name="document"
+                    type="file"
+                    accept={DOCUMENT_UPLOAD_ACCEPT}
+                    required
+                  />
+                  <span className="form-note">{DOCUMENT_UPLOAD_FORMAT_LABEL}</span>
+                </label>
+                <button className="primary-button" type="submit">
+                  Качи документ
+                </button>
+              </form>
+
+              <UserDocumentList
+                cvDocument={profile.cvDocument}
+                documents={profile.documents || []}
+                shareTargets={shareTargets}
+                onDownload={downloadDocument}
+                onRemove={removeDocument}
+                onShareChange={updateDocumentSharing}
+              />
+            </div>
+          )}
+        </section>
+      </div>
+    </section>
   );
 }
 

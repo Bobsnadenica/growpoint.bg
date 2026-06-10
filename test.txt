@@ -1000,3 +1000,56 @@ DEPLOY STATE
   - LIVE via terraform: catalog package ordering, packageTier in public
     payload, admin package endpoint + route.
   - STAGED (commit+push + npm run deploy:cloudfront): all frontend changes.
+
+==================================================================
+OWNER FEEDBACK ROUND 2 — six UI/UX issues (all fixed)
+==================================================================
+Date: 2026-06-10 (later)
+
+1) PHOTO CLICK "opens something, not a popup" — ROOT CAUSE FOUND + FIXED.
+   The lightbox/modals rendered as direct children of .page-scene, and the rule
+   `.page-scene > :not(.page-scene__particles)` (specificity 0,2,0) overrode
+   their `position: fixed` -> the "popup" rendered as a 1280x258 strip inside
+   the page. Fixed twice over: the :not() rule now excludes overlays, AND all 6
+   overlays (image lightbox, sessions modal, social onboarding, review,
+   reschedule, delete-profile) now render through a new <OverlayPortal> to
+   document.body — this also fixes the sticky header painting ABOVE modal
+   backdrops (page-scene's isolation:isolate stacking context could never beat
+   the header). Verified: lightbox covers the full viewport incl. the header.
+
+2) "Кой си в момента" Име/Имейл misalignment — REPRODUCED + FIXED.
+   In side-by-side fields the grid stretch distributed a neighbour's form-note
+   height into the other label -> Име input rendered 80px tall, 28px lower than
+   Имейл (52px). Fix: .form-stack label { align-content: start }. Verified:
+   both inputs now 52px at identical top.
+
+3) AGE LIMITS 18–95 — input min/max (was min 16, no max), saveProfile validation
+   with a clear message, AND backend normalizeBoundedNumber bounds 18..95
+   (was 13..120). Backend deployed.
+
+4) ФАЙЛОВЕ MOVED OUT OF THE PROFILE — new top-appbar files icon (next to
+   известия/съобщения) + dedicated /files page ("Дръж всички материали на едно
+   място") with the full upload + list + share-with-consultants flow (sharing
+   limited to consultants with a confirmed session — same rule the API
+   enforces). The dashboard's Документи section was removed; sidebar nav and
+   overview button now link to /files. Dead dashboard handlers removed.
+
+5) РЕКЛАМА NOW SHOWS THE REAL AD ASSETS — the dashboard ad box rotates a random
+   creative from assets/advertisement/ (1.mp4 / 2.mp4 / 3.jpg / 4.jpg; videos
+   muted+loop+playsinline). The code-rendered placeholder from R1 was removed
+   per owner direction (the CareerLane creatives ARE the ad content).
+
+6) ИЗВЕСТИЯ REMOVED FROM THE PROFILE BODY — the in-dashboard NotificationsPanel
+   and its nav badge button are gone; the sidebar "Известия" entry now links to
+   /notifications (header bell + full page already cover history). Dead
+   component/state cleaned up.
+
+VERIFIED (preview, live data, desktop + 375px): lightbox fullscreen over the
+header; dashboard renders with ad video and without documents/notifications
+sections; /files page works via the new header icon; 0 horizontal overflow;
+fresh reload clean (console buffer errors were stale mid-edit HMR states).
+GATES: build (theme guard + tsc + vite) PASS; node --check PASS; fmt clean;
+secret scan PASS. Lambda redeployed (age bounds); CORS temp-enabled for QA and
+REVERTED (verified localhost rejected, www allowed).
+
+DEPLOY: frontend staged (commit+push + npm run deploy:cloudfront); backend live.

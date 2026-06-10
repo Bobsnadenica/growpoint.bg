@@ -2405,8 +2405,8 @@ async function updateMeProfile(event) {
       body.age === null
         ? null
         : normalizeBoundedNumber(body.age, current.age ?? null, {
-            min: 13,
-            max: 120,
+            min: 18,
+            max: 95,
             integer: true
           }),
     headline: normalizeText(body.headline, current.headline, 180),

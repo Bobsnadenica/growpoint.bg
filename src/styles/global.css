@@ -207,7 +207,9 @@ main {
   opacity: 0.72;
 }
 
-.page-scene > :not(.page-scene__particles) {
+/* Overlays (lightbox/modals) must keep position: fixed — excluding them here,
+   otherwise this rule's higher specificity pins them into the page flow. */
+.page-scene > :not(.page-scene__particles, .image-lightbox, .modal-backdrop) {
   position: relative;
   z-index: 1;
 }
@@ -1853,6 +1855,9 @@ main {
 .form-stack label {
   display: grid;
   gap: 8px;
+  /* Don't stretch internal rows: side-by-side fields stay top-aligned with
+     equal input heights even when a neighbour has an extra form-note. */
+  align-content: start;
   font-weight: 700;
   color: var(--text);
 }
@@ -10939,41 +10944,11 @@ textarea {
   object-fit: cover;
 }
 
-/* Code-rendered branded banner — replaces the stale third-party ad image. */
-.dashboard-ad__placeholder {
-  display: grid;
-  gap: 4px;
-  padding: 22px 20px;
-  line-height: 1.45;
-  background:
-    radial-gradient(circle at 88% 18%, rgba(127, 143, 137, 0.3), transparent 42%),
-    linear-gradient(110deg, var(--primary-dark), var(--primary) 75%);
-  color: #ffffff;
-}
-
-.dashboard-ad__brand {
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  opacity: 0.85;
-}
-
-.dashboard-ad__placeholder strong {
-  font-size: 1.08rem;
-}
-
-.dashboard-ad__placeholder p {
-  margin: 0;
-  font-size: 0.88rem;
-  opacity: 0.92;
-}
-
-.dashboard-ad__placeholder em {
-  font-style: normal;
-  font-size: 0.85rem;
-  font-weight: 700;
-  margin-top: 4px;
+.dashboard-ad video {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
 }
 
 .dashboard-ad__tag {

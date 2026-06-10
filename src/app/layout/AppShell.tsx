@@ -21,6 +21,7 @@ import AuthPage from "../pages/AuthPage";
 import ConsultantProfilePage from "../pages/ConsultantProfilePage";
 import ContactPage from "../pages/ContactPage";
 import FaqPage from "../pages/FaqPage";
+import FilesPage from "../pages/FilesPage";
 import HomePage from "../pages/HomePage";
 import LegalPage from "../pages/LegalPage";
 import MemberProfilePage from "../pages/MemberProfilePage";
@@ -104,12 +105,20 @@ function ThemeToggleArtwork({ theme }: { theme: ThemePreference }) {
   );
 }
 
-function HeaderIcon({ type }: { type: "notifications" | "messages" }) {
+function HeaderIcon({ type }: { type: "notifications" | "messages" | "files" }) {
   if (type === "messages") {
     return (
       <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
         <path d="M4.5 6.5h15v11h-15z" />
         <path d="m5.2 7.1 6.8 5.6 6.8-5.6" />
+      </svg>
+    );
+  }
+
+  if (type === "files") {
+    return (
+      <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+        <path d="M4 7.5V18a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 18V9.5A1.5 1.5 0 0 0 18.5 8H12l-2-2.5H5.5A1.5 1.5 0 0 0 4 7Z" />
       </svg>
     );
   }
@@ -655,6 +664,15 @@ export default function AppShell() {
                         <span className="topbar-alert__badge">{unreadMessages}</span>
                       ) : null}
                     </button>
+                    <Link
+                      className="topbar-alert"
+                      to="/files"
+                      aria-label="Моите файлове"
+                      title="Моите файлове"
+                      onClick={() => setActiveHeaderPanel(null)}
+                    >
+                      <HeaderIcon type="files" />
+                    </Link>
                     {activeHeaderPanel ? (
                       <HeaderNotificationPopover
                         activePanel={activeHeaderPanel}
@@ -833,6 +851,7 @@ export default function AppShell() {
           <Route path="/dashboard" element={<ProfilePage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/files" element={<FilesPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route
             path="/admin/preview/:consultantId"
