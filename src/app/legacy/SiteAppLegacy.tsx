@@ -1035,13 +1035,6 @@ function renderPersonaIcon(icon: PersonaIcon) {
           <path d="M8.5 11h7M8.5 14.5h4" />
         </svg>
       );
-    case "health":
-      return (
-        <svg {...common}>
-          <path d="M20.4 12.6a5.5 5.5 0 0 0-8.4-7 5.5 5.5 0 0 0-8.4 7L12 21z" />
-          <path d="M4 12h4l2-3 3 6 2-3h5" />
-        </svg>
-      );
     case "finance":
       return (
         <svg {...common}>
@@ -1596,13 +1589,11 @@ export function UsersPage() {
                     <span className="persona-card__code" aria-hidden="true">
                       {renderPersonaIcon(preset.icon)}
                     </span>
-                    <span className="persona-card__type">
-                      {preset.type
-                        ? preset.type === "mentor"
-                          ? "Ментор"
-                          : "Консултант"
-                        : "Област"}
-                    </span>
+                    {preset.type ? (
+                      <span className="persona-card__type">
+                        {preset.type === "mentor" ? "Ментор" : "Консултант"}
+                      </span>
+                    ) : null}
                   </div>
                   <strong>{preset.name}</strong>
                   <p>{preset.description}</p>

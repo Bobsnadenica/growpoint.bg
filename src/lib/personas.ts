@@ -7,7 +7,6 @@ export type PersonaIcon =
   | "product"
   | "data"
   | "communication"
-  | "health"
   | "finance"
   | "creative";
 
@@ -106,26 +105,6 @@ export const personaPresets: PersonaPreset[] = [
       "skills",
       "networking",
       "увереност"
-    ]
-  },
-  {
-    id: "health-sport",
-    code: "ЗС",
-    icon: "health",
-    name: "Здраве и спорт",
-    description:
-      "Постигни целите си чрез правилен подход към тренировките, храненето и изграждането на устойчиви навици.",
-    tags: [
-      "Фитнес",
-      "Хранене",
-      "Навици",
-      "fitness",
-      "health",
-      "nutrition",
-      "habits",
-      "sport",
-      "тренировки",
-      "здраве"
     ]
   },
   {

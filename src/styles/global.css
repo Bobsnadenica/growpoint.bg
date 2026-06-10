@@ -5426,15 +5426,18 @@ textarea {
 .persona-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
+/* Apple-style области cards: hairline border, soft squircle radius, tinted
+   icon, tight typography — compact, no leftover space. */
 .persona-card {
   display: grid;
-  gap: 10px;
-  padding: 18px;
+  gap: 7px;
+  align-content: start;
+  padding: 14px 16px 14px;
   text-align: left;
-  border-radius: 20px;
+  border-radius: 22px;
   border: 1px solid var(--border);
   background: var(--surface);
   cursor: pointer;
@@ -5447,7 +5450,8 @@ textarea {
 
 .persona-card:hover {
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-soft);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
 }
 
 .persona-card--active {
@@ -5467,14 +5471,19 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
   background: var(--primary);
   color: white;
   font-weight: 800;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   letter-spacing: 0.04em;
+}
+
+.persona-card__code svg {
+  width: 20px;
+  height: 20px;
 }
 
 .persona-card--active .persona-card__code {
@@ -5494,16 +5503,31 @@ textarea {
 }
 
 .persona-card strong {
-  font-size: 1.05rem;
-  line-height: 1.25;
+  font-size: 0.99rem;
+  line-height: 1.22;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
 
 .persona-card p {
   margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.5;
+  font-size: 0.85rem;
+  line-height: 1.42;
   color: var(--text-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.persona-card .chip-row {
+  gap: 6px;
+}
+
+.persona-card .chip {
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 0.74rem;
 }
 
 .user-match-card__avatar {
