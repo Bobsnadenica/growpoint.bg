@@ -113,6 +113,8 @@ export default function MemberProfilePage() {
     member.interests.length ||
     member.experienceHighlights.length ||
     member.educationHighlights.length;
+  const isThinProfile =
+    !member.bio && !member.headline && !member.experienceSummary && !hasExpertise;
 
   return (
     <PageScene tone="consultant" pageKey="member">
@@ -166,6 +168,18 @@ export default function MemberProfilePage() {
                 </div>
                 {shareMessage ? (
                   <div className="panel panel--success">{shareMessage}</div>
+                ) : null}
+                {isOwnProfile && isThinProfile ? (
+                  <div className="panel panel--subtle">
+                    <strong>Профилът ти е почти празен.</strong>
+                    <p>
+                      Допълни заглавие, описание и умения от таблото, за да изглежда
+                      страницата ти завършена, когато я споделиш.
+                    </p>
+                    <Link className="ghost-button" to="/dashboard#profile-basics">
+                      Допълни профила си
+                    </Link>
+                  </div>
                 ) : null}
               </div>
             </div>

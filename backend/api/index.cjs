@@ -1951,9 +1951,17 @@ async function getPublicUser(event) {
 
   const user = await getUserBySub(id);
 
-  if (!user || !user.name || String(user.userId || "").startsWith("system#")) {
+  if (!user || String(user.userId || "").startsWith("system#")) {
     return notFound("Profile not found.");
   }
+
+  // A missing name must not 404 the page (e.g. social signups that skipped the
+  // onboarding step) — fall back to the email local-part so the owner's own
+  // "виж публичния си профил" always resolves.
+  const displayName =
+    normalizeText(user.name, "", 120) ||
+    String(user.email || "").split("@")[0] ||
+    "Потребител GrowPoint";
 
   const avatarUrl = user.avatarStorageKey
     ? await getSignedObjectUrl(user.avatarStorageKey)
@@ -1963,7 +1971,7 @@ async function getPublicUser(event) {
     200,
     {
       userId: user.userId,
-      name: user.name || "",
+      name: displayName,
       role: normalizeUserRole(user.role, "client"),
       avatarUrl,
       city: user.city || "",
