@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { formatRelativeBg } from "../../lib/datetime";
+import { formatDateTimeBg, formatRelativeBg } from "../../lib/datetime";
 import {
   NOTIFICATION_ICONS,
   getNotificationCategory,
@@ -23,9 +24,17 @@ const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   system: "Система"
 };
 
-function notificationTarget(item: NotificationItem) {
-  if (item.href) return item.href;
-  return item.type === "message_received" ? "/messages" : null;
+// Contextual action shown INSIDE the detail popup. Legacy notification hrefs
+// point at old dashboard anchors, so we never navigate on click — clicking an
+// item opens the popup with the full text instead.
+function notificationAction(item: NotificationItem): { to: string; label: string } | null {
+  if (item.type === "message_received") {
+    return { to: "/messages", label: "Към съобщенията" };
+  }
+  if (getNotificationCategory(item.type) === "booking") {
+    return { to: "/dashboard", label: "Към таблото" };
+  }
+  return null;
 }
 
 export default function NotificationsPage() {
@@ -33,6 +42,16 @@ export default function NotificationsPage() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [selected, setSelected] = useState<NotificationItem | null>(null);
+
+  useEffect(() => {
+    if (!selected) return;
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setSelected(null);
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [selected]);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -134,34 +153,27 @@ export default function NotificationsPage() {
                 <ul className="notifications-list" aria-label="Списък с известия">
                   {sorted.map((n) => {
                     const category = getNotificationCategory(n.type);
-                    const target = notificationTarget(n);
-                    const body = (
-                      <>
-                        <span className="notifications-item__icon" aria-hidden="true">
-                          {NOTIFICATION_ICONS[n.type] || "🔔"}
-                        </span>
-                        <div className="notifications-item__body">
-                          <strong>{n.title}</strong>
-                          <p>{n.body}</p>
-                          <span className="form-note">
-                            <span className="notifications-item__tag">
-                              {CATEGORY_LABELS[category]}
-                            </span>
-                            {formatRelativeBg(n.createdAt)}
-                          </span>
-                        </div>
-                      </>
-                    );
-                    const className = `notifications-item notifications-item--${category} ${n.readAt ? "" : "notifications-item--unread"}`;
                     return (
                       <li key={n.id}>
-                        {target ? (
-                          <Link className={`${className} notifications-item--link`} to={target}>
-                            {body}
-                          </Link>
-                        ) : (
-                          <div className={className}>{body}</div>
-                        )}
+                        <button
+                          type="button"
+                          className={`notifications-item notifications-item--button notifications-item--${category} ${n.readAt ? "" : "notifications-item--unread"}`}
+                          onClick={() => setSelected(n)}
+                        >
+                          <span className="notifications-item__icon" aria-hidden="true">
+                            {NOTIFICATION_ICONS[n.type] || "🔔"}
+                          </span>
+                          <div className="notifications-item__body">
+                            <strong>{n.title}</strong>
+                            <p>{n.body}</p>
+                            <span className="form-note">
+                              <span className="notifications-item__tag">
+                                {CATEGORY_LABELS[category]}
+                              </span>
+                              {formatRelativeBg(n.createdAt)}
+                            </span>
+                          </div>
+                        </button>
                       </li>
                     );
                   })}
@@ -176,6 +188,55 @@ export default function NotificationsPage() {
           )}
         </div>
       </section>
+
+      {selected && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="modal-backdrop"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Известие"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) setSelected(null);
+              }}
+            >
+              <div className="modal-card notification-modal">
+                <header className="modal-card__head">
+                  <p className="eyebrow">
+                    {CATEGORY_LABELS[getNotificationCategory(selected.type)]} ·{" "}
+                    {formatDateTimeBg(selected.createdAt)}
+                  </p>
+                  <h2>
+                    <span aria-hidden="true">
+                      {NOTIFICATION_ICONS[selected.type] || "🔔"}
+                    </span>{" "}
+                    {selected.title}
+                  </h2>
+                </header>
+                <p className="notification-modal__body">{selected.body}</p>
+                <div className="modal-card__actions">
+                  {notificationAction(selected) ? (
+                    <Link
+                      className="primary-button"
+                      to={notificationAction(selected)!.to}
+                      onClick={() => setSelected(null)}
+                    >
+                      {notificationAction(selected)!.label}
+                    </Link>
+                  ) : null}
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => setSelected(null)}
+                  >
+                    Затвори
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </PageScene>
   );
 }

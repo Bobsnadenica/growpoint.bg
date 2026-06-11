@@ -8282,6 +8282,39 @@ textarea {
   transform: translateY(-1px);
 }
 
+/* Clicking an item opens the detail popup — the list shows a 2-line preview. */
+.notifications-item--button {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.notifications-item--button:hover {
+  border-color: rgba(10, 102, 194, 0.45);
+  transform: translateY(-1px);
+}
+
+.notifications-item--button .notifications-item__body p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.notification-modal__body {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.notification-modal h2 {
+  overflow-wrap: anywhere;
+}
+
 .notifications-item__tag {
   display: inline-block;
   margin-right: 8px;

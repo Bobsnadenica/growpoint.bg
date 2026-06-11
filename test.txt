@@ -76,6 +76,12 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-11  /notifications: clicking an item no longer redirects to the
+              profile (legacy dashboard-anchor hrefs) — it opens a popup with
+              the full notification text (category + time + contextual action
+              "Към съобщенията"/"Към таблото"); list previews clamp to 2 lines.
+              Verified with stubbed long-body data (modal portaled, stays on
+              page, Затвори/Escape close); CORS temp-QA reverted & re-verified.
   2026-06-11  Perf: "Виж публичния си профил" now renders instantly (28ms vs
               waiting on the API, which pays ~1-2s on Lambda cold start) — the
               dashboard Link seeds the member page with the already-loaded
