@@ -454,12 +454,17 @@ export default function AppShell() {
 
   useEffect(() => {
     function handleNotificationsMarkedRead(event: Event) {
+      const detail = event instanceof CustomEvent ? event.detail : null;
       const readAt =
-        event instanceof CustomEvent && typeof event.detail?.readAt === "string"
-          ? event.detail.readAt
-          : new Date().toISOString();
+        typeof detail?.readAt === "string" ? detail.readAt : new Date().toISOString();
+      // A notificationId in the event marks just that one (single-read from the
+      // /notifications page); without it, everything is marked read.
+      const onlyId =
+        typeof detail?.notificationId === "string" ? detail.notificationId : null;
       setHeaderNotifications((items) =>
-        items.map((item) => (item.readAt ? item : { ...item, readAt }))
+        items.map((item) =>
+          item.readAt || (onlyId && item.id !== onlyId) ? item : { ...item, readAt }
+        )
       );
     }
 

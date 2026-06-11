@@ -76,6 +76,11 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-11  Notifications: opening one now marks JUST that one as read
+              (mark-read accepts optional notificationId; header badge syncs
+              per-id). "Маркирай всички" unchanged. Verified live: bogus-id
+              call left the real unread untouched; UI test confirmed single
+              mark + badge decrement. Lambda redeployed.
   2026-06-11  /notifications: clicking an item no longer redirects to the
               profile (legacy dashboard-anchor hrefs) — it opens a popup with
               the full notification text (category + time + contextual action

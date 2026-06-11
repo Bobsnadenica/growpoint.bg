@@ -91,6 +91,22 @@ export default function NotificationsPage() {
     }
   }
 
+  // Opening a notification marks just that one as read (like an inbox).
+  function openNotification(item: NotificationItem) {
+    setSelected(item);
+    if (!token || isAdmin || item.readAt) return;
+    const readAt = new Date().toISOString();
+    setItems((current) =>
+      current.map((n) => (n.id === item.id ? { ...n, readAt } : n))
+    );
+    window.dispatchEvent(
+      new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, {
+        detail: { readAt, notificationId: item.id }
+      })
+    );
+    void api.markMyNotificationsRead(token, item.id).catch(() => {});
+  }
+
   const sorted = [...items].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
@@ -158,7 +174,7 @@ export default function NotificationsPage() {
                         <button
                           type="button"
                           className={`notifications-item notifications-item--button notifications-item--${category} ${n.readAt ? "" : "notifications-item--unread"}`}
-                          onClick={() => setSelected(n)}
+                          onClick={() => openNotification(n)}
                         >
                           <span className="notifications-item__icon" aria-hidden="true">
                             {NOTIFICATION_ICONS[n.type] || "🔔"}

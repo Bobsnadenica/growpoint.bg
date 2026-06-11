@@ -3909,6 +3909,10 @@ async function getMyNotifications(event) {
 
 async function markMyNotificationsRead(event) {
   const claims = requireAuth(event);
+  // Optional body.notificationId marks a single notification; without it the
+  // whole list is marked read (the original behaviour).
+  const body = parseBody(event);
+  const notificationId = String(body.notificationId || "").trim();
   const result = await dynamo.send(
     new GetCommand({
       TableName: env.usersTable,
@@ -3921,7 +3925,11 @@ async function markMyNotificationsRead(event) {
     ? result.Item.notifications
     : [];
   const now = new Date().toISOString();
-  const next = stored.map((n) => (n.readAt ? n : { ...n, readAt: now }));
+  const next = stored.map((n) => {
+    if (n.readAt) return n;
+    if (notificationId && n.id !== notificationId) return n;
+    return { ...n, readAt: now };
+  });
   await dynamo.send(
     new UpdateCommand({
       TableName: env.usersTable,
@@ -3930,7 +3938,8 @@ async function markMyNotificationsRead(event) {
       ExpressionAttributeValues: { ":n": next }
     })
   );
-  return response(200, { ok: true, unreadCount: 0 });
+  const unreadCount = next.filter((n) => !n.readAt).length;
+  return response(200, { ok: true, unreadCount });
 }
 
 async function listBookings(event) {

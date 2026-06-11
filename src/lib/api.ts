@@ -360,10 +360,13 @@ export const api = {
     );
   },
 
-  async markMyNotificationsRead(token: string) {
+  async markMyNotificationsRead(token: string, notificationId?: string) {
     return request<{ ok: boolean; unreadCount: number }>(
       "/me/notifications/mark-read",
-      { method: "POST" },
+      {
+        method: "POST",
+        body: JSON.stringify(notificationId ? { notificationId } : {})
+      },
       token
     );
   },
