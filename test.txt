@@ -76,6 +76,12 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-10  Fix: "Виж публичния си профил" showed nothing for accounts with
+              an empty name — GET /public/users/{id} rejected them (404). Now
+              falls back to the email local-part as display name (deployed);
+              /u/:id additionally shows a "допълни профила си" hint when your
+              own card is still empty. Reproduced + verified live with the QA
+              account; CORS temp-QA reverted & re-verified.
   2026-06-10  Round 2 fixes (overlay portal, alignment, age 18–95, /files
               page + header icon, ad assets, Известия removal) — verified
               with live data desktop+mobile; Lambda redeployed; CORS reverted.
@@ -114,9 +120,3 @@ Notes
   - Apex DNS TLS + payments are known/owned items, not bugs.
   - Logged-in pages can't load from localhost (prod-only CORS); QA passes
     temporarily allow localhost via terraform and always revert + re-verify.
-  2026-06-10  Fix: "Виж публичния си профил" showed nothing for accounts with
-              an empty name — GET /public/users/{id} rejected them (404). Now
-              falls back to the email local-part as display name (deployed);
-              /u/:id additionally shows a "допълни профила си" hint when your
-              own card is still empty. Reproduced + verified live with the QA
-              account; CORS temp-QA reverted & re-verified.
