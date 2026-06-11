@@ -4550,6 +4550,32 @@ export function DashboardPage() {
                       ? `/consultants/${consultantProfile.slug}`
                       : `/u/${profile.userId}`
                   }
+                  state={
+                    profile.role === "consultant" && consultantProfile
+                      ? undefined
+                      : {
+                          // Seed the member page so it renders instantly from the
+                          // profile we already have (no wait on the public API).
+                          member: {
+                            userId: profile.userId,
+                            name:
+                              profile.name ||
+                              (profile.email || "").split("@")[0] ||
+                              "Потребител GrowPoint",
+                            role: profile.role,
+                            avatarUrl: profile.avatarUrl || "",
+                            city: profile.city || "",
+                            occupation: profile.occupation || "",
+                            headline: profile.headline || "",
+                            bio: profile.bio || "",
+                            experienceSummary: profile.experienceSummary || "",
+                            experienceHighlights: profile.experienceHighlights || [],
+                            educationHighlights: profile.educationHighlights || [],
+                            skills: profile.skills || [],
+                            interests: profile.interests || []
+                          }
+                        }
+                  }
                 >
                   {profile.role === "consultant" && consultantProfile
                     ? "Виж публичната страница"

@@ -76,6 +76,12 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-11  Perf: "Виж публичния си профил" now renders instantly (28ms vs
+              waiting on the API, which pays ~1-2s on Lambda cold start) — the
+              dashboard Link seeds the member page with the already-loaded
+              profile via route state; a background refresh still pulls the
+              live public payload. Verified with the owner's test client
+              account; CORS temp-QA reverted & re-verified.
   2026-06-10  Fix: "Виж публичния си профил" showed nothing for accounts with
               an empty name — GET /public/users/{id} rejected them (404). Now
               falls back to the email local-part as display name (deployed);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { applyMemberProfileSeo } from "../../lib/seo";
@@ -20,13 +20,26 @@ function initials(name: string) {
 export default function MemberProfilePage() {
   const { id = "" } = useParams();
   const { user } = useAuth();
-  const [member, setMember] = useState<PublicUserProfile | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const location = useLocation();
+  // When the user arrives from their own dashboard, the Link passes the profile
+  // as route state — render it instantly instead of waiting on the API (which
+  // can pay a Lambda cold start), then refresh from the server in the background.
+  const seeded = (location.state as { member?: PublicUserProfile } | null)?.member;
+  const seedValid = seeded && seeded.userId === id ? seeded : undefined;
+  const [member, setMember] = useState<PublicUserProfile | null>(seedValid ?? null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">(
+    seedValid ? "ready" : "loading"
+  );
   const [shareMessage, setShareMessage] = useState("");
 
   useEffect(() => {
     let mounted = true;
-    setStatus("loading");
+    const hasSeed = Boolean(seedValid);
+    if (hasSeed && seedValid) {
+      applyMemberProfileSeo(seedValid);
+    } else {
+      setStatus("loading");
+    }
     api
       .getPublicUser(id)
       .then((value) => {
@@ -37,11 +50,13 @@ export default function MemberProfilePage() {
       })
       .catch(() => {
         if (!mounted) return;
-        setStatus("error");
+        // Keep showing the seeded card if the background refresh fails.
+        if (!hasSeed) setStatus("error");
       });
     return () => {
       mounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
