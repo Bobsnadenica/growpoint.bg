@@ -76,6 +76,11 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-11  Booking notifications: the popup action is now "Виж сесиите" —
+              opens the dashboard WITH the "Предстоящи сесии" popup already
+              open (#sessions hash handled by the dashboard) instead of just
+              landing on the profile top. Verified end-to-end with the owner's
+              real booking_accepted notification; CORS temp-QA reverted.
   2026-06-11  Notifications: opening one now marks JUST that one as read
               (mark-read accepts optional notificationId; header badge syncs
               per-id). "Маркирай всички" unchanged. Verified live: bogus-id

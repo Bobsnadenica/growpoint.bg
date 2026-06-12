@@ -3637,6 +3637,13 @@ export function DashboardPage() {
       return;
     }
 
+    // Сесиите вече са попъп, не секция — #sessions го отваря директно
+    // (използва се от известията: „Виж сесиите").
+    if (targetId === "sessions") {
+      setSessionsOpen(true);
+      return;
+    }
+
     const timeout = window.setTimeout(() => scrollToDashboardSection(targetId), 80);
     return () => window.clearTimeout(timeout);
   }, [bookings.length, dashboardLocation.hash, notifications.length, profile]);

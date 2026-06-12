@@ -32,7 +32,9 @@ function notificationAction(item: NotificationItem): { to: string; label: string
     return { to: "/messages", label: "Към съобщенията" };
   }
   if (getNotificationCategory(item.type) === "booking") {
-    return { to: "/dashboard", label: "Към таблото" };
+    // Opens the dashboard WITH the "Предстоящи сесии" popup already open —
+    // the #sessions hash is handled by the dashboard.
+    return { to: "/dashboard#sessions", label: "Виж сесиите" };
   }
   return null;
 }
