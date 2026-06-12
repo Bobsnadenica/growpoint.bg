@@ -1,6 +1,6 @@
 GrowPoint — QA & Change Report (condensed)
 ===========================================
-Last updated: 2026-06-10
+Last updated: 2026-06-12
 This file is the running QA log. Detailed feature docs + the consolidated
 "What's next" table live in README.md. Public file — no secrets here.
 
@@ -10,7 +10,7 @@ Targets
   - Live API:                  https://zmajj05nm1.execute-api.eu-west-1.amazonaws.com
 
 ==================================================================
-CURRENT STATE — what is verified working (as of 2026-06-10)
+CURRENT STATE — what is verified working (as of 2026-06-12, full audit)
 ==================================================================
   - Build gates: npm run build (dark-theme guard + tsc + vite) PASS;
     node --check backend PASS; terraform validate + fmt clean; secret scan
@@ -76,6 +76,19 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-12  FULL AUDIT: gates+drift clean; security review of new surface
+              (admin package endpoint, per-id mark-read, public users endpoint,
+              setRole) — no issues; live: all boundaries 401, package internals
+              hidden from public payload, CORS posture correct. Both-role
+              browser sweeps (client+consultant, 1280/375/dark): 0 overflow,
+              0 console errors; booking calendar flow OK; sessions-via-hash OK.
+              2 findings FIXED: (1) consultant owner-edit links never showed on
+              the live public profile (check used ownerUserId which the public
+              payload strips — now compares the viewer's own consultant
+              profile; verified: owner note + 4 edit links, negative control
+              clean); (2) own pending profile showed raw English "Consultant
+              profile not found." — now a friendly owner-aware panel with
+              "Допълни профила си" CTA (verified live). CORS reverted.
   2026-06-11  Booking notifications: the popup action is now "Виж сесиите" —
               opens the dashboard WITH the "Предстоящи сесии" popup already
               open (#sessions hash handled by the dashboard) instead of just

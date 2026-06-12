@@ -1777,6 +1777,37 @@ export function ConsultantPage() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
   const { profile: viewerProfile, loading: viewerProfileLoading } = useViewerProfile();
+  // The public payload strips ownerUserId (privacy), so owning is detected by
+  // comparing against the viewer's OWN consultant profile (consultants only).
+  const [ownConsultant, setOwnConsultant] = useState<{
+    consultantId: string;
+    slug: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!token || viewerProfile?.role !== "consultant") {
+      setOwnConsultant(null);
+      return;
+    }
+    api
+      .getMyConsultantProfile(token)
+      .then((own) => {
+        if (mounted) {
+          setOwnConsultant(
+            own?.consultantId
+              ? { consultantId: own.consultantId, slug: own.slug || "" }
+              : null
+          );
+        }
+      })
+      .catch(() => {
+        if (mounted) setOwnConsultant(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [token, viewerProfile?.role]);
   const [consultant, setConsultant] = useState<ConsultantProfile | null>(null);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [note, setNote] = useState("");
@@ -1826,10 +1857,40 @@ export function ConsultantPage() {
   }, [consultant]);
 
   if (error) {
+    // Owner looking at their own not-yet-public page: explain instead of 404.
+    const isOwnPendingProfile = Boolean(ownConsultant && slug === ownConsultant.slug);
     return (
       <section className="section">
         <div className="container">
-          <div className="panel panel--error">{error}</div>
+          {isOwnPendingProfile ? (
+            <div className="panel">
+              <p className="eyebrow">Публичен профил</p>
+              <h1>Профилът ти още не е публичен.</h1>
+              <p className="section-caption">
+                Страницата се показва на потребителите след одобрение от екипа на
+                GrowPoint. Допълни профила си и изчакай одобрението — ще получиш
+                известие.
+              </p>
+              <div className="profile-actions">
+                <Link className="primary-button" to="/dashboard#consultant-profile">
+                  Допълни профила си
+                </Link>
+                <Link className="ghost-button" to="/dashboard">
+                  Към таблото
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="panel">
+              <h1>Този профил не е наличен.</h1>
+              <p className="section-caption">
+                Възможно е профилът още да не е одобрен или вече да не е публичен.
+              </p>
+              <Link className="primary-button" to="/users">
+                Разгледай активните профили
+              </Link>
+            </div>
+          )}
         </div>
       </section>
     );
@@ -1846,7 +1907,11 @@ export function ConsultantPage() {
   }
 
   const isConsultantViewer = viewerProfile?.role === "consultant";
-  const isOwnProfile = Boolean(user && consultant.ownerUserId === user.id);
+  const isOwnProfile = Boolean(
+    user &&
+      ((consultant.ownerUserId && consultant.ownerUserId === user.id) ||
+        (ownConsultant && consultant.consultantId === ownConsultant.consultantId))
+  );
   const bookingCtaTo = user ? "/dashboard" : "/auth?tab=register";
   const visibleAvailability = getUpcomingAvailabilitySlots(consultant.availability, 12);
   const themeStyle = getConsultantThemeStyle(consultant);
