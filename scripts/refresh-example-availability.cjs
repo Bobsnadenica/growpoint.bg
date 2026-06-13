@@ -8,12 +8,12 @@
  *
  * Dry run (default — prints what would change, writes nothing):
  *   AWS_REGION=eu-west-1 \
- *   CONSULTANTS_TABLE=careerdoc-dev-consultants \
+ *   CONSULTANTS_TABLE=growpoint-dev-consultants \
  *   node scripts/refresh-example-availability.cjs
  *
  * Apply:
  *   AWS_REGION=eu-west-1 \
- *   CONSULTANTS_TABLE=careerdoc-dev-consultants \
+ *   CONSULTANTS_TABLE=growpoint-dev-consultants \
  *   node scripts/refresh-example-availability.cjs --apply
  */
 const path = require("node:path");
@@ -27,7 +27,7 @@ const {
 } = require(path.join(sdkRoot, "@aws-sdk", "lib-dynamodb"));
 
 const REGION = process.env.AWS_REGION || "eu-west-1";
-const TABLE = process.env.CONSULTANTS_TABLE || "careerdoc-dev-consultants";
+const TABLE = process.env.CONSULTANTS_TABLE || "growpoint-dev-consultants";
 const APPLY = process.argv.includes("--apply");
 
 // Span roughly the next two weeks; weekends are skipped below so the actual

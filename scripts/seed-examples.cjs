@@ -6,7 +6,7 @@
  *
  * Run:
  *   AWS_REGION=eu-west-1 \
- *   CONSULTANTS_TABLE=careerdoc-dev-consultants \
+ *   CONSULTANTS_TABLE=growpoint-dev-consultants \
  *   node scripts/seed-examples.cjs
  *
  * Or use the live region/table the Lambda is configured with:
@@ -24,7 +24,7 @@ const {
 } = require(path.join(sdkRoot, "@aws-sdk", "lib-dynamodb"));
 
 const REGION = process.env.AWS_REGION || "eu-west-1";
-const TABLE = process.env.CONSULTANTS_TABLE || "careerdoc-dev-consultants";
+const TABLE = process.env.CONSULTANTS_TABLE || "growpoint-dev-consultants";
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
 

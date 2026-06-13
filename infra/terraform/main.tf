@@ -51,7 +51,13 @@ resource "random_string" "suffix" {
 }
 
 resource "aws_cognito_user_pool" "main" {
-  name = "${local.name_prefix}-users"
+  # PINNED — do NOT derive from name_prefix. A Cognito user pool's name is
+  # immutable; changing it forces a full replacement, which would destroy every
+  # registered account (email + Google/Apple/LinkedIn), mint a new pool id, and
+  # break the API Gateway JWT authorizer + hosted UI. The name is an internal,
+  # user-invisible label, so it stays at the original value through the
+  # careerdoc -> growpoint project rename to protect existing users.
+  name = "careerdoc-dev-users"
 
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
@@ -410,6 +416,13 @@ resource "aws_cloudfront_function" "frontend_rewrite" {
       return request;
     }
   EOT
+
+  # Create the renamed function and let the distribution switch to it before the
+  # old one is deleted (CloudFront refuses to delete a function still attached
+  # to a distribution). Safe because old/new names differ.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_cloudfront_response_headers_policy" "frontend_security" {
@@ -762,7 +775,7 @@ resource "aws_iam_role_policy" "lambda" {
 data "archive_file" "api" {
   type        = "zip"
   source_dir  = "${path.module}/../../backend/api"
-  output_path = "${path.module}/.terraform-build/careerdoc-api.zip"
+  output_path = "${path.module}/.terraform-build/growpoint-api.zip"
 }
 
 resource "aws_lambda_function" "api" {

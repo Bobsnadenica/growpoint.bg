@@ -1,6 +1,6 @@
 variable "project_name" {
   type    = string
-  default = "careerdoc"
+  default = "growpoint"
 }
 
 variable "environment" {

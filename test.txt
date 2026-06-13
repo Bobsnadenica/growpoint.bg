@@ -89,6 +89,24 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-13  Project rename careerdoc -> growpoint (infra + code), zero data
+              loss, zero downtime to production. DynamoDB tables are now
+              growpoint-dev-{users,consultants,bookings}; S3 buckets
+              growpoint-dev-cv-* and growpoint-dev-frontend-*; Lambda
+              growpoint-dev-api; IAM + tags growpoint. Method: created the new
+              tables mirroring the exact schema (GSIs + PITR) and copied every
+              item (scripts/migrate-tables-to-growpoint.cjs; counts verified
+              24/37/8), synced both S3 buckets, then reconciled Terraform
+              (state rm old + import new) and applied (Lambda env/IAM/names ->
+              growpoint). The Cognito user pool NAME is deliberately left as the
+              original (a pool name is immutable in AWS — renaming = full pool
+              replacement = all accounts lost); it is an internal label only, so
+              the pool id, all users, and the API URL are unchanged. Old
+              careerdoc tables + buckets are kept intact as a rollback backup
+              (delete after the owner confirms). Verified: API health/consultants
+              (11) on the new tables, GSI slug lookup, smoke:prod 14/14, IAM
+              read+write on new resources, CloudFront test domain OK, terraform
+              plan clean (no drift).
   2026-06-13  Admin monitoring made authoritative: the dashboard now reads real
               numbers, incl. the Cognito user pool itself (not just the DynamoDB
               mirror). Backend: new getCognitoUserStats (paginated ListUsers →

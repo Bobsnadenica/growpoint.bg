@@ -1,8 +1,8 @@
 import type { ConsultantProfileType, PlanTier, UserRole } from "./types";
 
-const PENDING_BOOTSTRAP_KEY = "careerdoc.pending-bootstrap";
-const SOCIAL_AUTH_INTENT_KEY = "careerdoc.social-auth-intent";
-const SOCIAL_ONBOARDING_KEY = "careerdoc.social-onboarding-pending";
+const PENDING_BOOTSTRAP_KEY = "growpoint.pending-bootstrap";
+const SOCIAL_AUTH_INTENT_KEY = "growpoint.social-auth-intent";
+const SOCIAL_ONBOARDING_KEY = "growpoint.social-onboarding-pending";
 
 export type SocialAuthProviderKey = "google" | "apple" | "linkedin";
 export type SocialAuthMode = "login" | "register";

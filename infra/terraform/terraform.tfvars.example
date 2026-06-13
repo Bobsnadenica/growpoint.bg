@@ -1,4 +1,4 @@
-project_name     = "careerdoc"
+project_name     = "growpoint"
 environment      = "dev"
 aws_region       = "eu-west-1"
 
@@ -69,7 +69,7 @@ frontend_origins = [
 # linkedin_client_secret = ""
 
 tags = {
-  Project = "CareerDoc"
+  Project = "GrowPoint"
   Owner   = "BobSNadenica"
 }
 

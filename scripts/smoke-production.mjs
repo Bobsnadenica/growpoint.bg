@@ -101,9 +101,9 @@ async function loadConfig() {
       : String(env.GROWPOINT_SITE_URL || "https://www.growpoint.bg").replace(/\/+$/, ""),
     userPoolId: outputValue(outputs, "cognito_user_pool_id", env.VITE_COGNITO_USER_POOL_ID || ""),
     userPoolClientId: outputValue(outputs, "cognito_user_pool_client_id", env.VITE_COGNITO_USER_POOL_CLIENT_ID || ""),
-    usersTable: outputValue(outputs, "users_table_name", "careerdoc-dev-users"),
-    consultantsTable: outputValue(outputs, "consultants_table_name", "careerdoc-dev-consultants"),
-    bookingsTable: outputValue(outputs, "bookings_table_name", "careerdoc-dev-bookings"),
+    usersTable: outputValue(outputs, "users_table_name", "growpoint-dev-users"),
+    consultantsTable: outputValue(outputs, "consultants_table_name", "growpoint-dev-consultants"),
+    bookingsTable: outputValue(outputs, "bookings_table_name", "growpoint-dev-bookings"),
     cvBucket: outputValue(outputs, "cv_bucket_name", ""),
     adminEmail: env.GROWPOINT_ADMIN_EMAIL || "",
     adminPassword: env.GROWPOINT_ADMIN_PASSWORD || ""
