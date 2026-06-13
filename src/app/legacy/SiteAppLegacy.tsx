@@ -167,7 +167,7 @@ const PACKAGE_PLANS: Array<{
     tier: "start",
     level: "Ниво 1 · Старт",
     name: "GrowPoint Start",
-    tagline: "Стандартният профил — безплатно",
+    tagline: "Основният професионален профил",
     description:
       "Създай своя профил, управлявай календара си и започни да приемаш заявки.",
     features: [
@@ -177,7 +177,7 @@ const PACKAGE_PLANS: Array<{
       "Представяне на теми и услуги",
       "Минимум 1 безплатна сесия месечно"
     ],
-    price: "Безплатно"
+    price: "9.99 € / месец"
   },
   {
     tier: "grow",
@@ -4735,8 +4735,6 @@ export function DashboardPage() {
                           <span className="status-badge status-badge--success">
                             Текущ пакет
                           </span>
-                        ) : plan.tier === "start" ? (
-                          <span className="form-note">Винаги безплатно</span>
                         ) : (
                           <button
                             className="ghost-button"
