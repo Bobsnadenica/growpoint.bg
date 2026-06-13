@@ -18,15 +18,21 @@ const {
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { SESv2Client, SendEmailCommand } = require("@aws-sdk/client-sesv2");
+const {
+  CognitoIdentityProviderClient,
+  ListUsersCommand
+} = require("@aws-sdk/client-cognito-identity-provider");
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
 const ses = new SESv2Client({});
+const cognito = new CognitoIdentityProviderClient({});
 
 const env = {
   usersTable: process.env.USERS_TABLE,
   consultantsTable: process.env.CONSULTANTS_TABLE,
   bookingsTable: process.env.BOOKINGS_TABLE,
+  userPoolId: process.env.USER_POOL_ID || "",
   cvBucket: process.env.CV_BUCKET,
   allowedOrigin: process.env.ALLOWED_ORIGIN || "https://www.growpoint.bg",
   allowedOrigins: String(
@@ -4043,17 +4049,98 @@ function lastNDays(n) {
   return days;
 }
 
+// Maps a Cognito user (federated or native) to an identity provider bucket.
+// Federated users carry an "identities" attribute (JSON) and/or a username
+// prefixed by the IdP name; native email/password users have neither.
+function cognitoUserProvider(user) {
+  const attrs = user.Attributes || [];
+  const identitiesAttr = attrs.find((a) => a.Name === "identities");
+  if (identitiesAttr?.Value) {
+    try {
+      const parsed = JSON.parse(identitiesAttr.Value);
+      const providerName = String(parsed?.[0]?.providerName || "").toLowerCase();
+      if (providerName.includes("google")) return "google";
+      if (providerName.includes("apple")) return "apple";
+      if (providerName.includes("linkedin")) return "linkedin";
+      if (providerName) return "other";
+    } catch {
+      // fall through to username heuristic
+    }
+  }
+  const username = String(user.Username || "").toLowerCase();
+  if (username.startsWith("google_")) return "google";
+  if (username.startsWith("signinwithapple_") || username.startsWith("apple_")) return "apple";
+  if (username.startsWith("linkedinoidc_") || username.startsWith("linkedin_")) return "linkedin";
+  return "email";
+}
+
+// Authoritative account stats straight from the Cognito user pool — the real
+// source of truth for "who has registered" (the DynamoDB users table is only
+// populated on first authenticated request, so it can lag the pool). Degrades
+// gracefully: if the pool id is unset or the call fails, returns
+// { available: false } and the caller falls back to DynamoDB counts.
+async function getCognitoUserStats() {
+  if (!env.userPoolId) return { available: false };
+
+  const stats = {
+    available: true,
+    total: 0,
+    confirmed: 0,
+    unconfirmed: 0,
+    disabled: 0,
+    newLast7: 0,
+    byProvider: { email: 0, google: 0, apple: 0, linkedin: 0, other: 0 },
+    capped: false
+  };
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const MAX_PAGES = 200; // 200 * 60 = 12k users — far beyond current scale
+
+  try {
+    let paginationToken;
+    let pages = 0;
+    do {
+      const result = await cognito.send(
+        new ListUsersCommand({
+          UserPoolId: env.userPoolId,
+          Limit: 60,
+          PaginationToken: paginationToken
+        })
+      );
+      for (const user of result.Users || []) {
+        stats.total += 1;
+        if (user.Enabled === false) stats.disabled += 1;
+        const status = String(user.UserStatus || "");
+        if (status === "UNCONFIRMED") stats.unconfirmed += 1;
+        else stats.confirmed += 1; // CONFIRMED + EXTERNAL_PROVIDER (federated)
+        const created = user.UserCreateDate ? new Date(user.UserCreateDate).getTime() : 0;
+        if (created && created >= weekAgo) stats.newLast7 += 1;
+        const provider = cognitoUserProvider(user);
+        stats.byProvider[provider] = (stats.byProvider[provider] || 0) + 1;
+      }
+      paginationToken = result.PaginationToken;
+      pages += 1;
+    } while (paginationToken && pages < MAX_PAGES);
+    if (paginationToken) stats.capped = true;
+  } catch (error) {
+    console.error("[metrics] cognito stats failed", { error: error?.message || error });
+    return { available: false };
+  }
+
+  return stats;
+}
+
 async function getAdminMetrics(event) {
   requireAdmin(event);
 
-  const [allUsers, consultantRows, bookings, visitsItem] = await Promise.all([
+  const [allUsers, consultantRows, bookings, visitsItem, cognitoStats] = await Promise.all([
     scanAllItems(env.usersTable),
     scanAllItems(env.consultantsTable),
     scanAllItems(env.bookingsTable),
     dynamo
       .send(new GetCommand({ TableName: env.usersTable, Key: { userId: VISITS_ITEM_ID } }))
       .then((r) => r.Item || {})
-      .catch(() => ({}))
+      .catch(() => ({})),
+    getCognitoUserStats()
   ]);
 
   // Exclude internal system rows (e.g. the page-view counter) from user metrics.
@@ -4100,21 +4187,40 @@ async function getAdminMetrics(event) {
   }
 
   // Bookings, messages, reviews
+  const now = Date.now();
   const bookingsByStatus = { pending: 0, confirmed: 0, declined: 0, cancelled: 0 };
   let totalMessages = 0;
   let totalReviews = 0;
+  let reviewRatingSum = 0;
   let confirmedSessions = 0;
+  let upcomingConfirmed = 0;
   for (const b of bookings) {
     if (bookingsByStatus[b.status] !== undefined) bookingsByStatus[b.status] += 1;
     if (Array.isArray(b.messages)) totalMessages += b.messages.length;
-    if (b.review && Number(b.review.rating) > 0) totalReviews += 1;
+    const rating = Number(b.review?.rating);
+    if (b.review && rating > 0) {
+      totalReviews += 1;
+      reviewRatingSum += rating;
+    }
     if (b.sessionConfirmation?.clientConfirmedAt && b.sessionConfirmation?.consultantConfirmedAt) {
       confirmedSessions += 1;
     }
+    if (b.status === "confirmed" && b.scheduledAt) {
+      const when = new Date(b.scheduledAt).getTime();
+      if (Number.isFinite(when) && when >= now) upcomingConfirmed += 1;
+    }
   }
+  const averageRating = totalReviews
+    ? Math.round((reviewRatingSum / totalReviews) * 10) / 10
+    : 0;
 
   return response(200, {
     generatedAt: new Date().toISOString(),
+    // Authoritative account count from the Cognito user pool (source of truth
+    // for registrations). `users` below is the DynamoDB mirror, which only fills
+    // in on a user's first authenticated request — comparing the two surfaces
+    // accounts that registered but never activated an app profile.
+    cognito: cognitoStats,
     users: {
       total: users.length,
       clients: clientUsers,
@@ -4135,10 +4241,12 @@ async function getAdminMetrics(event) {
       confirmed: bookingsByStatus.confirmed,
       declined: bookingsByStatus.declined,
       cancelled: bookingsByStatus.cancelled,
-      confirmedSessions
+      confirmedSessions,
+      upcomingConfirmed
     },
     messages: totalMessages,
     reviews: totalReviews,
+    averageRating,
     visits: {
       total: visitsTotal,
       last7: visitsLast7,

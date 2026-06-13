@@ -10825,8 +10825,14 @@ textarea {
 
 .metric-breakdown {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
+}
+
+/* The day-chart card reads better wide; it spans two tracks when there's room
+   and collapses to one on narrow viewports. Robust for 3 or 4 breakdown cards. */
+.metric-card--wide {
+  grid-column: span 2;
 }
 
 .metric-chart {
@@ -10885,6 +10891,10 @@ textarea {
 @media (max-width: 760px) {
   .metric-breakdown {
     grid-template-columns: 1fr;
+  }
+
+  .metric-card--wide {
+    grid-column: auto;
   }
 }
 

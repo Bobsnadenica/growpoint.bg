@@ -38,6 +38,16 @@ CURRENT STATE — what is verified working (as of 2026-06-12, full audit)
     Grow profiles show a "Препоръчан експерт" badge; Spotlight profiles show a
     fancier animated gold "★ GrowPoint суперзвезди" badge. Paywall visibility
     gate deliberately NOT enforced until Stripe lands.
+  - Admin monitoring (/admin "Преглед на платформата"): numbers are real, not
+    placeholders. Account totals now come straight from the Cognito user pool
+    (ListUsers, read-only IAM) — the source of truth for registrations — with a
+    confirmed/непотвърдени split and a breakdown by login (Имейл/Google/Apple/
+    LinkedIn). "Активирани профили" is the DynamoDB mirror (created on first
+    authenticated request); a note surfaces the drift (registered-but-not-yet-
+    activated). Other tiles scan DynamoDB live: public profiles, bookings by
+    status + upcoming confirmed sessions, messages, reviews + average rating,
+    confirmed sessions, and a first-party page-view counter. Degrades gracefully
+    to DB counts if Cognito is unreachable.
   - Designer/tester doc (June): fully implemented and DOM-verified — new
     copy site-wide, 7 области (+auto-scroll), directory Препоръчани (≥4.5,
     verified min 4.6) / Водещи buttons, photo badges, −50% card photos,
@@ -79,6 +89,23 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-13  Admin monitoring made authoritative: the dashboard now reads real
+              numbers, incl. the Cognito user pool itself (not just the DynamoDB
+              mirror). Backend: new getCognitoUserStats (paginated ListUsers →
+              total/confirmed/unconfirmed/disabled/by-provider/new-7d) wired into
+              /admin/metrics; added upcoming confirmed sessions + average review
+              rating. Infra: read-only cognito-idp:ListUsers/DescribeUserPool IAM
+              scoped to the pool ARN + USER_POOL_ID Lambda env (terraform apply).
+              Frontend: "Регистрирани акаунти" now = Cognito (with confirmed split
+              + login-provider breakdown); "Активирани профили" = DynamoDB mirror;
+              drift note shows registered-but-not-activated; new tiles for
+              предстоящи сесии + среден рейтинг. Fixed the misleading note that
+              claimed visits aren't tracked (they are, via a cookieless counter).
+              Degrades to DB counts if Cognito is unreachable. Verified: tsc/
+              node --check/build/secret-scan PASS; layout DOM-checked at 1280 &
+              390 (0 overflow); Lambda boots + endpoint 401 anon; live Cognito
+              read left for the owner's admin session (CLI pool dumps are blocked
+              by policy — aggregate-only attempt denied, respected).
   2026-06-13  Owner round (5 items), all DOM-verified live + gates green:
               (1) Header bell notifications now open the SAME detail popup as
               the /notifications page (shared NotificationDetailModal, portaled

@@ -351,6 +351,17 @@ export default function AdminPage() {
         ? (() => {
             const reg14 = metrics.users.registrationsPerDay.slice(-14);
             const regMax = Math.max(1, ...reg14.map((day) => day.count));
+            const cognito = metrics.cognito;
+            const cognitoOn = cognito.available;
+            // Authoritative account count (Cognito) when available; otherwise the
+            // DynamoDB mirror. Drift = registered accounts that have not yet made
+            // an authenticated request (no app profile row created yet).
+            const accountTotal = cognitoOn ? cognito.total : metrics.users.total;
+            const drift = cognitoOn ? cognito.total - metrics.users.total : 0;
+            const newLast7 = cognitoOn ? cognito.newLast7 : metrics.users.registrationsLast7;
+            const ratingLabel = metrics.averageRating
+              ? metrics.averageRating.toFixed(1)
+              : "—";
             return (
               <section className="section section--tight">
                 <div className="container">
@@ -360,7 +371,16 @@ export default function AdminPage() {
                   </div>
                   <div className="metric-grid">
                     <article className="metric-card">
-                      <span>Регистрирани потребители</span>
+                      <span>Регистрирани акаунти</span>
+                      <strong>{accountTotal}</strong>
+                      <em>
+                        {cognitoOn
+                          ? `${cognito.confirmed} потвърдени · ${cognito.unconfirmed} непотвърдени`
+                          : `${metrics.users.clients} клиенти · ${metrics.users.consultants} консултанти`}
+                      </em>
+                    </article>
+                    <article className="metric-card">
+                      <span>Активирани профили</span>
                       <strong>{metrics.users.total}</strong>
                       <em>
                         {metrics.users.clients} клиенти · {metrics.users.consultants} консултанти
@@ -368,8 +388,8 @@ export default function AdminPage() {
                     </article>
                     <article className="metric-card">
                       <span>Нови за 7 дни</span>
-                      <strong>{metrics.users.registrationsLast7}</strong>
-                      <em>регистрации</em>
+                      <strong>{newLast7}</strong>
+                      <em>{cognitoOn ? "регистрации в Cognito" : "регистрации"}</em>
                     </article>
                     <article className="metric-card">
                       <span>Публични профили</span>
@@ -382,6 +402,11 @@ export default function AdminPage() {
                       <em>{metrics.bookings.confirmed} потвърдени</em>
                     </article>
                     <article className="metric-card">
+                      <span>Предстоящи сесии</span>
+                      <strong>{metrics.bookings.upcomingConfirmed}</strong>
+                      <em>потвърдени в бъдеще</em>
+                    </article>
+                    <article className="metric-card">
                       <span>Съобщения</span>
                       <strong>{metrics.messages}</strong>
                       <em>между потребители</em>
@@ -389,19 +414,28 @@ export default function AdminPage() {
                     <article className="metric-card">
                       <span>Отзиви</span>
                       <strong>{metrics.reviews}</strong>
-                      <em>{metrics.bookings.confirmedSessions} проведени сесии</em>
+                      <em>среден рейтинг {ratingLabel} · {metrics.bookings.confirmedSessions} проведени</em>
                     </article>
                     <article className="metric-card">
                       <span>Посещения (7 дни)</span>
                       <strong>{metrics.visits.last7}</strong>
-                      <em>{metrics.visits.total} общо сесии</em>
+                      <em>{metrics.visits.total} зареждания общо</em>
                     </article>
                   </div>
 
+                  {cognitoOn && drift > 0 ? (
+                    <p className="form-note">
+                      {drift}{" "}
+                      {drift === 1 ? "акаунт е регистриран" : "акаунта са регистрирани"} в
+                      Cognito, но още нямат активиран профил в приложението (записът се създава
+                      при първото влизане).
+                    </p>
+                  ) : null}
+
                   <div className="metric-breakdown">
                     <article className="metric-card metric-card--wide">
-                      <span>Регистрации по дни (последни 14)</span>
-                      <div className="metric-chart" role="img" aria-label="Регистрации по дни">
+                      <span>Нови профили по дни (последни 14)</span>
+                      <div className="metric-chart" role="img" aria-label="Нови профили по дни">
                         {reg14.map((day) => (
                           <div
                             key={day.date}
@@ -414,6 +448,35 @@ export default function AdminPage() {
                         ))}
                       </div>
                     </article>
+                    {cognitoOn ? (
+                      <article className="metric-card">
+                        <span>Акаунти по вход</span>
+                        <dl className="metric-rows">
+                          <div>
+                            <dt>Имейл / парола</dt>
+                            <dd>{cognito.byProvider.email}</dd>
+                          </div>
+                          <div>
+                            <dt>Google</dt>
+                            <dd>{cognito.byProvider.google}</dd>
+                          </div>
+                          <div>
+                            <dt>Apple</dt>
+                            <dd>{cognito.byProvider.apple}</dd>
+                          </div>
+                          <div>
+                            <dt>LinkedIn</dt>
+                            <dd>{cognito.byProvider.linkedin}</dd>
+                          </div>
+                          {cognito.byProvider.other > 0 ? (
+                            <div>
+                              <dt>Други</dt>
+                              <dd>{cognito.byProvider.other}</dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                      </article>
+                    ) : null}
                     <article className="metric-card">
                       <span>Консултанти по статус</span>
                       <dl className="metric-rows">
@@ -454,8 +517,17 @@ export default function AdminPage() {
                     </article>
                   </div>
                   <p className="form-note">
-                    Посещенията на сайта не се проследяват тук — за това е нужен аналитичен
-                    инструмент (напр. Plausible или Google Analytics).
+                    {cognitoOn
+                      ? "Регистрираните акаунти и разбивката по вход идват в реално време от Cognito; останалите числа — от базата данни."
+                      : "Cognito не е достъпен в момента — „Регистрирани акаунти“ показва записите от базата данни (създават се при първо влизане)."}
+                    {cognitoOn && cognito.capped
+                      ? " (Показана е извадка — потребителите надхвърлят лимита за броене.)"
+                      : ""}{" "}
+                    Посещенията се броят със собствен брояч на зареждания (без бисквитки и
+                    проследяване); за демографски данни е нужен външен аналитичен инструмент.
+                  </p>
+                  <p className="form-note">
+                    Данните са към {formatAuditDate(metrics.generatedAt) || metrics.generatedAt}.
                   </p>
                 </div>
               </section>

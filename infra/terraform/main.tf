@@ -743,6 +743,17 @@ resource "aws_iam_role_policy" "lambda" {
           "ses:SendEmail"
         ]
         Resource = "*"
+      },
+      {
+        # Read-only: admin metrics count the real Cognito user pool (authoritative
+        # registration numbers + provider/confirmation breakdown). No write/admin
+        # mutation actions are granted.
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:ListUsers",
+          "cognito-idp:DescribeUserPool"
+        ]
+        Resource = aws_cognito_user_pool.main.arn
       }
     ]
   })
@@ -771,6 +782,7 @@ resource "aws_lambda_function" "api" {
       USERS_TABLE       = aws_dynamodb_table.users.name
       CONSULTANTS_TABLE = aws_dynamodb_table.consultants.name
       BOOKINGS_TABLE    = aws_dynamodb_table.bookings.name
+      USER_POOL_ID      = aws_cognito_user_pool.main.id
       CV_BUCKET         = aws_s3_bucket.cv_documents.bucket
       ALLOWED_ORIGIN    = element(var.frontend_origins, 0)
       ALLOWED_ORIGINS   = join(",", var.frontend_origins)

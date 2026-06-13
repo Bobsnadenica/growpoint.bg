@@ -59,6 +59,27 @@ export interface AdminConsultantSummary {
 
 export interface AdminMetrics {
   generatedAt: string;
+  // Authoritative account stats read straight from the Cognito user pool.
+  // `available: false` means the pool could not be read (env unset or call
+  // failed) and the UI should fall back to the DynamoDB `users` counts.
+  cognito:
+    | { available: false }
+    | {
+        available: true;
+        total: number;
+        confirmed: number;
+        unconfirmed: number;
+        disabled: number;
+        newLast7: number;
+        capped: boolean;
+        byProvider: {
+          email: number;
+          google: number;
+          apple: number;
+          linkedin: number;
+          other: number;
+        };
+      };
   users: {
     total: number;
     clients: number;
@@ -80,9 +101,11 @@ export interface AdminMetrics {
     declined: number;
     cancelled: number;
     confirmedSessions: number;
+    upcomingConfirmed: number;
   };
   messages: number;
   reviews: number;
+  averageRating: number;
   visits: {
     total: number;
     last7: number;
