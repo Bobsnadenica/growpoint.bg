@@ -281,6 +281,33 @@ main {
   font-size: 0.88rem;
 }
 
+/* Header wordmark logo (includes the GrowPoint name). Light + dark variants
+   are swapped by theme so the dark-blue mark stays legible on a dark header. */
+.brand-logo {
+  display: block;
+  height: 38px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.brand-logo--dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .brand-logo--light {
+  display: none;
+}
+
+:root[data-theme="dark"] .brand-logo--dark {
+  display: block;
+}
+
+@media (max-width: 600px) {
+  .brand-logo {
+    height: 32px;
+  }
+}
+
 .brand-mark {
   position: relative;
   width: 30px;

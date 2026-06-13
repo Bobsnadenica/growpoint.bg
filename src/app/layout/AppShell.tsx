@@ -623,9 +623,17 @@ export default function AppShell() {
         <div className="container site-header__inner">
           <Link className="brand-link" to="/" aria-label={config.appName}>
             <img
-              className="brand-logo"
+              className="brand-logo brand-logo--light"
               src="/assets/logo.svg"
               alt={config.appName}
+              width={150}
+              height={45}
+            />
+            <img
+              className="brand-logo brand-logo--dark"
+              src="/assets/logo-dark.svg"
+              alt=""
+              aria-hidden="true"
               width={150}
               height={45}
             />

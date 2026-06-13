@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 150" width="100%" height="100%">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;800&amp;display=swap');
+      .text-grow { font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 68px; fill: #FFFFFF; }
+      .text-point { font-family: 'Montserrat', sans-serif; font-weight: 300; font-size: 68px; fill: #FFFFFF; }
+      .icon-pin { fill: #93C5FD; }
+      .icon-arrow { fill: #10B981; }
+    </style>
+  </defs>
+
+  <!-- ICON -->
+  <g transform="translate(20, 25)">
+    <!-- Pinpoint Outline -->
+    <path class="icon-pin" d="M50,0 C22.4,0 0,22.4 0,50 C0,87.5 50,120 50,120 C50,120 100,87.5 100,50 C100,22.4 77.6,0 50,0 Z M50,85 C30.7,85 15,69.3 15,50 C15,30.7 30.7,15 50,15 C69.3,15 85,30.7 85,50 C85,69.3 69.3,85 50,85 Z"/>
+
+    <!-- Upward Trending Arrow -->
+    <path class="icon-arrow" d="M35,65 L35,50 L25,50 L50,22 L75,50 L65,50 L65,65 Z"/>
+  </g>
+
+  <!-- TYPOGRAPHY -->
+  <g transform="translate(140, 100)">
+    <text x="0" y="0" class="text-grow">Grow</text>
+    <text x="195" y="0" class="text-point">point</text>
+  </g>
+</svg>
