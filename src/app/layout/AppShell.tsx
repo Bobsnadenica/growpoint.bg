@@ -34,15 +34,6 @@ import NotFoundPage from "../pages/NotFoundPage";
 import ProfilePage from "../pages/ProfilePage";
 import UsersPage from "../pages/UsersPage";
 
-function brandMark() {
-  return (
-    <span className="brand-mark" aria-hidden="true">
-      <span className="brand-mark__vertical" />
-      <span className="brand-mark__horizontal" />
-    </span>
-  );
-}
-
 const primaryNavigation = [
   { to: "/", label: "Начало" },
   { to: "/users", label: "За хората, които търсят" }
@@ -630,9 +621,14 @@ export default function AppShell() {
           aria-hidden="true"
         />
         <div className="container site-header__inner">
-          <Link className="brand-link" to="/">
-            {brandMark()}
-            <strong>{config.appName}</strong>
+          <Link className="brand-link" to="/" aria-label={config.appName}>
+            <img
+              className="brand-logo"
+              src="/assets/logo.svg"
+              alt={config.appName}
+              width={150}
+              height={45}
+            />
           </Link>
 
           <nav className="site-nav" aria-label="Основна навигация">
