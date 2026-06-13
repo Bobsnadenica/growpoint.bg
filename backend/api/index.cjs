@@ -20,7 +20,9 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { SESv2Client, SendEmailCommand } = require("@aws-sdk/client-sesv2");
 const {
   CognitoIdentityProviderClient,
-  ListUsersCommand
+  ListUsersCommand,
+  AdminDisableUserCommand,
+  AdminEnableUserCommand
 } = require("@aws-sdk/client-cognito-identity-provider");
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -99,7 +101,6 @@ const MAX_USER_TOTAL_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const MAX_USER_DOCUMENTS = 50;
 const ACCOUNT_DELETION_DELAY_DAYS = 7;
 const CONSULTANT_PROFILE_STATUSES = new Set(["pending", "approved", "rejected"]);
-const VISIBLE_CONSULTANT_STATUSES = new Set(["approved"]);
 const ADMIN_GROUP = "admin";
 const CONSULTANT_GROUP = "consultants";
 const CLIENT_GROUP = "clients";
@@ -1574,12 +1575,25 @@ function isReasonablePublicNumber(value, min, max) {
   return Number.isFinite(number) && number >= min && number <= max;
 }
 
+// A consultant has an active membership (and may be public) when they are a
+// paying or admin-comped/invited expert. Approval is no longer required — paid
+// (or invited) accounts are the gate. `comped` is set by an admin invite or by
+// grandfathering existing live profiles; `packageSource` purchased|granted comes
+// from Stripe (future) or an admin package grant. Restricted accounts are never
+// active.
+function consultantMembershipActive(consultant) {
+  if (!consultant || consultant.restricted === true) return false;
+  if (consultant.comped === true) return true;
+  const source = consultant.packageSource || "";
+  return source === "granted" || source === "purchased";
+}
+
 function isVisibleConsultant(consultant) {
   if (!isConsultantRecord(consultant)) return false;
   if (consultant.isPublic === false) return false;
-  const status = consultant.profileStatus || "pending";
-  if (!VISIBLE_CONSULTANT_STATUSES.has(status)) return false;
+  if (consultant.restricted === true) return false;
   if (consultant.deletionScheduledAt || consultant.anonymizedAt) return false;
+  if (!consultantMembershipActive(consultant)) return false;
 
   const name = String(consultant.name || "").trim();
   const headline = String(consultant.headline || "").trim();
@@ -1593,14 +1607,14 @@ function isVisibleConsultant(consultant) {
   if (!isReasonablePublicNumber(normalizeConsultantPriceEur(consultant), 0, 2500)) return false;
   if (!isReasonablePublicNumber(consultant.sessionLengthMinutes || 60, 15, 240)) return false;
 
-  // Manual admin approval is authoritative: if an admin has reviewed and
-  // approved the profile, the public page should not be hidden by automated
-  // completeness heuristics. Auto-approved profiles still pass the stricter
-  // quality bar below before appearing in the catalog.
+  // An admin-established membership (invited/comped, or a granted/purchased
+  // package) is authoritative — the profile is not hidden by the automated
+  // completeness heuristics below. Self-built profiles still pass the stricter
+  // quality bar before appearing in the catalog.
   if (
-    consultant.profileStatus === "approved" &&
-    consultant.statusSelfApproved !== true &&
-    (consultant.statusUpdatedAt || consultant.statusUpdatedBy)
+    consultant.comped === true ||
+    consultant.packageSource === "granted" ||
+    consultant.packageSource === "purchased"
   ) {
     return true;
   }
@@ -1798,7 +1812,8 @@ function createConsultantDraft({
   profileType,
   city,
   headline,
-  avatarUrl
+  avatarUrl,
+  comped = false
 }) {
   const baseName = String(name || email || "consultant").trim();
   const slug = normalizeSlug(baseName);
@@ -1806,6 +1821,8 @@ function createConsultantDraft({
   return {
     consultantId: `consultant-${randomUUID()}`,
     ownerUserId: userId,
+    comped: comped === true,
+    restricted: false,
     profileType: normalizeConsultantProfileType(profileType),
     slug: slug || `consultant-${Date.now()}`,
     name: baseName || "Нов профил",
@@ -2006,6 +2023,16 @@ async function bootstrapUser(event) {
   const existing = await getUserBySub(claims.sub);
   const currentPlan = normalizePlanTier(existing?.plan, "free");
   const currentRole = normalizeUserRole(existing?.role, "client");
+  // Redeem an admin email invite (?invite=TOKEN) — grants a free, "comped"
+  // consultant account (the only way to onboard a mentor until Stripe is live).
+  // The invite is keyed by the invited email and the verified token must match.
+  let redeemedInvite = false;
+  const inviteEmail = String(claims.email || body.email || "").trim().toLowerCase();
+  if (body.inviteToken && inviteEmail) {
+    const redeemed = await redeemInvite(inviteEmail, String(body.inviteToken), claims.sub);
+    if (redeemed) redeemedInvite = true;
+  }
+  const compedConsultant = existing?.compedConsultant === true || redeemedInvite;
   // Cognito group membership is authoritative, so a manually-created Cognito user
   // can be designated by assigning a group (picked up on next login):
   //   - "consultants" group -> mentor/consultant
@@ -2023,11 +2050,12 @@ async function bootstrapUser(event) {
   // applies the requested role; without `setRole`, an existing user keeps their
   // current role so routine bootstrap calls can never silently demote them.
   const allowRoleChange = body.setRole === true;
-  const requestedRole =
-    groupRole ||
-    (existing && !allowRoleChange
-      ? currentRole
-      : normalizeUserRole(body.role, currentRole));
+  const requestedRole = redeemedInvite
+    ? "consultant"
+    : groupRole ||
+      (existing && !allowRoleChange
+        ? currentRole
+        : normalizeUserRole(body.role, currentRole));
   const requestedConsultantProfileType =
     typeof body.consultantProfileType === "undefined"
       ? null
@@ -2037,6 +2065,8 @@ async function bootstrapUser(event) {
     email: claims.email || normalizeText(body.email, "", 320),
     name: normalizeText(body.name || claims.name, existing?.name || "", 120),
     role: requestedRole,
+    compedConsultant,
+    restricted: existing?.restricted === true,
     plan: currentPlan,
     avatarUrl: normalizeText(
       body.avatarUrl ?? claims.picture,
@@ -2083,7 +2113,8 @@ async function bootstrapUser(event) {
         profileType: requestedConsultantProfileType || "consultant",
         city: nextUser.city,
         headline: nextUser.headline,
-        avatarUrl: nextUser.avatarUrl
+        avatarUrl: nextUser.avatarUrl,
+        comped: compedConsultant
       });
       await putConsultantDraftWithUniqueSlug(draft);
     } else {
@@ -2092,6 +2123,7 @@ async function bootstrapUser(event) {
           TableName: env.consultantsTable,
           Item: {
             ...existingConsultant,
+            comped: existingConsultant.comped === true || compedConsultant,
             profileType:
               requestedConsultantProfileType ||
               existingConsultant.profileType ||
@@ -2559,6 +2591,10 @@ async function updateMyConsultant(event) {
       normalizeConsultantPriceEur(baseConsultant)
     ),
     featured: baseConsultant.featured ?? false,
+    // Active membership flows from an admin invite (comped) — preserve it, and
+    // pick it up from the owner's user record for a freshly-created draft.
+    comped: baseConsultant.comped === true || user.compedConsultant === true,
+    restricted: baseConsultant.restricted === true,
     rating: baseConsultant.rating ?? 0,
     reviewCount: baseConsultant.reviewCount ?? 0,
     theme: normalizePlanTier(user.plan, "free") === "pro" ? requestedTheme : "",
@@ -2617,18 +2653,16 @@ async function updateMyConsultant(event) {
   );
   delete nextConsultant.priceBgn;
 
-  // Silent auto-approve: a fully-fleshed-out profile becomes public without
-  // waiting for explicit admin action. We only promote upward — pending →
-  // approved+public. We never downgrade an admin-approved or admin-rejected
-  // profile from here, and we don't communicate this rule to the UI; the
-  // profile just appears in the catalog the moment it's ready.
+  // Auto-publish: an ACTIVE (paid or admin-invited/comped) consultant whose
+  // profile is complete becomes public automatically — no admin approval step.
+  // Inactive accounts never go public; they must be invited or pay first.
   if (
-    nextConsultant.profileStatus === "pending" &&
+    consultantMembershipActive(nextConsultant) &&
+    nextConsultant.isPublic !== true &&
     isConsultantProfileReadyForAutoApprove(nextConsultant)
   ) {
-    nextConsultant.profileStatus = "approved";
     nextConsultant.isPublic = true;
-    nextConsultant.autoApprovedAt = new Date().toISOString();
+    nextConsultant.autoPublishedAt = new Date().toISOString();
   }
 
   try {
@@ -4143,8 +4177,11 @@ async function getAdminMetrics(event) {
     getCognitoUserStats()
   ]);
 
-  // Exclude internal system rows (e.g. the page-view counter) from user metrics.
-  const users = allUsers.filter((u) => !String(u.userId || "").startsWith("system#"));
+  // Exclude internal rows (page-view counter, pending invites) from user metrics.
+  const users = allUsers.filter((u) => {
+    const id = String(u.userId || "");
+    return !id.startsWith("system#") && !id.startsWith(INVITE_PREFIX);
+  });
 
   // Dedupe by owner: an owner can have several draft rows, which would inflate
   // the "consultants by status" counts. Use the same canonical-pick logic as the
@@ -4327,6 +4364,8 @@ async function listConsultantsForAdmin(event) {
         profileStatus: item.profileStatus || "approved",
         isPublic: item.isPublic !== false,
         featured: Boolean(item.featured),
+        comped: item.comped === true,
+        restricted: item.restricted === true,
         packageTier: normalizeConsultantPackageTier(item.packageTier),
         packageSource: item.packageSource || "",
         membershipTier: item.membershipTier || "standard",
@@ -4413,68 +4452,6 @@ async function getConsultantForAdmin(event) {
     statusUpdatedByEmail: consultant.statusUpdatedByEmail || "",
     statusSelfApproved: Boolean(consultant.statusSelfApproved)
   }, { "Cache-Control": "no-store" });
-}
-
-async function setConsultantStatus(event) {
-  const claims = requireAdmin(event);
-  const body = parseBody(event);
-  const consultantId = event.pathParameters?.consultantId;
-
-  if (!consultantId) {
-    return badRequest("consultantId is required.");
-  }
-
-  const status = normalizeConsultantStatus(body.status);
-
-  if (!status) {
-    return badRequest("status must be one of: pending, approved, rejected.");
-  }
-
-  const existing = await dynamo.send(
-    new GetCommand({
-      TableName: env.consultantsTable,
-      Key: { consultantId }
-    })
-  );
-
-  if (!existing.Item) {
-    return notFound("Consultant not found.");
-  }
-
-  // Self-approval is allowed — single-admin teams need an escape hatch. We
-  // record it as `selfApproved: true` so the audit trail makes the decision
-  // visible to anyone reviewing later.
-  const isSelfApproval = existing.Item.ownerUserId === claims.sub;
-  const now = new Date().toISOString();
-  const updated = {
-    ...existing.Item,
-    profileStatus: status,
-    isPublic: status === "approved",
-    featured: status === "approved" ? Boolean(existing.Item.featured) : false,
-    statusUpdatedAt: now,
-    statusUpdatedBy: claims.sub,
-    statusUpdatedByEmail: claims.email || "",
-    statusSelfApproved: isSelfApproval,
-    updatedAt: now
-  };
-
-  await dynamo.send(
-    new PutCommand({
-      TableName: env.consultantsTable,
-      Item: updated
-    })
-  );
-
-  return response(200, {
-    consultantId: updated.consultantId,
-    profileStatus: updated.profileStatus,
-    isPublic: updated.isPublic,
-    featured: updated.featured,
-    statusUpdatedAt: updated.statusUpdatedAt,
-    statusUpdatedBy: updated.statusUpdatedBy,
-    statusUpdatedByEmail: updated.statusUpdatedByEmail,
-    statusSelfApproved: updated.statusSelfApproved
-  });
 }
 
 // Admin-assigned visibility package (Стр. 6). Until Stripe checkout exists this
@@ -4604,6 +4581,194 @@ async function setConsultantFeatured(event) {
       featuredUpdatedAt: updated.featuredUpdatedAt,
       featuredUpdatedBy: updated.featuredUpdatedBy,
       featuredUpdatedByEmail: updated.featuredUpdatedByEmail
+    },
+    { "Cache-Control": "no-store" }
+  );
+}
+
+// --- Admin invites: a free, "comped" consultant onboarding path -------------
+// Until Stripe is live, mentor accounts only come from an admin invite. An
+// invite is stored on the users table keyed by the invited email and redeemed
+// at bootstrap when that email signs up with the matching token.
+const INVITE_PREFIX = "invite#";
+const INVITE_TTL_DAYS = 30;
+
+function inviteKey(email) {
+  return `${INVITE_PREFIX}${String(email || "").trim().toLowerCase()}`;
+}
+
+async function redeemInvite(email, token, userId) {
+  const key = inviteKey(email);
+  const invite = await getUserBySub(key);
+  if (!invite || invite.status !== "pending") return null;
+  if (String(invite.token || "") !== String(token || "")) return null;
+  if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) return null;
+  const now = new Date().toISOString();
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: env.usersTable,
+        Key: { userId: key },
+        UpdateExpression: "SET #s = :redeemed, redeemedAt = :now, redeemedBy = :uid",
+        ConditionExpression: "#s = :pending",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":redeemed": "redeemed",
+          ":pending": "pending",
+          ":now": now,
+          ":uid": userId || ""
+        }
+      })
+    );
+  } catch {
+    // Lost the race (already redeemed) — treat as not redeemable.
+    return null;
+  }
+  return invite;
+}
+
+async function createInvite(event) {
+  const claims = requireAdmin(event);
+  const body = parseBody(event);
+  const email = String(body.email || "").trim().toLowerCase();
+
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return badRequest("A valid email is required.");
+  }
+
+  const profileType = normalizeConsultantProfileType(body.profileType, "consultant");
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86400000).toISOString();
+  const token = randomUUID();
+  const invite = {
+    userId: inviteKey(email),
+    recordType: "invite",
+    email,
+    token,
+    profileType,
+    status: "pending",
+    invitedBy: claims.sub,
+    invitedByEmail: claims.email || "",
+    invitedAt: now,
+    expiresAt,
+    redeemedAt: null
+  };
+
+  await dynamo.send(new PutCommand({ TableName: env.usersTable, Item: invite }));
+
+  const link = appUrl(`auth?invite=${encodeURIComponent(token)}`);
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Покана за GrowPoint — създай безплатен експертен профил",
+      text:
+        "Здравей,\n\n" +
+        "Екипът на GrowPoint те кани да създадеш безплатен експертен профил (консултант или ментор) в платформата.\n\n" +
+        `Активирай поканата си тук:\n${link}\n\n` +
+        `Линкът е валиден до ${new Date(expiresAt).toLocaleDateString("bg-BG")}. ` +
+        "Ако не очакваш тази покана, просто игнорирай това съобщение."
+    });
+  } catch (error) {
+    console.error("[invite] email failed", error?.message || error);
+  }
+
+  return response(
+    201,
+    {
+      email: invite.email,
+      status: invite.status,
+      profileType: invite.profileType,
+      invitedAt: invite.invitedAt,
+      expiresAt: invite.expiresAt
+    },
+    { "Cache-Control": "no-store" }
+  );
+}
+
+async function listInvites(event) {
+  requireAdmin(event);
+  const items = await scanAllItems(env.usersTable);
+  const invites = items
+    .filter((it) => typeof it.userId === "string" && it.userId.startsWith(INVITE_PREFIX))
+    .map((it) => ({
+      email: it.email || "",
+      status: it.status || "pending",
+      profileType: it.profileType || "consultant",
+      invitedByEmail: it.invitedByEmail || "",
+      invitedAt: it.invitedAt || "",
+      expiresAt: it.expiresAt || "",
+      redeemedAt: it.redeemedAt || null
+    }))
+    .sort((a, b) => String(b.invitedAt).localeCompare(String(a.invitedAt)));
+  return response(200, { items: invites }, { "Cache-Control": "no-store" });
+}
+
+// --- Admin restrict / full-suspend ------------------------------------------
+// Hides the public profile, and disables sign-in at Cognito so the account can
+// no longer authenticate. Reversible. Cognito disable blocks new logins; an
+// already-issued token stays valid until it expires (~1h).
+async function setUserRestricted(event) {
+  const claims = requireAdmin(event);
+  const body = parseBody(event);
+  const userId = event.pathParameters?.userId;
+
+  if (!userId) return badRequest("userId is required.");
+  if (typeof body.restricted !== "boolean") {
+    return badRequest("restricted must be a boolean.");
+  }
+  if (userId === claims.sub) {
+    return badRequest("You cannot restrict your own account.");
+  }
+
+  const user = await getUserBySub(userId);
+  if (!user) return notFound("User not found.");
+
+  const now = new Date().toISOString();
+  const restricted = body.restricted;
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: env.usersTable,
+      Item: {
+        ...user,
+        restricted,
+        restrictedAt: restricted ? now : "",
+        restrictedBy: restricted ? claims.sub : "",
+        restrictedByEmail: restricted ? claims.email || "" : "",
+        updatedAt: now
+      }
+    })
+  );
+
+  const consultant = await getConsultantByOwner(userId);
+  if (consultant) {
+    await dynamo.send(
+      new PutCommand({
+        TableName: env.consultantsTable,
+        Item: { ...consultant, restricted, updatedAt: now }
+      })
+    );
+  }
+
+  if (env.userPoolId) {
+    try {
+      await cognito.send(
+        restricted
+          ? new AdminDisableUserCommand({ UserPoolId: env.userPoolId, Username: userId })
+          : new AdminEnableUserCommand({ UserPoolId: env.userPoolId, Username: userId })
+      );
+    } catch (error) {
+      console.error("[restrict] cognito toggle failed", error?.message || error);
+    }
+  }
+
+  return response(
+    200,
+    {
+      userId,
+      restricted,
+      restrictedAt: restricted ? now : "",
+      restrictedByEmail: restricted ? claims.email || "" : ""
     },
     { "Cache-Control": "no-store" }
   );
@@ -4750,6 +4915,9 @@ exports.handler = async (event) => {
     if (method === "GET" && path === "/admin/metrics") return await getAdminMetrics(event);
     if (method === "GET" && path === "/admin/consultants") return await listConsultantsForAdmin(event);
 
+    if (method === "POST" && path === "/admin/invites") return await createInvite(event);
+    if (method === "GET" && path === "/admin/invites") return await listInvites(event);
+
     const adminUserMessageMatch = /^\/admin\/users\/([^/]+)\/message$/.exec(path);
     if (method === "POST" && adminUserMessageMatch) {
       event.pathParameters = {
@@ -4759,10 +4927,13 @@ exports.handler = async (event) => {
       return await adminMessageUser(event);
     }
 
-    const adminStatusMatch = /^\/admin\/consultants\/([^/]+)\/status$/.exec(path);
-    if (method === "PUT" && adminStatusMatch) {
-      event.pathParameters = { ...(event.pathParameters || {}), consultantId: adminStatusMatch[1] };
-      return await setConsultantStatus(event);
+    const adminRestrictMatch = /^\/admin\/users\/([^/]+)\/restrict$/.exec(path);
+    if (method === "PUT" && adminRestrictMatch) {
+      event.pathParameters = {
+        ...(event.pathParameters || {}),
+        userId: adminRestrictMatch[1]
+      };
+      return await setUserRestricted(event);
     }
 
     const adminFeaturedMatch = /^\/admin\/consultants\/([^/]+)\/featured$/.exec(path);

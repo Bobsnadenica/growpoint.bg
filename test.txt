@@ -1,6 +1,6 @@
 GrowPoint — QA & Change Report (condensed)
 ===========================================
-Last updated: 2026-06-13
+Last updated: 2026-06-14
 This file is the running QA log. Detailed feature docs + the consolidated
 "What's next" table live in README.md. Public file — no secrets here.
 
@@ -30,14 +30,18 @@ CURRENT STATE — what is verified working (as of 2026-06-12, full audit)
     Apple uses the Services ID as client_id; /oauth2/authorize handoff
     verified for all three. OAuth errors now surface as a clear banner on
     /auth (e.g. email-collision case) instead of failing silently.
-  - Package model Start/Grow/Spotlight: live. Start is the default profile and
-    is FREE ("Винаги безплатно" in the pricing card; Grow/Spotlight show
-    "Очаквай скоро" until Stripe lands). Legacy profiles grandfathered as Start
-    (verified: all 11 public profiles). Catalog orders Spotlight > Grow first.
-    Admin can grant/revoke a package (audited; "(предоставен)" in admin UI).
-    Grow profiles show a "Препоръчан експерт" badge; Spotlight profiles show a
-    fancier animated gold "★ GrowPoint суперзвезди" badge. Paywall visibility
-    gate deliberately NOT enforced until Stripe lands.
+  - Package/access model (2026-06-14): ALL expert tiers are PAID — Start 9.99 /
+    Grow 29.99 / Spotlight 99.99 EUR per month; clients are free; every pricing
+    button is "Очаквай скоро" (Stripe pending). No consultant approval anymore —
+    a profile is public when the account is ACTIVE (admin-comped/invited or paid)
+    AND passes the quality bar. The 11 existing profiles were grandfathered
+    (comped). New mentor onboarding is INVITE-ONLY: admin emails an invite
+    (POST /admin/invites -> SES link /auth?invite=TOKEN), redeemed at bootstrap
+    for a free comped consultant account; self-serve consultant signup shows an
+    invite-only notice. Admin can RESTRICT/full-suspend any account
+    (PUT /admin/users/{id}/restrict): hides the profile + blocks bookings +
+    disables Cognito sign-in (reversible). Catalog orders Spotlight > Grow first.
+    Admin can still grant a package (audited) + feature/message accounts.
   - Admin monitoring (/admin "Преглед на платформата"): numbers are real, not
     placeholders. Account totals now come straight from the Cognito user pool
     (ListUsers, read-only IAM) — the source of truth for registrations — with a
@@ -89,6 +93,21 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-14  Paid-mentor model + invites + restrict + no approval. Pricing
+              corrected: Start is PAID 9.99 (reversed the same-week free-Start
+              mistake); all tiers "Очаквай скоро" (Stripe pending); clients free.
+              Removed consultant approval: visibility now gated on active
+              membership (comped/invited or paid) + quality bar; the 11 live
+              profiles were grandfathered (comped) and verified still public.
+              Added admin EMAIL INVITES (POST/GET /admin/invites; SES link
+              /auth?invite=TOKEN redeemed at bootstrap -> free comped consultant)
+              and admin RESTRICT/full-suspend (PUT /admin/users/{id}/restrict:
+              hides profile + blocks bookings + Cognito AdminDisableUser, read-only
+              IAM added). Consultant self-signup is invite-only (notice + guard).
+              /admin reworked (invite form+list, restrict/unrestrict, public/
+              featured/restricted filters; approve-reject removed). Verified:
+              gates PASS, terraform plan clean (no data/pool destroy), new
+              endpoints 401 anon, consultants still 11, register gate DOM-checked.
   2026-06-13  Project rename careerdoc -> growpoint (infra + code), zero data
               loss, zero downtime to production. DynamoDB tables are now
               growpoint-dev-{users,consultants,bookings}; S3 buckets

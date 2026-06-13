@@ -2,26 +2,24 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import type {
-  AdminConsultantDetail,
-  ConsultantProfileStatus
-} from "../../lib/types";
+import type { AdminConsultantDetail } from "../../lib/types";
 import PageScene from "../layout/PageScene";
 
 const BGN_PER_EUR = 1.95583;
 const PRICE_TIER_STEP_EUR = 50;
 
-function statusLabel(status: AdminConsultantDetail["profileStatus"]) {
-  if (status === "approved" || status === "active") return "Одобрен";
-  if (status === "rejected") return "Отказан";
-  return "Чакащ одобрение";
+function membershipLabel(c: AdminConsultantDetail) {
+  if (c.restricted) return "Ограничен";
+  if (c.isPublic) return "Публичен";
+  if (c.comped || c.packageSource === "granted" || c.packageSource === "purchased") {
+    return "Активен (скрит)";
+  }
+  return "Неактивен";
 }
 
-function statusBadgeClass(status: AdminConsultantDetail["profileStatus"]) {
-  if (status === "approved" || status === "active") {
-    return "status-badge status-badge--success";
-  }
-  if (status === "rejected") return "status-badge status-badge--cancelled";
+function membershipBadgeClass(c: AdminConsultantDetail) {
+  if (c.restricted) return "status-badge status-badge--cancelled";
+  if (c.isPublic) return "status-badge status-badge--success";
   return "plan-pill";
 }
 
@@ -85,7 +83,7 @@ export default function AdminConsultantPreviewPage() {
   const [consultant, setConsultant] = useState<AdminConsultantDetail | null>(null);
   const [listLoading, setListLoading] = useState(true);
   const [error, setError] = useState("");
-  const [action, setAction] = useState<ConsultantProfileStatus | null>(null);
+  const [restrictBusy, setRestrictBusy] = useState(false);
 
   const reload = useCallback(async () => {
     if (!token || !consultantId) return;
@@ -136,31 +134,27 @@ export default function AdminConsultantPreviewPage() {
     );
   }
 
-  async function setStatus(nextStatus: ConsultantProfileStatus) {
-    if (!token || !consultant) return;
-    const isOwnProfile = consultant.ownerUserId === user!.id;
-    const labelMap: Record<ConsultantProfileStatus, string> = {
-      approved: "одобриш",
-      rejected: "откажеш",
-      pending: "върнеш в чакащи"
-    };
-    const verb = labelMap[nextStatus];
-    const confirmCopy =
-      isOwnProfile && nextStatus === "approved"
-        ? "Сигурен ли си, че искаш да одобриш СОБСТВЕНИЯ си профил? Действието ще бъде записано в одита като самостоятелно одобрение."
-        : `Сигурен ли си, че искаш да ${verb} профила на ${consultant.name}?`;
+  async function setRestricted(nextRestricted: boolean) {
+    if (!token || !consultant || !consultant.ownerUserId) return;
+    if (consultant.ownerUserId === user!.id) {
+      setError("Не можеш да ограничиш собствения си акаунт.");
+      return;
+    }
+    const confirmCopy = nextRestricted
+      ? `Сигурен ли си, че искаш да ограничиш акаунта на ${consultant.name}? Профилът ще бъде скрит и входът ще бъде блокиран.`
+      : `Да възстановиш ли достъпа на ${consultant.name}?`;
     if (typeof window !== "undefined" && !window.confirm(confirmCopy)) {
       return;
     }
-    setAction(nextStatus);
+    setRestrictBusy(true);
     setError("");
     try {
-      await api.adminSetConsultantStatus(token, consultant.consultantId, nextStatus);
+      await api.adminRestrictUser(token, consultant.ownerUserId, nextRestricted);
       await reload();
     } catch (value) {
       setError(value instanceof Error ? value.message : "Действието не успя.");
     } finally {
-      setAction(null);
+      setRestrictBusy(false);
     }
   }
 
@@ -195,14 +189,7 @@ export default function AdminConsultantPreviewPage() {
     );
   }
 
-  const isApproved =
-    consultant.profileStatus === "approved" || consultant.profileStatus === "active";
-  const isRejected = consultant.profileStatus === "rejected";
   const isOwnProfile = consultant.ownerUserId === user.id;
-  const busy = action !== null;
-  const auditWho =
-    consultant.statusUpdatedByEmail ||
-    (consultant.statusSelfApproved ? "самостоятелно" : "администратор");
 
   return (
     <PageScene tone="dashboard" pageKey="admin">
@@ -216,15 +203,17 @@ export default function AdminConsultantPreviewPage() {
             >
               ← Назад към списъка
             </button>
-            <span className={statusBadgeClass(consultant.profileStatus)}>
-              {statusLabel(consultant.profileStatus)}
+            <span className={membershipBadgeClass(consultant)}>
+              {membershipLabel(consultant)}
             </span>
             {isOwnProfile ? (
               <span className="status-badge admin-card__own-badge">Твой профил</span>
             ) : null}
-            {consultant.statusSelfApproved && isApproved ? (
+            {consultant.restricted ? (
+              <span className="status-badge status-badge--cancelled">Ограничен</span>
+            ) : consultant.comped ? (
               <span className="status-badge admin-card__self-badge">
-                Самостоятелно одобрен
+                Поканен (безплатно)
               </span>
             ) : null}
           </div>
@@ -387,49 +376,22 @@ export default function AdminConsultantPreviewPage() {
               </section>
             ) : null}
 
-            {consultant.statusUpdatedAt ? (
-              <p
-                className={`admin-card__audit ${
-                  consultant.statusSelfApproved ? "admin-card__audit--self" : ""
-                }`}
-              >
-                {isApproved ? "Одобрен" : isRejected ? "Отказан" : "Върнат в чакащи"} от{" "}
-                {auditWho} на {formatAuditDate(consultant.statusUpdatedAt)}
-              </p>
-            ) : null}
-
             <div className="admin-card__actions">
-              {!isApproved ? (
+              {consultant.ownerUserId && !isOwnProfile ? (
                 <button
-                  className="primary-button"
+                  className={`ghost-button ${consultant.restricted ? "" : "admin-card__danger-action"}`}
                   type="button"
-                  disabled={busy}
-                  onClick={() => setStatus("approved")}
+                  disabled={restrictBusy}
+                  onClick={() => setRestricted(!consultant.restricted)}
                 >
-                  {action === "approved" ? "Записваме..." : "Одобри"}
+                  {restrictBusy
+                    ? "Записваме..."
+                    : consultant.restricted
+                      ? "Възстанови достъпа"
+                      : "Ограничи акаунта"}
                 </button>
               ) : null}
-              {!isRejected ? (
-                <button
-                  className="ghost-button"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setStatus("rejected")}
-                >
-                  {action === "rejected" ? "Записваме..." : "Откажи"}
-                </button>
-              ) : null}
-              {isApproved || isRejected ? (
-                <button
-                  className="ghost-button"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setStatus("pending")}
-                >
-                  Върни в чакащи
-                </button>
-              ) : null}
-              {isApproved && consultant.slug ? (
+              {consultant.isPublic && !consultant.restricted && consultant.slug ? (
                 <Link
                   className="ghost-button"
                   to={`/consultants/${consultant.slug}`}

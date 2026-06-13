@@ -4,13 +4,13 @@ import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import type {
   AdminConsultantSummary,
+  AdminInvite,
   AdminMetrics,
-  ConsultantPackageTier,
-  ConsultantProfileStatus
+  ConsultantPackageTier
 } from "../../lib/types";
 import PageScene from "../layout/PageScene";
 
-type Filter = "pending" | "featured" | "approved" | "rejected" | "all";
+type Filter = "all" | "public" | "featured" | "restricted";
 
 const PACKAGE_TIER_LABELS: Record<ConsultantPackageTier, string> = {
   start: "Start",
@@ -18,17 +18,24 @@ const PACKAGE_TIER_LABELS: Record<ConsultantPackageTier, string> = {
   spotlight: "Spotlight"
 };
 
-function statusLabel(status: AdminConsultantSummary["profileStatus"]) {
-  if (status === "approved" || status === "active") return "Одобрен";
-  if (status === "rejected") return "Отказан";
-  return "Чакащ одобрение";
+function isActiveMember(item: AdminConsultantSummary) {
+  return (
+    item.comped === true ||
+    item.packageSource === "granted" ||
+    item.packageSource === "purchased"
+  );
 }
 
-function statusBadgeClass(status: AdminConsultantSummary["profileStatus"]) {
-  if (status === "approved" || status === "active") {
-    return "status-badge status-badge--success";
-  }
-  if (status === "rejected") return "status-badge status-badge--cancelled";
+function membershipLabel(item: AdminConsultantSummary) {
+  if (item.restricted) return "Ограничен";
+  if (item.isPublic) return "Публичен";
+  if (isActiveMember(item)) return "Активен (скрит)";
+  return "Неактивен";
+}
+
+function membershipBadgeClass(item: AdminConsultantSummary) {
+  if (item.restricted) return "status-badge status-badge--cancelled";
+  if (item.isPublic) return "status-badge status-badge--success";
   return "plan-pill";
 }
 
@@ -62,8 +69,8 @@ export default function AdminPage() {
   const [items, setItems] = useState<AdminConsultantSummary[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState<Filter>("pending");
-  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [restrictActionId, setRestrictActionId] = useState<string | null>(null);
   const [featuredActionId, setFeaturedActionId] = useState<string | null>(null);
   const [packageActionId, setPackageActionId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -72,6 +79,9 @@ export default function AdminPage() {
   const [adminMessageBusy, setAdminMessageBusy] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [invites, setInvites] = useState<AdminInvite[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   const reload = useCallback(async () => {
     if (!token) return;
@@ -92,6 +102,15 @@ export default function AdminPage() {
     void reload();
   }, [isAdmin, reload, token]);
 
+  const loadInvites = useCallback(async () => {
+    if (!token) return;
+    try {
+      setInvites(await api.adminListInvites(token));
+    } catch {
+      // Invites are non-critical for the moderation list.
+    }
+  }, [token]);
+
   useEffect(() => {
     if (!isAdmin || !token) return;
     let active = true;
@@ -103,34 +122,28 @@ export default function AdminPage() {
       .catch(() => {
         // Metrics are non-critical; the moderation list still works without them.
       });
+    void loadInvites();
     return () => {
       active = false;
     };
-  }, [isAdmin, token]);
+  }, [isAdmin, token, loadInvites]);
 
   const counts = useMemo(() => {
     return {
-      pending: items.filter((item) => item.profileStatus === "pending").length,
-      approved: items.filter(
-        (item) => item.profileStatus === "approved" || item.profileStatus === "active"
-      ).length,
+      all: items.length,
+      public: items.filter((item) => item.isPublic && !item.restricted).length,
       featured: items.filter((item) => item.featured).length,
-      rejected: items.filter((item) => item.profileStatus === "rejected").length,
-      all: items.length
+      restricted: items.filter((item) => item.restricted).length
     };
   }, [items]);
 
   const visible = useMemo(() => {
-    if (filter === "all") return items;
-    if (filter === "approved") {
-      return items.filter(
-        (item) => item.profileStatus === "approved" || item.profileStatus === "active"
-      );
+    if (filter === "public") {
+      return items.filter((item) => item.isPublic && !item.restricted);
     }
-    if (filter === "featured") {
-      return items.filter((item) => item.featured);
-    }
-    return items.filter((item) => item.profileStatus === filter);
+    if (filter === "featured") return items.filter((item) => item.featured);
+    if (filter === "restricted") return items.filter((item) => item.restricted);
+    return items;
   }, [items, filter]);
 
   if (loading) {
@@ -163,49 +176,66 @@ export default function AdminPage() {
     );
   }
 
-  async function setStatus(
-    item: AdminConsultantSummary,
-    nextStatus: ConsultantProfileStatus
-  ) {
-    if (!token) return;
-    const isOwnProfile = item.ownerUserId === user!.id;
-
-    if (typeof window !== "undefined") {
-      const labelMap: Record<ConsultantProfileStatus, string> = {
-        approved: "одобриш",
-        rejected: "откажеш",
-        pending: "върнеш в чакащи"
-      };
-      const action = labelMap[nextStatus];
-      const confirmCopy = isOwnProfile && nextStatus === "approved"
-        ? `Сигурен ли си, че искаш да одобриш СОБСТВЕНИЯ си профил? Действието ще бъде записано в одита като самостоятелно одобрение.`
-        : `Сигурен ли си, че искаш да ${action} профила на ${item.name}?`;
-      if (!window.confirm(confirmCopy)) {
-        return;
-      }
+  async function setRestricted(item: AdminConsultantSummary, nextRestricted: boolean) {
+    if (!token || !item.ownerUserId) return;
+    if (item.ownerUserId === user!.id) {
+      setError("Не можеш да ограничиш собствения си акаунт.");
+      return;
     }
 
-    setPendingActionId(item.consultantId);
+    if (typeof window !== "undefined") {
+      const confirmCopy = nextRestricted
+        ? `Сигурен ли си, че искаш да ограничиш акаунта на ${item.name}? Профилът ще бъде скрит и входът в системата ще бъде блокиран.`
+        : `Да възстановиш ли достъпа на ${item.name}?`;
+      if (!window.confirm(confirmCopy)) return;
+    }
+
+    setRestrictActionId(item.consultantId);
     setError("");
     setSuccessMessage("");
     try {
-      await api.adminSetConsultantStatus(token, item.consultantId, nextStatus);
+      await api.adminRestrictUser(token, item.ownerUserId, nextRestricted);
       await reload();
+      setSuccessMessage(
+        nextRestricted
+          ? `${item.name}: акаунтът е ограничен (профилът е скрит, входът е блокиран).`
+          : `${item.name}: достъпът е възстановен.`
+      );
     } catch (value) {
       setError(value instanceof Error ? value.message : "Действието не успя.");
     } finally {
-      setPendingActionId(null);
+      setRestrictActionId(null);
+    }
+  }
+
+  async function sendInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || inviteBusy) return;
+    const email = inviteEmail.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      setError("Въведи валиден имейл за поканата.");
+      return;
+    }
+    setInviteBusy(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      await api.adminCreateInvite(token, email);
+      setInviteEmail("");
+      setSuccessMessage(`Поканата е изпратена на ${email}.`);
+      await loadInvites();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно изпращане на покана.");
+    } finally {
+      setInviteBusy(false);
     }
   }
 
   async function setFeatured(item: AdminConsultantSummary, nextFeatured: boolean) {
     if (!token) return;
 
-    const isApproved =
-      item.profileStatus === "approved" || item.profileStatus === "active";
-
-    if (nextFeatured && (!isApproved || !item.isPublic)) {
-      setError("Първо одобри профила и го направи публичен, преди да го добавиш към подбраните.");
+    if (nextFeatured && (!item.isPublic || item.restricted)) {
+      setError("Профилът трябва да е публичен и неограничен, преди да го добавиш към подбраните.");
       return;
     }
 
@@ -301,35 +331,32 @@ export default function AdminPage() {
   }
 
   const filterChips: { key: Filter; label: string; count: number }[] = [
-    { key: "pending", label: "Чакащи", count: counts.pending },
+    { key: "all", label: "Всички", count: counts.all },
+    { key: "public", label: "Публични", count: counts.public },
     { key: "featured", label: "Подбрани", count: counts.featured },
-    { key: "approved", label: "Одобрени", count: counts.approved },
-    { key: "rejected", label: "Отказани", count: counts.rejected },
-    { key: "all", label: "Всички", count: counts.all }
+    { key: "restricted", label: "Ограничени", count: counts.restricted }
   ];
 
   const emptyCopy: Record<Filter, { title: string; hint: string }> = {
-    pending: {
-      title: "Няма чакащи заявки.",
-      hint: "Всички профили са прегледани. Връщай се периодично, за да обработваш нови подавания."
+    all: {
+      title: "Няма консултантски профили в системата.",
+      hint: "Поканените експерти ще се появят тук, след като активират профила си."
     },
-    approved: {
-      title: "Все още няма одобрени профили.",
-      hint: "Одобрените профили се показват тук с информация кой и кога ги е приел."
+    public: {
+      title: "Все още няма публични профили.",
+      hint: "Профил става публичен, когато е активен (платен/поканен) и достатъчно попълнен."
     },
     featured: {
       title: "Няма подбрани профили за началната страница.",
-      hint: "Одобри публичен профил и използвай бутона за подбиране, за да го покажеш в началната секция."
+      hint: "Използвай бутона за подбиране на публичен профил, за да го покажеш в началната секция."
     },
-    rejected: {
-      title: "Няма отказани профили.",
-      hint: "Отказаните профили остават достъпни за повторен преглед."
-    },
-    all: {
-      title: "Няма консултантски профили в системата.",
-      hint: "След като консултанти и ментори се регистрират, ще се появят тук."
+    restricted: {
+      title: "Няма ограничени акаунти.",
+      hint: "Ограничените акаунти са скрити от каталога и не могат да влизат в системата."
     }
   };
+
+  const pendingInvites = invites.filter((invite) => invite.status === "pending");
 
   return (
     <PageScene tone="dashboard" pageKey="admin">
@@ -337,11 +364,11 @@ export default function AdminPage() {
         <div className="container">
           <div className="page-intro">
             <p className="eyebrow">Админ</p>
-            <h1>Одобряване на консултантски профили</h1>
+            <h1>Управление на профили</h1>
             <p className="hero__lede">
-              Преглеждаш заявките от консултанти и ментори преди да станат публични в
-              каталога. Можеш да одобряваш и собствения си профил — действието се
-              записва в одита.
+              Кани нови експерти, следи активните профили и ограничавай акаунти при
+              нужда. Одобрение вече не е необходимо — експертните профили са платени
+              (или с покана).
             </p>
           </div>
         </div>
@@ -537,22 +564,67 @@ export default function AdminPage() {
 
       <section className="section section--tight">
         <div className="container">
+          <article className="panel admin-invite-panel">
+            <div className="dashboard-form-head">
+              <p className="eyebrow">Покани</p>
+              <h2>Покани експерт безплатно</h2>
+            </div>
+            <p className="form-note">
+              Изпрати покана по имейл. Поканеният създава безплатен експертен профил
+              (без плащане), валидна 30 дни. Иначе експертните профили изискват
+              платен план (Stripe — очаквай скоро).
+            </p>
+            <form className="admin-invite-form" onSubmit={sendInvite}>
+              <input
+                type="email"
+                value={inviteEmail}
+                placeholder="имейл на експерта"
+                onChange={(event) => setInviteEmail(event.target.value)}
+                disabled={inviteBusy}
+                aria-label="Имейл за покана"
+              />
+              <button className="primary-button" type="submit" disabled={inviteBusy || !inviteEmail.trim()}>
+                {inviteBusy ? "Изпращаме..." : "Изпрати покана"}
+              </button>
+            </form>
+            {invites.length ? (
+              <ul className="admin-invite-list">
+                {invites.slice(0, 12).map((invite) => (
+                  <li key={invite.email}>
+                    <span className="admin-invite-list__email">{invite.email}</span>
+                    <span
+                      className={`status-badge ${invite.status === "redeemed" ? "status-badge--success" : "plan-pill"}`}
+                    >
+                      {invite.status === "redeemed" ? "Активирана" : "Чака активиране"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="form-note">Все още няма изпратени покани.</p>
+            )}
+          </article>
+
           <dl className="admin-stats">
             <div>
-              <dt>Чакащи</dt>
-              <dd>{counts.pending}</dd>
+              <dt>Всички</dt>
+              <dd>{counts.all}</dd>
             </div>
             <div>
-              <dt>Одобрени</dt>
-              <dd>{counts.approved}</dd>
+              <dt>Публични</dt>
+              <dd>{counts.public}</dd>
             </div>
             <div>
               <dt>Подбрани</dt>
               <dd>{counts.featured}</dd>
             </div>
             <div>
-              <dt>Отказани</dt>
-              <dd>{counts.rejected}</dd>
+              <dt>Ограничени</dt>
+              <dd>{counts.restricted}</dd>
+            </div>
+            <div>
+              <dt>Покани (чакащи)</dt>
+              <dd>{pendingInvites.length}</dd>
             </div>
           </dl>
 
@@ -588,23 +660,11 @@ export default function AdminPage() {
           ) : (
             <div className="admin-list">
               {visible.map((item) => {
-                const isApproved =
-                  item.profileStatus === "approved" || item.profileStatus === "active";
-                const isRejected = item.profileStatus === "rejected";
-                const busy = pendingActionId === item.consultantId;
+                const isApproved = item.isPublic && !item.restricted;
+                const restrictBusy = restrictActionId === item.consultantId;
                 const featuredBusy = featuredActionId === item.consultantId;
                 const isOwnProfile = item.ownerUserId === user.id;
                 const isExpanded = expandedId === item.consultantId;
-                const auditWho =
-                  item.statusUpdatedByEmail || (item.statusSelfApproved ? "самостоятелно" : "администратор");
-                const auditAction = isApproved
-                  ? "Одобрен"
-                  : isRejected
-                    ? "Отказан"
-                    : "Върнат в чакащи";
-                const audit = item.statusUpdatedAt
-                  ? `${auditAction} от ${auditWho} на ${formatAuditDate(item.statusUpdatedAt)}`
-                  : "";
 
                 return (
                   <article className="panel admin-card" key={item.consultantId}>
@@ -627,9 +687,13 @@ export default function AdminPage() {
                                 Твой профил
                               </span>
                             ) : null}
-                            {item.statusSelfApproved && isApproved ? (
+                            {item.restricted ? (
+                              <span className="status-badge status-badge--cancelled">
+                                Ограничен
+                              </span>
+                            ) : item.comped ? (
                               <span className="status-badge admin-card__self-badge">
-                                Самостоятелно одобрен
+                                Поканен (безплатно)
                               </span>
                             ) : null}
                             {item.featured ? (
@@ -648,8 +712,8 @@ export default function AdminPage() {
                           ) : null}
                         </div>
                       </div>
-                      <span className={statusBadgeClass(item.profileStatus)}>
-                        {statusLabel(item.profileStatus)}
+                      <span className={membershipBadgeClass(item)}>
+                        {membershipLabel(item)}
                       </span>
                     </div>
 
@@ -724,12 +788,6 @@ export default function AdminPage() {
                       </div>
                     ) : null}
 
-                    {audit ? (
-                      <p className={`admin-card__audit ${item.statusSelfApproved ? "admin-card__audit--self" : ""}`}>
-                        {audit}
-                      </p>
-                    ) : null}
-
                     <div className="admin-card__actions">
                       <Link
                         className="primary-button"
@@ -758,10 +816,10 @@ export default function AdminPage() {
                       <button
                         className={`ghost-button admin-card__featured-action ${item.featured ? "admin-card__featured-action--active" : ""}`}
                         type="button"
-                        disabled={featuredBusy || (!item.featured && (!isApproved || !item.isPublic))}
+                        disabled={featuredBusy || (!item.featured && (!item.isPublic || item.restricted))}
                         title={
-                          !item.featured && (!isApproved || !item.isPublic)
-                            ? "Профилът трябва първо да е одобрен и публичен."
+                          !item.featured && (!item.isPublic || item.restricted)
+                            ? "Профилът трябва да е публичен и неограничен."
                             : undefined
                         }
                         onClick={() => setFeatured(item, !item.featured)}
@@ -790,34 +848,18 @@ export default function AdminPage() {
                           )}
                         </select>
                       </label>
-                      {!isApproved ? (
+                      {item.ownerUserId && !isOwnProfile ? (
                         <button
-                          className="ghost-button"
+                          className={`ghost-button ${item.restricted ? "" : "admin-card__danger-action"}`}
                           type="button"
-                          disabled={busy}
-                          onClick={() => setStatus(item, "approved")}
+                          disabled={restrictBusy}
+                          onClick={() => setRestricted(item, !item.restricted)}
                         >
-                          {busy ? "Записваме..." : "Одобри"}
-                        </button>
-                      ) : null}
-                      {!isRejected ? (
-                        <button
-                          className="ghost-button"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setStatus(item, "rejected")}
-                        >
-                          {busy ? "Записваме..." : "Откажи"}
-                        </button>
-                      ) : null}
-                      {(isApproved || isRejected) ? (
-                        <button
-                          className="ghost-button"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setStatus(item, "pending")}
-                        >
-                          Върни в чакащи
+                          {restrictBusy
+                            ? "Записваме..."
+                            : item.restricted
+                              ? "Възстанови достъпа"
+                              : "Ограничи акаунта"}
                         </button>
                       ) : null}
                     </div>

@@ -3,6 +3,7 @@ import type { ConsultantProfileType, PlanTier, UserRole } from "./types";
 const PENDING_BOOTSTRAP_KEY = "growpoint.pending-bootstrap";
 const SOCIAL_AUTH_INTENT_KEY = "growpoint.social-auth-intent";
 const SOCIAL_ONBOARDING_KEY = "growpoint.social-onboarding-pending";
+const INVITE_TOKEN_KEY = "growpoint.invite-token";
 
 export type SocialAuthProviderKey = "google" | "apple" | "linkedin";
 export type SocialAuthMode = "login" | "register";
@@ -116,4 +117,33 @@ export function readSocialOnboardingPending() {
 
 export function clearSocialOnboardingPending() {
   removeStorageItem(SOCIAL_ONBOARDING_KEY);
+}
+
+// Admin email-invite token (?invite=TOKEN). Captured on page load so it survives
+// the Cognito hosted-UI / social-login round-trip, then redeemed at bootstrap to
+// grant a free comped consultant account. Stored as a raw string.
+export function captureInviteTokenFromUrl() {
+  if (typeof window === "undefined") return;
+  try {
+    const token = new URLSearchParams(window.location.search).get("invite");
+    if (token && token.trim()) {
+      window.localStorage.setItem(INVITE_TOKEN_KEY, token.trim());
+    }
+  } catch {
+    // Storage / URL unavailable.
+  }
+}
+
+export function readInviteToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(INVITE_TOKEN_KEY);
+    return value && value.trim() ? value.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearInviteToken() {
+  removeStorageItem(INVITE_TOKEN_KEY);
 }

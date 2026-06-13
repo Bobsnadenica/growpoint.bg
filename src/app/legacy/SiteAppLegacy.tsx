@@ -24,6 +24,7 @@ import { NewPasswordRequiredError, useAuth } from "../../lib/auth";
 import {
   clearPendingBootstrap,
   clearSocialOnboardingPending,
+  readInviteToken,
   readPendingBootstrap,
   readSocialOnboardingPending,
   socialProviders,
@@ -2619,6 +2620,15 @@ export function AuthPage() {
     event.preventDefault();
     clearFeedback();
 
+    // Expert profiles are paid (Stripe pending) — until then a mentor account
+    // can only be created from an admin email invite. Clients stay free + open.
+    if (form.role === "consultant" && !readInviteToken()) {
+      setError(
+        "Експертните профили са с покана засега. Онлайн плащането (Stripe) предстои — пиши ни на contactus@growpoint.bg за достъп."
+      );
+      return;
+    }
+
     if (!canRegister) {
       if (!emailValid) {
         setError("Въведи валиден имейл адрес.");
@@ -3089,6 +3099,14 @@ export function AuthPage() {
                     </button>
                   ))}
                 </div>
+                {form.role === "consultant" && !readInviteToken() ? (
+                  <p className="form-note auth-invite-note">
+                    Експертните профили (консултанти и ментори) са платени. Онлайн
+                    плащането (Stripe) предстои — засега нов експертен профил се
+                    създава само с покана от екипа на GrowPoint. Пиши ни на{" "}
+                    <a href="mailto:contactus@growpoint.bg">contactus@growpoint.bg</a>.
+                  </p>
+                ) : null}
               </fieldset>
 
               {isSocialOnboarding ? (

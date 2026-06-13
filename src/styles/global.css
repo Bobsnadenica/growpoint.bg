@@ -1604,6 +1604,65 @@ main {
   opacity: 0.58;
 }
 
+/* Restrict / suspend action — clearly destructive. */
+.admin-card__danger-action {
+  border-color: rgba(176, 58, 46, 0.4);
+  color: #9e3326;
+}
+
+.admin-card__danger-action:hover:not(:disabled) {
+  background: rgba(176, 58, 46, 0.08);
+}
+
+/* Admin invite panel */
+.admin-invite-panel {
+  margin-bottom: 18px;
+}
+
+.admin-invite-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.admin-invite-form input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.admin-invite-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-invite-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-invite-list__email {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+/* Invite-only notice on the consultant register choice */
+.auth-invite-note {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft, rgba(0, 0, 0, 0.03));
+}
+
 .admin-message-form {
   display: grid;
   gap: 10px;

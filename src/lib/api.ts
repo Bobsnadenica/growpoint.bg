@@ -1,15 +1,16 @@
+import { clearInviteToken, readInviteToken } from "./auth-flow";
 import { config, isApiConfigured } from "./config";
 import { getCvUploadContentType, getDocumentUploadContentType } from "./uploads";
 import type {
   AdminConsultantDetail,
   AdminConsultantSummary,
+  AdminInvite,
   AdminMetrics,
   Booking,
   BookingMessage,
   ConsultantMediaKind,
   ConsultantPackageTier,
   ConsultantProfile,
-  ConsultantProfileStatus,
   ConsultantProfileType,
   NotificationItem,
   PlanTier,
@@ -32,6 +33,9 @@ type BootstrapInput = {
   // When true, an existing user's role is updated to `role` (used by the
   // social-onboarding role choice). Cognito group membership still wins.
   setRole?: boolean;
+  // Admin email-invite token (?invite=...) — redeemed server-side to grant a
+  // free comped consultant account.
+  inviteToken?: string;
 };
 
 type UpdateProfileInput = Partial<
@@ -191,11 +195,17 @@ export const api = {
   },
 
   async bootstrapUser(token: string, input: BootstrapInput) {
-    return request<UserProfile>(
+    // Attach a pending admin email-invite token (if any) so the server can
+    // redeem it and grant a free comped consultant account. Single-use: clear
+    // it once bootstrap succeeds.
+    const inviteToken = input.inviteToken || readInviteToken() || undefined;
+    const profile = await request<UserProfile>(
       "/auth/bootstrap",
-      { method: "POST", body: JSON.stringify(input) },
+      { method: "POST", body: JSON.stringify({ ...input, inviteToken }) },
       token
     );
+    if (inviteToken) clearInviteToken();
+    return profile;
   },
 
   async getMyProfile(token: string) {
@@ -488,18 +498,29 @@ export const api = {
     );
   },
 
-  async adminSetConsultantStatus(
+  async adminCreateInvite(
     token: string,
-    consultantId: string,
-    status: ConsultantProfileStatus
+    email: string,
+    profileType: ConsultantProfileType = "consultant"
   ) {
     return request<{
-      consultantId: string;
-      profileStatus: ConsultantProfileStatus;
-      isPublic: boolean;
-    }>(
-      `/admin/consultants/${encodeURIComponent(consultantId)}/status`,
-      { method: "PUT", body: JSON.stringify({ status }) },
+      email: string;
+      status: string;
+      profileType: ConsultantProfileType;
+      invitedAt: string;
+      expiresAt: string;
+    }>("/admin/invites", { method: "POST", body: JSON.stringify({ email, profileType }) }, token);
+  },
+
+  async adminListInvites(token: string) {
+    const payload = await request<{ items: AdminInvite[] }>("/admin/invites", undefined, token);
+    return payload.items || [];
+  },
+
+  async adminRestrictUser(token: string, userId: string, restricted: boolean) {
+    return request<{ userId: string; restricted: boolean; restrictedAt?: string }>(
+      `/admin/users/${encodeURIComponent(userId)}/restrict`,
+      { method: "PUT", body: JSON.stringify({ restricted }) },
       token
     );
   },

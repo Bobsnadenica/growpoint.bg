@@ -39,6 +39,8 @@ export interface AdminConsultantSummary {
   profileStatus: ConsultantProfileStatus | "active";
   isPublic: boolean;
   featured: boolean;
+  comped?: boolean;
+  restricted?: boolean;
   packageTier?: ConsultantPackageTier;
   packageSource?: string;
   membershipTier: string;
@@ -55,6 +57,16 @@ export interface AdminConsultantSummary {
   statusUpdatedBy: string;
   statusUpdatedByEmail: string;
   statusSelfApproved: boolean;
+}
+
+export interface AdminInvite {
+  email: string;
+  status: "pending" | "redeemed" | string;
+  profileType: ConsultantProfileType;
+  invitedByEmail: string;
+  invitedAt: string;
+  expiresAt: string;
+  redeemedAt: string | null;
 }
 
 export interface AdminMetrics {
@@ -133,6 +145,8 @@ export interface ConsultantProfile {
   theme?: ConsultantProfileTheme;
   profileStatus?: ConsultantProfileStatus | "active";
   isPublic?: boolean;
+  comped?: boolean;
+  restricted?: boolean;
   slug: string;
   name: string;
   headline: string;

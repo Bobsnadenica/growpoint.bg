@@ -764,7 +764,9 @@ resource "aws_iam_role_policy" "lambda" {
         Effect = "Allow"
         Action = [
           "cognito-idp:ListUsers",
-          "cognito-idp:DescribeUserPool"
+          "cognito-idp:DescribeUserPool",
+          "cognito-idp:AdminDisableUser",
+          "cognito-idp:AdminEnableUser"
         ]
         Resource = aws_cognito_user_pool.main.arn
       }
@@ -1052,9 +1054,26 @@ resource "aws_apigatewayv2_route" "admin_consultants_list" {
   authorization_type = "JWT"
 }
 
-resource "aws_apigatewayv2_route" "admin_consultant_status" {
+# Admin email invites (free comped consultant onboarding) + account restrict.
+resource "aws_apigatewayv2_route" "admin_invite_create" {
   api_id             = aws_apigatewayv2_api.http.id
-  route_key          = "PUT /admin/consultants/{consultantId}/status"
+  route_key          = "POST /admin/invites"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "admin_invite_list" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /admin/invites"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "admin_user_restrict" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "PUT /admin/users/{userId}/restrict"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
   authorization_type = "JWT"
