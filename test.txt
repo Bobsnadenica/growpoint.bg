@@ -1,6 +1,6 @@
 GrowPoint — QA & Change Report (condensed)
 ===========================================
-Last updated: 2026-06-12
+Last updated: 2026-06-13
 This file is the running QA log. Detailed feature docs + the consolidated
 "What's next" table live in README.md. Public file — no secrets here.
 
@@ -30,11 +30,14 @@ CURRENT STATE — what is verified working (as of 2026-06-12, full audit)
     Apple uses the Services ID as client_id; /oauth2/authorize handoff
     verified for all three. OAuth errors now surface as a clear banner on
     /auth (e.g. email-collision case) instead of failing silently.
-  - Package model Start/Grow/Spotlight: live. Legacy profiles grandfathered
-    as Start (verified: all 11 public profiles). Catalog orders Spotlight >
-    Grow first. Admin can grant/revoke a package (audited; "(предоставен)"
-    in admin UI). Paywall visibility gate deliberately NOT enforced until
-    Stripe lands.
+  - Package model Start/Grow/Spotlight: live. Start is the default profile and
+    is FREE ("Винаги безплатно" in the pricing card; Grow/Spotlight show
+    "Очаквай скоро" until Stripe lands). Legacy profiles grandfathered as Start
+    (verified: all 11 public profiles). Catalog orders Spotlight > Grow first.
+    Admin can grant/revoke a package (audited; "(предоставен)" in admin UI).
+    Grow profiles show a "Препоръчан експерт" badge; Spotlight profiles show a
+    fancier animated gold "★ GrowPoint суперзвезди" badge. Paywall visibility
+    gate deliberately NOT enforced until Stripe lands.
   - Designer/tester doc (June): fully implemented and DOM-verified — new
     copy site-wide, 7 области (+auto-scroll), directory Препоръчани (≥4.5,
     verified min 4.6) / Водещи buttons, photo badges, −50% card photos,
@@ -76,6 +79,19 @@ OPEN ITEMS / HANDOFFS (full table in README "What's next")
 ==================================================================
 CHANGE HISTORY (one line per pass; details in git + README changelog)
 ==================================================================
+  2026-06-13  Owner round (5 items), all DOM-verified live + gates green:
+              (1) Header bell notifications now open the SAME detail popup as
+              the /notifications page (shared NotificationDetailModal, portaled
+              to <body>); clicking one marks just that one read and clears the
+              badge. (2) Backend confirmed to support the three packets; Start
+              is the default profile and is FREE in the pricing card. (3) Grow
+              badge "Препоръчан експерт"; Spotlight gets a fancier animated gold
+              "★ GrowPoint суперзвезди" badge (reduced-motion respected).
+              (4) /auth register heading "Създай профил" -> "Добре дошъл в
+              GrowPoint". (5) Social-login onboarding popup polished — root
+              cause of the jank was the hidden avatar <input type=file> being
+              forced visible by a global rule; scoped the rule to [hidden] so
+              the modal is clean ("Смени снимката" pill only). CORS reverted.
   2026-06-12  FULL AUDIT: gates+drift clean; security review of new surface
               (admin package endpoint, per-id mark-read, public users endpoint,
               setRole) — no issues; live: all boundaries 401, package internals

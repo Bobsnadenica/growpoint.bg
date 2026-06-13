@@ -1,43 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { formatDateTimeBg, formatRelativeBg } from "../../lib/datetime";
-import {
-  NOTIFICATION_ICONS,
-  getNotificationCategory,
-  type NotificationCategory
-} from "../../lib/notifications";
+import { formatRelativeBg } from "../../lib/datetime";
+import { NOTIFICATION_ICONS, getNotificationCategory } from "../../lib/notifications";
 import type { NotificationItem } from "../../lib/types";
+import NotificationDetailModal, {
+  NOTIFICATION_CATEGORY_LABELS as CATEGORY_LABELS
+} from "../components/NotificationDetailModal";
 import PageScene from "../layout/PageScene";
 
 // Keep in sync with AppShell's NOTIFICATIONS_MARKED_READ_EVENT so the header
 // badge clears when notifications are marked read from this page.
 const NOTIFICATIONS_MARKED_READ_EVENT = "growpoint:notifications-marked-read";
-
-const CATEGORY_LABELS: Record<NotificationCategory, string> = {
-  admin: "Админ",
-  message: "Съобщение",
-  booking: "Резервация",
-  review: "Отзив",
-  system: "Система"
-};
-
-// Contextual action shown INSIDE the detail popup. Legacy notification hrefs
-// point at old dashboard anchors, so we never navigate on click — clicking an
-// item opens the popup with the full text instead.
-function notificationAction(item: NotificationItem): { to: string; label: string } | null {
-  if (item.type === "message_received") {
-    return { to: "/messages", label: "Към съобщенията" };
-  }
-  if (getNotificationCategory(item.type) === "booking") {
-    // Opens the dashboard WITH the "Предстоящи сесии" popup already open —
-    // the #sessions hash is handled by the dashboard.
-    return { to: "/dashboard#sessions", label: "Виж сесиите" };
-  }
-  return null;
-}
 
 export default function NotificationsPage() {
   const { user, token, isAdmin } = useAuth();
@@ -45,15 +20,6 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<NotificationItem | null>(null);
-
-  useEffect(() => {
-    if (!selected) return;
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setSelected(null);
-    }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [selected]);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -207,54 +173,12 @@ export default function NotificationsPage() {
         </div>
       </section>
 
-      {selected && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="modal-backdrop"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Известие"
-              onClick={(event) => {
-                if (event.target === event.currentTarget) setSelected(null);
-              }}
-            >
-              <div className="modal-card notification-modal">
-                <header className="modal-card__head">
-                  <p className="eyebrow">
-                    {CATEGORY_LABELS[getNotificationCategory(selected.type)]} ·{" "}
-                    {formatDateTimeBg(selected.createdAt)}
-                  </p>
-                  <h2>
-                    <span aria-hidden="true">
-                      {NOTIFICATION_ICONS[selected.type] || "🔔"}
-                    </span>{" "}
-                    {selected.title}
-                  </h2>
-                </header>
-                <p className="notification-modal__body">{selected.body}</p>
-                <div className="modal-card__actions">
-                  {notificationAction(selected) ? (
-                    <Link
-                      className="primary-button"
-                      to={notificationAction(selected)!.to}
-                      onClick={() => setSelected(null)}
-                    >
-                      {notificationAction(selected)!.label}
-                    </Link>
-                  ) : null}
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => setSelected(null)}
-                  >
-                    Затвори
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body
-          )
-        : null}
+      {selected ? (
+        <NotificationDetailModal
+          notification={selected}
+          onClose={() => setSelected(null)}
+        />
+      ) : null}
     </PageScene>
   );
 }

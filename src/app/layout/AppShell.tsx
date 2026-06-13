@@ -13,6 +13,7 @@ import { config } from "../../lib/config";
 import { getNotificationCategory } from "../../lib/notifications";
 import { applyRouteSeo } from "../../lib/seo";
 import type { NotificationItem } from "../../lib/types";
+import NotificationDetailModal from "../components/NotificationDetailModal";
 import AboutPage from "../pages/AboutPage";
 import AccountPage from "../pages/AccountPage";
 import AdminConsultantPreviewPage from "../pages/AdminConsultantPreviewPage";
@@ -160,7 +161,8 @@ function HeaderNotificationPopover({
   unreadCount,
   busy,
   onClose,
-  onMarkAllRead
+  onMarkAllRead,
+  onSelectNotification
 }: {
   activePanel: HeaderPanel;
   items: NotificationItem[];
@@ -168,6 +170,7 @@ function HeaderNotificationPopover({
   busy: boolean;
   onClose: () => void;
   onMarkAllRead: () => void | Promise<void>;
+  onSelectNotification: (item: NotificationItem) => void;
 }) {
   const isMessages = activePanel === "messages";
   const title = isMessages ? "Съобщения" : "Известия";
@@ -200,22 +203,40 @@ function HeaderNotificationPopover({
 
       {visibleItems.length ? (
         <ul className="topbar-popover__list" aria-label={`${title} в горната лента`}>
-          {visibleItems.map((item) => (
-            <li key={item.id}>
-              <Link
-                className={`topbar-popover__item topbar-popover__item--${getNotificationCategory(item.type)} ${item.readAt ? "" : "topbar-popover__item--unread"}`}
-                to={notificationHref(item)}
-                onClick={onClose}
-              >
+          {visibleItems.map((item) => {
+            const itemClass = `topbar-popover__item topbar-popover__item--${getNotificationCategory(item.type)} ${item.readAt ? "" : "topbar-popover__item--unread"}`;
+            const copy = (
+              <>
                 <span className="topbar-popover__dot" aria-hidden="true" />
                 <span className="topbar-popover__copy">
                   <strong>{item.title}</strong>
                   <span>{item.body}</span>
-                  <time dateTime={item.createdAt}>{formatHeaderNotificationTime(item.createdAt)}</time>
+                  <time dateTime={item.createdAt}>
+                    {formatHeaderNotificationTime(item.createdAt)}
+                  </time>
                 </span>
-              </Link>
-            </li>
-          ))}
+              </>
+            );
+            return (
+              <li key={item.id}>
+                {isMessages ? (
+                  // Messages point to the conversation thread.
+                  <Link className={itemClass} to={notificationHref(item)} onClick={onClose}>
+                    {copy}
+                  </Link>
+                ) : (
+                  // Notifications open the full-text popup, same as /notifications.
+                  <button
+                    type="button"
+                    className={`${itemClass} topbar-popover__item--button`}
+                    onClick={() => onSelectNotification(item)}
+                  >
+                    {copy}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="topbar-popover__empty">
@@ -274,6 +295,7 @@ export default function AppShell() {
   const [headerNotifications, setHeaderNotifications] = useState<NotificationItem[]>([]);
   const [activeHeaderPanel, setActiveHeaderPanel] = useState<HeaderPanel | null>(null);
   const [headerNotificationsBusy, setHeaderNotificationsBusy] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
   const topbarPanelRef = useRef<HTMLDivElement | null>(null);
   const themeSwitchTimerRef = useRef<number | null>(null);
 
@@ -549,6 +571,26 @@ export default function AppShell() {
     setTheme((value) => (value === "dark" ? "light" : "dark"));
   }
 
+  // Open a notification from the header popover in the same detail popup the
+  // /notifications page uses, and mark just that one read.
+  function openHeaderNotification(item: NotificationItem) {
+    setActiveHeaderPanel(null);
+    setSelectedNotification(item);
+    if (!token || !user || isAdmin || item.readAt) {
+      return;
+    }
+    const readAt = new Date().toISOString();
+    setHeaderNotifications((items) =>
+      items.map((n) => (n.id === item.id ? { ...n, readAt } : n))
+    );
+    window.dispatchEvent(
+      new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, {
+        detail: { readAt, notificationId: item.id }
+      })
+    );
+    void api.markMyNotificationsRead(token, item.id).catch(() => {});
+  }
+
   async function markHeaderNotificationsRead() {
     if (!token || !user || isAdmin || headerNotificationsBusy) {
       return;
@@ -686,6 +728,7 @@ export default function AppShell() {
                         busy={headerNotificationsBusy}
                         onClose={() => setActiveHeaderPanel(null)}
                         onMarkAllRead={markHeaderNotificationsRead}
+                        onSelectNotification={openHeaderNotification}
                       />
                     ) : null}
                   </div>
@@ -882,6 +925,12 @@ export default function AppShell() {
         </div>
       </footer>
       <CookieConsentBanner />
+      {selectedNotification ? (
+        <NotificationDetailModal
+          notification={selectedNotification}
+          onClose={() => setSelectedNotification(null)}
+        />
+      ) : null}
     </div>
   );
 }

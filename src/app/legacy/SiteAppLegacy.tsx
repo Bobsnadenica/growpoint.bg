@@ -167,7 +167,7 @@ const PACKAGE_PLANS: Array<{
     tier: "start",
     level: "Ниво 1 · Старт",
     name: "GrowPoint Start",
-    tagline: "Това е стандартният профил",
+    tagline: "Стандартният профил — безплатно",
     description:
       "Създай своя профил, управлявай календара си и започни да приемаш заявки.",
     features: [
@@ -177,7 +177,7 @@ const PACKAGE_PLANS: Array<{
       "Представяне на теми и услуги",
       "Минимум 1 безплатна сесия месечно"
     ],
-    price: "9.99 € / месец"
+    price: "Безплатно"
   },
   {
     tier: "grow",
@@ -2492,9 +2492,7 @@ export function AuthPage() {
 
   const headerLabel =
     screen === "register"
-      ? form.role === "consultant"
-        ? "Създай експертен профил"
-        : "Създай профил"
+      ? "Добре дошъл в GrowPoint"
       : screen === "confirm"
         ? "Потвърди регистрацията"
         : screen === "new-password"
@@ -4737,6 +4735,8 @@ export function DashboardPage() {
                           <span className="status-badge status-badge--success">
                             Текущ пакет
                           </span>
+                        ) : plan.tier === "start" ? (
+                          <span className="form-note">Винаги безплатно</span>
                         ) : (
                           <button
                             className="ghost-button"
@@ -7044,6 +7044,11 @@ function ConsultantCard({
               <span
                 className={`package-badge package-badge--${getConsultantPackageTier(consultant)}`}
               >
+                {getConsultantPackageTier(consultant) === "spotlight" ? (
+                  <span className="package-badge__star" aria-hidden="true">
+                    ★
+                  </span>
+                ) : null}
                 {getConsultantPackageBadge(consultant)}
               </span>
             ) : null}

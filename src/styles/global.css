@@ -824,6 +824,17 @@ main {
   transition: background-color 160ms ease, transform 160ms ease;
 }
 
+/* Notification entries render as <button> (open the detail popup) — reset
+   native button styling so they match the <Link> message entries exactly. */
+.topbar-popover__item--button {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
 .topbar-popover__item:hover,
 .topbar-popover__item:focus-visible {
   transform: translateY(-1px);
@@ -1911,7 +1922,13 @@ input[readonly] {
     #f6f9fc;
 }
 
-input[type="file"] {
+/* A file input with the `hidden` attribute (e.g. inside an upload-button label)
+   must stay hidden — the styled rule below would otherwise force it visible. */
+input[type="file"][hidden] {
+  display: none;
+}
+
+input[type="file"]:not([hidden]) {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -4892,6 +4909,9 @@ textarea {
   position: absolute;
   left: 0;
   bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 4px 12px;
   border-radius: 0 999px 999px 0;
   font-size: 0.72rem;
@@ -4903,8 +4923,39 @@ textarea {
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.22);
 }
 
+/* Spotlight badge — premium gold treatment with a subtle sheen sweep. */
 .package-badge--spotlight {
-  background: linear-gradient(100deg, #8a5a00, #c98a00 55%, #8a5a00);
+  padding-right: 14px;
+  color: #2a1c00;
+  background: linear-gradient(100deg, #f6c66b 0%, #ffe9a8 45%, #e0a23a 100%);
+  background-size: 200% 100%;
+  box-shadow:
+    0 6px 18px rgba(184, 134, 11, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  animation: spotlightSheen 4.5s ease-in-out infinite;
+}
+
+.package-badge__star {
+  font-size: 0.8rem;
+  line-height: 1;
+  color: #7a4b00;
+  filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.6));
+}
+
+@keyframes spotlightSheen {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .package-badge--spotlight {
+    animation: none;
+  }
 }
 
 /* ─── Пакети за експерти (Стр. 6) ───────────────────────────────────── */
