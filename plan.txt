@@ -1,0 +1,116 @@
+GrowPoint — work plan (ready-to-run prompts for future sessions)
+================================================================
+Each item below is a self-contained prompt. Paste one to start that task.
+Ordered by priority. test.txt = QA log, README.md = overview, CLAUDE.md = how-to.
+
+Ground rules for every task (the bar for "professional"):
+  - Run the gates before shipping: `npm run build`, `bash scripts/check-secrets.sh`,
+    `node --check backend/api/index.cjs`, `npm run smoke:prod` (expect 14/14).
+  - Review `terraform plan` before any apply. NEVER apply a plan that destroys a
+    DynamoDB table or replaces the Cognito user pool (it would wipe all accounts).
+  - Production `www` deploys via push to `main` (GitHub Pages). Secrets only in the
+    gitignored terraform.tfvars. README.md / test.txt / plan.txt are public.
+  - Verify changes in the browser preview when they're visible; update test.txt.
+
+
+P0 — REVENUE & EMAIL (unblocks the business)
+--------------------------------------------
+1. Stripe checkout for paid mentor signup
+Prompt: "Integrate Stripe Checkout so consultants can buy a Start/Grow/Spotlight
+plan. Add a backend route that creates a Checkout Session and a webhook handler
+that, on payment success, sets the consultant's packageSource='purchased' +
+packageTier and marks membership active (so the profile can go public). Wire the
+pricing-card buttons in SiteAppLegacy.tsx (currently 'Очаквай скоро') to start
+checkout. Turn off the invite-only block once a user has paid. Add the Stripe
+secret to terraform.tfvars (gitignored) + IAM/env as needed. Test with Stripe test
+mode end-to-end; document the flow in README/CLAUDE."
+
+2. SES production access + switch sender to growpoint.bg
+Prompt: "Confirm growpoint.bg is verified in SES eu-west-1 (DKIM SUCCESS). Then
+switch ses_from_email to noreply@growpoint.bg in terraform.tfvars and apply.
+Send a test invite from /admin and confirm it lands. NOTE: SES is in sandbox and a
+prior production-access request was DENIED (CaseId 177970917100849) — production
+access must be re-requested in the AWS Support Center console (the PutAccountDetails
+API returns ConflictException after a denial); the paste-ready use-case text is in
+the chat history. Until production access is granted, email only reaches verified
+addresses."
+
+
+P1 — HARDENING & EDGE CASES
+---------------------------
+3. Enforce `restricted` on every request
+Prompt: "Today, restricting an account disables Cognito login (blocks new logins)
+but an already-issued JWT stays valid ~1h. Add a lightweight check so a restricted
+user is blocked immediately: in backend/api/index.cjs load the user in requireAuth
+(or a requireActiveUser wrapper) and return 403 if user.restricted === true. Keep
+it cheap (one GetItem). Make sure admins can still unrestrict. Add a smoke check."
+
+4. Invite system edge cases
+Prompt: "Harden the admin invite flow (backend/api/index.cjs createInvite/
+redeemInvite + AdminPage.tsx). Add: revoke a pending invite, resend, show expiry
+countdown, handle 'email already has an account', and a clear message when a token
+is expired/already-redeemed/email-mismatch at redemption. Verify the single-use
+race (ConditionExpression) holds. Update the admin invite list UI."
+
+5. Restrict clients too (not just consultants) + audit
+Prompt: "The /admin UI only exposes restrict on consultant cards. Add a way to
+find + restrict/unrestrict any user (a searchable users list backed by a new
+admin users endpoint, or reuse Cognito ListUsers). Record who/when for each
+restrict action and show it. Keep the 'cannot restrict yourself' guard."
+
+6. CloudFront DNS cutover + security headers
+Prompt: "Plan and execute moving www.growpoint.bg from GitHub Pages to the S3 +
+CloudFront stack (DNS at jethost.bg) so we get HSTS / X-Frame-Options / CSP that
+Pages can't send (the response-headers policy already exists in terraform). Do it
+as a reversible cutover with verification; keep Pages as fallback until confirmed."
+
+
+P2 — PROFESSIONAL POLISH
+------------------------
+7. Automated tests (beyond smoke)
+Prompt: "Add a real test layer. Unit-test the pure backend helpers in index.cjs
+(consultantMembershipActive, redeemInvite, normalize* , booking validation) and the
+frontend lib (auth-flow, datetime). Add an e2e happy-path for invite redemption and
+the booking flow. Wire them into CI (.github/workflows/ci.yml)."
+
+8. Accessibility audit
+Prompt: "Audit the app for accessibility: keyboard navigation, focus traps in the
+portal modals, aria labels on icon buttons, colour contrast in light + dark, and
+form labels. Fix the issues found. Verify with the browser preview at 1280 and 390."
+
+9. Performance / bundle size
+Prompt: "The main JS bundle is ~560KB. Code-split it: lazy-load the admin pages,
+the booking calendar, and the Lottie hero animation with dynamic import(). Confirm
+the gate (npm run build) stays green and the smoke test passes; measure before/after."
+
+10. Observability — error alerts
+Prompt: "Add CloudWatch alarms for Lambda errors/throttles and SES bounce/complaint
+rates, with an SNS email to the team. Make backend errors easier to trace (request
+ids in logs). Keep IAM minimal. Define this in terraform."
+
+11. Branded social preview + logo hardening
+Prompt: "Create a branded og-image for link previews (currently a leftover). Also
+convert the text in assets/logo.svg + logo-dark.svg to outlined paths so they don't
+depend on a Google Fonts @import, and add a square favicon/app-icon variant derived
+from the pin mark."
+
+12. Rate limiting / abuse protection
+Prompt: "Add basic abuse protection: throttle the public page-view beacon and
+booking/message creation per user, and rate-limit admin invite creation. Use API
+Gateway throttling + per-user checks. Don't break legitimate usage."
+
+13. GDPR / privacy pass
+Prompt: "Review the data-export (/me/data-export) and account-deletion flows end to
+end, confirm the 7-day deletion sweep works, verify the cookie-consent banner gates
+what it claims, and make sure restricted/deleted users disappear from all public
+surfaces. Document retention in the privacy page."
+
+
+HOUSEKEEPING (do when confirmed safe)
+-------------------------------------
+14. Delete the careerdoc backup resources
+Prompt: "The old careerdoc-dev-{users,consultants,bookings} tables and
+careerdoc-dev-cv-* / careerdoc-dev-frontend-* buckets are orphaned backups from the
+growpoint rename. Once the owner confirms the migration is stable, delete them
+(aws dynamodb delete-table x3; empty + aws s3 rb x2). Confirm they're not in
+terraform state first."

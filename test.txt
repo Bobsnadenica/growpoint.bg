@@ -1,237 +1,67 @@
-GrowPoint — QA & Change Report (condensed)
-===========================================
-Last updated: 2026-06-14
-This file is the running QA log. Detailed feature docs + the consolidated
-"What's next" table live in README.md. Public file — no secrets here.
+GrowPoint — QA & change log
+===========================
+Last updated: 2026-06-14. Public file — no secrets here.
+Deep docs: README.md · agent/dev notes: CLAUDE.md · upcoming work: plan.txt
 
 Targets
-  - Live site (GitHub Pages):  https://www.growpoint.bg
-  - CloudFront test domain:    https://d30m6jtjij7col.cloudfront.net
-  - Live API:                  https://zmajj05nm1.execute-api.eu-west-1.amazonaws.com
+  - Production site (GitHub Pages):  https://www.growpoint.bg
+  - CloudFront test domain:          https://d30m6jtjij7col.cloudfront.net
+  - API:                             https://zmajj05nm1.execute-api.eu-west-1.amazonaws.com
 
-==================================================================
-CURRENT STATE — what is verified working (as of 2026-06-12, full audit)
-==================================================================
-  - Build gates: npm run build (dark-theme guard + tsc + vite) PASS;
-    node --check backend PASS; terraform validate + fmt clean; secret scan
-    (scripts/check-secrets.sh) PASS. CI (.github/workflows/ci.yml) runs the
-    same gates + gitleaks on every push/PR.
-  - Safe production smoke (npm run smoke:prod): 14/14 — health, consultants
-    list (11 profiles), Cyrillic slug, public routes, sitemap/robots,
-    anonymous 401 on protected routes, prod-origin CORS preflight.
-  - Security posture: all /me/*, /bookings, /admin/* return 401 anonymously;
-    auth claims come only from the API GW JWT authorizer; booking mutations
-    enforce ownership (no IDOR found in review); no XSS sinks
-    (no innerHTML/dangerouslySetInnerHTML; JSON-LD via textContent); IAM
-    scoped to the 3 tables + CV bucket; CORS allowlist = www + CloudFront
-    (localhost is only enabled temporarily during QA and always reverted —
-    re-verified after every pass).
-  - Social login: Google + LinkedIn + Apple live via Cognito hosted UI.
-    Apple uses the Services ID as client_id; /oauth2/authorize handoff
-    verified for all three. OAuth errors now surface as a clear banner on
-    /auth (e.g. email-collision case) instead of failing silently.
-  - Package/access model (2026-06-14): ALL expert tiers are PAID — Start 9.99 /
-    Grow 29.99 / Spotlight 99.99 EUR per month; clients are free; every pricing
-    button is "Очаквай скоро" (Stripe pending). No consultant approval anymore —
-    a profile is public when the account is ACTIVE (admin-comped/invited or paid)
-    AND passes the quality bar. The 11 existing profiles were grandfathered
-    (comped). New mentor onboarding is INVITE-ONLY: admin emails an invite
-    (POST /admin/invites -> SES link /auth?invite=TOKEN), redeemed at bootstrap
-    for a free comped consultant account; self-serve consultant signup shows an
-    invite-only notice. Admin can RESTRICT/full-suspend any account
-    (PUT /admin/users/{id}/restrict): hides the profile + blocks bookings +
-    disables Cognito sign-in (reversible). Catalog orders Spotlight > Grow first.
-    Admin can still grant a package (audited) + feature/message accounts.
-  - Admin monitoring (/admin "Преглед на платформата"): numbers are real, not
-    placeholders. Account totals now come straight from the Cognito user pool
-    (ListUsers, read-only IAM) — the source of truth for registrations — with a
-    confirmed/непотвърдени split and a breakdown by login (Имейл/Google/Apple/
-    LinkedIn). "Активирани профили" is the DynamoDB mirror (created on first
-    authenticated request); a note surfaces the drift (registered-but-not-yet-
-    activated). Other tiles scan DynamoDB live: public profiles, bookings by
-    status + upcoming confirmed sessions, messages, reviews + average rating,
-    confirmed sessions, and a first-party page-view counter. Degrades gracefully
-    to DB counts if Cognito is unreachable.
-  - Designer/tester doc (June): fully implemented and DOM-verified — new
-    copy site-wide, 7 области (+auto-scroll), directory Препоръчани (≥4.5,
-    verified min 4.6) / Водещи buttons, photo badges, −50% card photos,
-    3-tier pricing card with current tier marked.
-  - Owner round-2 fixes: photo lightbox + all 5 modals render via portal to
-    <body> — true fullscreen popups above the sticky header (root cause was
-    a CSS specificity rule overriding position:fixed; reproduced, fixed,
-    re-measured). Form pairs top-aligned (Име/Имейл measured equal at 52px).
-    Age clamped 18–95 (input + save validation + backend). Документи moved
-    to a header files icon + /files page (upload + share with consultants
-    you have a confirmed session with). Ad box rotates the real creatives
-    from assets/advertisement/ (mp4 muted/loop + jpg). In-profile Известия
-    panel removed (header bell + /notifications cover it).
-  - Responsive: all pages checked at 1280px and 375px — 0 horizontal
-    overflow, 0 console errors on fresh loads; dark mode clean; calendar
-    tap targets ≥40px.
-
-==================================================================
-OPEN ITEMS / HANDOFFS (full table in README "What's next")
-==================================================================
-  P0  CloudFront DNS cutover (jethost.bg) — also fixes missing HTTP security
-      headers (HSTS/X-Frame-Options) that GitHub Pages can't send.
-  P0  Stripe checkout (Цецо): wire the three pricing buttons to Checkout;
-      on webhook success call the package update (backend handler
-      setConsultantPackage) with packageSource:"purchased". Then enable the
-      visibility gate from the designer doc.
-  P0  SES sender (jethost.bg DNS + SES production access).
-  P1  LinkedIn for emails that already have an account: the new /auth error
-      banner tells the cause. If it says "Вече има профил с този имейл" =>
-      build the PreSignUp account-linking trigger (AdminLinkProviderForUser;
-      needs cognito-idp SDK + IAM + USER_POOL_ID; native signups untouched).
-      Owner to retest and report the banner text.
-  P1  Real Apple end-to-end sign-in on the live origin (handoff verified).
-  P1  Admin destructive-action browser QA; CloudWatch alarms + throttling.
-  P2  Branded og-image (3.jpg fallback is a CareerLane creative); /u/:id
-      prerender + privacy opt-out; Cognito group sync for social roles;
-      reminder timing; pagination; cold-start latency; node_modules in repo.
-
-==================================================================
-CHANGE HISTORY (one line per pass; details in git + README changelog)
-==================================================================
-  2026-06-14  Paid-mentor model + invites + restrict + no approval. Pricing
-              corrected: Start is PAID 9.99 (reversed the same-week free-Start
-              mistake); all tiers "Очаквай скоро" (Stripe pending); clients free.
-              Removed consultant approval: visibility now gated on active
-              membership (comped/invited or paid) + quality bar; the 11 live
-              profiles were grandfathered (comped) and verified still public.
-              Added admin EMAIL INVITES (POST/GET /admin/invites; SES link
-              /auth?invite=TOKEN redeemed at bootstrap -> free comped consultant)
-              and admin RESTRICT/full-suspend (PUT /admin/users/{id}/restrict:
-              hides profile + blocks bookings + Cognito AdminDisableUser, read-only
-              IAM added). Consultant self-signup is invite-only (notice + guard).
-              /admin reworked (invite form+list, restrict/unrestrict, public/
-              featured/restricted filters; approve-reject removed). Verified:
-              gates PASS, terraform plan clean (no data/pool destroy), new
-              endpoints 401 anon, consultants still 11, register gate DOM-checked.
-  2026-06-13  Project rename careerdoc -> growpoint (infra + code), zero data
-              loss, zero downtime to production. DynamoDB tables are now
-              growpoint-dev-{users,consultants,bookings}; S3 buckets
-              growpoint-dev-cv-* and growpoint-dev-frontend-*; Lambda
-              growpoint-dev-api; IAM + tags growpoint. Method: created the new
-              tables mirroring the exact schema (GSIs + PITR) and copied every
-              item (scripts/migrate-tables-to-growpoint.cjs; counts verified
-              24/37/8), synced both S3 buckets, then reconciled Terraform
-              (state rm old + import new) and applied (Lambda env/IAM/names ->
-              growpoint). The Cognito user pool NAME is deliberately left as the
-              original (a pool name is immutable in AWS — renaming = full pool
-              replacement = all accounts lost); it is an internal label only, so
-              the pool id, all users, and the API URL are unchanged. Old
-              careerdoc tables + buckets are kept intact as a rollback backup
-              (delete after the owner confirms). Verified: API health/consultants
-              (11) on the new tables, GSI slug lookup, smoke:prod 14/14, IAM
-              read+write on new resources, CloudFront test domain OK, terraform
-              plan clean (no drift).
-  2026-06-13  Admin monitoring made authoritative: the dashboard now reads real
-              numbers, incl. the Cognito user pool itself (not just the DynamoDB
-              mirror). Backend: new getCognitoUserStats (paginated ListUsers →
-              total/confirmed/unconfirmed/disabled/by-provider/new-7d) wired into
-              /admin/metrics; added upcoming confirmed sessions + average review
-              rating. Infra: read-only cognito-idp:ListUsers/DescribeUserPool IAM
-              scoped to the pool ARN + USER_POOL_ID Lambda env (terraform apply).
-              Frontend: "Регистрирани акаунти" now = Cognito (with confirmed split
-              + login-provider breakdown); "Активирани профили" = DynamoDB mirror;
-              drift note shows registered-but-not-activated; new tiles for
-              предстоящи сесии + среден рейтинг. Fixed the misleading note that
-              claimed visits aren't tracked (they are, via a cookieless counter).
-              Degrades to DB counts if Cognito is unreachable. Verified: tsc/
-              node --check/build/secret-scan PASS; layout DOM-checked at 1280 &
-              390 (0 overflow); Lambda boots + endpoint 401 anon; live Cognito
-              read left for the owner's admin session (CLI pool dumps are blocked
-              by policy — aggregate-only attempt denied, respected).
-  2026-06-13  Owner round (5 items), all DOM-verified live + gates green:
-              (1) Header bell notifications now open the SAME detail popup as
-              the /notifications page (shared NotificationDetailModal, portaled
-              to <body>); clicking one marks just that one read and clears the
-              badge. (2) Backend confirmed to support the three packets; Start
-              is the default profile and is FREE in the pricing card. (3) Grow
-              badge "Препоръчан експерт"; Spotlight gets a fancier animated gold
-              "★ GrowPoint суперзвезди" badge (reduced-motion respected).
-              (4) /auth register heading "Създай профил" -> "Добре дошъл в
-              GrowPoint". (5) Social-login onboarding popup polished — root
-              cause of the jank was the hidden avatar <input type=file> being
-              forced visible by a global rule; scoped the rule to [hidden] so
-              the modal is clean ("Смени снимката" pill only). CORS reverted.
-  2026-06-12  FULL AUDIT: gates+drift clean; security review of new surface
-              (admin package endpoint, per-id mark-read, public users endpoint,
-              setRole) — no issues; live: all boundaries 401, package internals
-              hidden from public payload, CORS posture correct. Both-role
-              browser sweeps (client+consultant, 1280/375/dark): 0 overflow,
-              0 console errors; booking calendar flow OK; sessions-via-hash OK.
-              2 findings FIXED: (1) consultant owner-edit links never showed on
-              the live public profile (check used ownerUserId which the public
-              payload strips — now compares the viewer's own consultant
-              profile; verified: owner note + 4 edit links, negative control
-              clean); (2) own pending profile showed raw English "Consultant
-              profile not found." — now a friendly owner-aware panel with
-              "Допълни профила си" CTA (verified live). CORS reverted.
-  2026-06-11  Booking notifications: the popup action is now "Виж сесиите" —
-              opens the dashboard WITH the "Предстоящи сесии" popup already
-              open (#sessions hash handled by the dashboard) instead of just
-              landing on the profile top. Verified end-to-end with the owner's
-              real booking_accepted notification; CORS temp-QA reverted.
-  2026-06-11  Notifications: opening one now marks JUST that one as read
-              (mark-read accepts optional notificationId; header badge syncs
-              per-id). "Маркирай всички" unchanged. Verified live: bogus-id
-              call left the real unread untouched; UI test confirmed single
-              mark + badge decrement. Lambda redeployed.
-  2026-06-11  /notifications: clicking an item no longer redirects to the
-              profile (legacy dashboard-anchor hrefs) — it opens a popup with
-              the full notification text (category + time + contextual action
-              "Към съобщенията"/"Към таблото"); list previews clamp to 2 lines.
-              Verified with stubbed long-body data (modal portaled, stays on
-              page, Затвори/Escape close); CORS temp-QA reverted & re-verified.
-  2026-06-11  Perf: "Виж публичния си профил" now renders instantly (28ms vs
-              waiting on the API, which pays ~1-2s on Lambda cold start) — the
-              dashboard Link seeds the member page with the already-loaded
-              profile via route state; a background refresh still pulls the
-              live public payload. Verified with the owner's test client
-              account; CORS temp-QA reverted & re-verified.
-  2026-06-10  Fix: "Виж публичния си профил" showed nothing for accounts with
-              an empty name — GET /public/users/{id} rejected them (404). Now
-              falls back to the email local-part as display name (deployed);
-              /u/:id additionally shows a "допълни профила си" hint when your
-              own card is still empty. Reproduced + verified live with the QA
-              account; CORS temp-QA reverted & re-verified.
-  2026-06-10  Round 2 fixes (overlay portal, alignment, age 18–95, /files
-              page + header icon, ad assets, Известия removal) — verified
-              with live data desktop+mobile; Lambda redeployed; CORS reverted.
-  2026-06-10  Sprint R1: designer-doc copy/области/packages/pricing/badges;
-              backend package ordering + admin grant endpoint deployed.
-  2026-06-09  Sessions popup; /messages + /notifications pages; booking
-              calendar (book+pick); owner-edit on public profile; /u/:id
-              member share cards + GET /public/users/{id}; social onboarding
-              role choice (setRole) + prefill; Apple IdP configured (Services
-              ID fix); mobile sticky/overflow fixes; OAuth error banner;
-              CI workflow (secret scan + build + terraform) added.
-  2026-06-08  Google + LinkedIn login live; onboarding modal; consultants/
-              clients groups authoritative in bootstrap; dark-theme fixes;
-              beta tape removed; repo hygiene.
-  2026-06-07  CloudFront per-route SEO + function; API cache headers; demo
-              availability refresher (rerun any time:
-              AWS_REGION=eu-west-1 CONSULTANTS_TABLE=careerdoc-dev-consultants
-              node scripts/refresh-example-availability.cjs --apply);
-              live lifecycle QA 27/27 with cleanup; admin status/featured
-              verified; orphaned QA profile found + rejected.
-  2026-06-06  Initial live QA: public reads, auth flows, bookings, messages,
-              documents privacy (403 for unrelated), CloudFront hosting.
-
-==================================================================
-HOW TO RE-RUN THE CHECKS
-==================================================================
-  npm run check:secrets      # tracked-secret guard (also runs in CI)
-  npm run build              # theme guard + tsc + vite
+How to test (gates — all must pass before shipping)
+  npm run build                  # theme check + tsc + vite + route copies
+  bash scripts/check-secrets.sh  # secret scan
   node --check backend/api/index.cjs
-  terraform -chdir=infra/terraform validate && terraform -chdir=infra/terraform fmt -check
-  npm run smoke:prod         # safe, read-only production smoke (14 checks)
-  npm run smoke:prod:live    # full lifecycle with disposable data (owner-approved runs only)
+  npm run smoke:prod             # 14 read-only production checks -> expect 14/14
+  terraform -chdir=infra/terraform validate   # for infra changes (review `plan` before apply)
 
-Notes
-  - Demo profiles (isExample=true) are intentional pre-launch content.
-  - Apex DNS TLS + payments are known/owned items, not bugs.
-  - Logged-in pages can't load from localhost (prod-only CORS); QA passes
-    temporarily allow localhost via terraform and always revert + re-verify.
+Verified working (as of 2026-06-14)
+  - Build + secret scan + tsc + backend syntax: PASS. smoke:prod 14/14.
+  - Security: no XSS sinks; all /me, /bookings, /admin endpoints reject anonymous (401);
+    auth via Cognito JWT authorizer; IAM scoped to the 3 tables + CV bucket + SES +
+    read-only/enable-disable Cognito; secrets only in gitignored tfvars.
+  - Auth: email + Google + Apple + LinkedIn (Cognito hosted UI).
+  - Paid model: Start 9.99 / Grow 29.99 / Spotlight 99.99 EUR/mo, clients free,
+    buttons "Очаквай скоро" (Stripe pending). Badges: Grow / ★ Spotlight.
+  - Mentor onboarding invite-only (admin email invite -> free comped account);
+    self-serve consultant signup blocked with a notice. No approval step.
+  - Admin: invite, restrict/suspend (hides profile + disables Cognito login),
+    message, grant package, feature. Monitoring dashboard reads real Cognito + DB.
+  - Data: 3 DynamoDB tables growpoint-dev-{users,consultants,bookings} (11 public
+    consultants), CV/media in growpoint-dev-cv-* bucket.
+  - Responsive (1280 + ~390) with 0 horizontal overflow; dark theme clean; logo
+    light/dark variants verified.
+
+Open items (details + ready-to-run prompts in plan.txt)
+  P0  Stripe checkout — enables self-serve paid mentor signup.
+  P0  SES production access — account is in sandbox, so platform email only reaches
+      verified addresses. growpoint.bg DNS is in; request production in AWS console.
+  P1  Enforce `restricted` per request (Cognito disable blocks new logins; an
+      existing token stays valid ~1h).
+  P1  CloudFront DNS cutover (jethost.bg) — also adds HTTP security headers.
+  P2  Delete old careerdoc-dev-* tables/buckets once the rename is confirmed stable.
+
+Change history (newest first)
+  2026-06-14  Logo: header uses logo.svg wordmark (light + dark variants), dropped
+              the separate "GrowPoint" text. Docs simplified (README/CLAUDE/test).
+  2026-06-14  Paid-mentor model: all tiers paid (no free), email invites -> comped
+              accounts, admin restrict/suspend (Cognito disable), approval removed.
+              Pricing Start reverted to 9.99 EUR/mo.
+  2026-06-13  Rename careerdoc -> growpoint across infra + code; zero data loss /
+              zero downtime (table + bucket migration, terraform state reconcile).
+              Cognito pool name left pinned (immutable).
+  2026-06-13  Admin monitoring made authoritative — reads real Cognito user pool
+              + DynamoDB (registered vs activated, by login provider, drift).
+  2026-06-13  Owner round: header notif popup parity, fancier Spotlight badge,
+              auth heading, social-onboarding popup polish.
+  2026-06-12  Full audit: gates + drift clean; security review; both-role browser
+              sweeps; fixed owner-edit links + pending-profile panel on live.
+  2026-06-11  Notifications: full-text popup, per-item mark-read, booking action
+              opens the sessions popup.
+  2026-06-10  Overlay portal fix (modals/lightbox), age 18–95, /files page,
+              ad rotation; Sprint R1 (copy / области / packages / pricing / badges).
+  2026-06-09  Sessions popup; /messages + /notifications pages; booking calendar;
+              shareable member cards; Apple sign-in configured.
+  2026-06-08  Google + LinkedIn login live; social onboarding modal.
+  2026-06-07  CloudFront per-route SEO + function; API cache headers.
+  2026-06-06  Initial live QA: public reads, auth, bookings, messages.
