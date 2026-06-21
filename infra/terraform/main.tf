@@ -278,8 +278,12 @@ resource "aws_cognito_identity_provider" "linkedin" {
     client_id                 = var.linkedin_client_id
     client_secret             = var.linkedin_client_secret
     jwks_uri                  = "https://www.linkedin.com/oauth/openid/jwks"
-    oidc_issuer               = "https://www.linkedin.com"
-    token_url                 = "https://www.linkedin.com/oauth/v2/accessToken"
+    # Must EXACTLY match the `iss` claim in LinkedIn's id_token, else Cognito
+    # rejects every LinkedIn login with "bad id_token issuer". LinkedIn's OIDC
+    # discovery (https://www.linkedin.com/oauth/.well-known/openid-configuration)
+    # reports issuer = https://www.linkedin.com/oauth (NOT the bare domain).
+    oidc_issuer = "https://www.linkedin.com/oauth"
+    token_url   = "https://www.linkedin.com/oauth/v2/accessToken"
   }
 
   attribute_mapping = {
