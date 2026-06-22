@@ -624,18 +624,18 @@ export default function AppShell() {
           <Link className="brand-link" to="/" aria-label={config.appName}>
             <img
               className="brand-logo brand-logo--light"
-              src="/assets/logo.svg"
+              src="/assets/logo/logo_dark.png"
               alt={config.appName}
-              width={150}
-              height={45}
+              width={172}
+              height={40}
             />
             <img
               className="brand-logo brand-logo--dark"
-              src="/assets/logo-dark.svg"
+              src="/assets/logo/logo_white.png"
               alt=""
               aria-hidden="true"
-              width={150}
-              height={45}
+              width={172}
+              height={40}
             />
           </Link>
 
