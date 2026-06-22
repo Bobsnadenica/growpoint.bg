@@ -99,6 +99,7 @@ npm run deploy:cloudfront       # push the built site to the S3/CloudFront test 
 - Old `careerdoc-dev-*` tables/buckets are kept as a rollback backup — delete once the rename is confirmed stable.
 
 ### Recent changes (condensed)
+- **2026-06-22:** points/rewards for clients (earn for profile completion, referrals, attended consultations, reviews; 100 points = a free consultation applied at booking) + a booking pay-gate (consultant adds a meeting link on approval; the client sees it only after payment — free-via-points releases it now, otherwise an admin manual "mark paid" bridge until Stripe).
 - **2026-06:** rebrand `careerdoc → growpoint` (zero-downtime data migration); paid-mentor model + email invites + admin restrict/suspend (approval removed); Cognito-authoritative admin monitoring; header switched to the `logo.svg` wordmark (light + dark variants).
 
 Full per-change history is in git and the QA log in [`test.txt`](test.txt).

@@ -4,6 +4,7 @@ const PENDING_BOOTSTRAP_KEY = "growpoint.pending-bootstrap";
 const SOCIAL_AUTH_INTENT_KEY = "growpoint.social-auth-intent";
 const SOCIAL_ONBOARDING_KEY = "growpoint.social-onboarding-pending";
 const INVITE_TOKEN_KEY = "growpoint.invite-token";
+const REFERRAL_CODE_KEY = "growpoint.referral-code";
 
 export type SocialAuthProviderKey = "google" | "apple" | "linkedin";
 export type SocialAuthMode = "login" | "register";
@@ -146,4 +147,32 @@ export function readInviteToken(): string | null {
 
 export function clearInviteToken() {
   removeStorageItem(INVITE_TOKEN_KEY);
+}
+
+// Referral code (?ref=CODE). Captured on load so it survives the auth round-trip,
+// then sent at bootstrap to credit the referrer once this user completes signup.
+export function captureReferralFromUrl() {
+  if (typeof window === "undefined") return;
+  try {
+    const code = new URLSearchParams(window.location.search).get("ref");
+    if (code && code.trim()) {
+      window.localStorage.setItem(REFERRAL_CODE_KEY, code.trim());
+    }
+  } catch {
+    // Storage / URL unavailable.
+  }
+}
+
+export function readReferralCode(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(REFERRAL_CODE_KEY);
+    return value && value.trim() ? value.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearReferralCode() {
+  removeStorageItem(REFERRAL_CODE_KEY);
 }

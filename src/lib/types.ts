@@ -203,8 +203,19 @@ export interface UserProfile {
   preferredSessionModes?: string[];
   cvDocument?: UploadedDocument | null;
   documents?: UploadedDocument[];
+  points?: number;
+  pointsHistory?: PointsHistoryEntry[];
+  referralCode?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PointsHistoryEntry {
+  id: string;
+  type: string;
+  points: number;
+  reason: string;
+  createdAt: string;
 }
 
 export interface Booking {
@@ -230,6 +241,23 @@ export interface Booking {
   sessionConfirmation?: BookingSessionConfirmation;
   messages?: BookingMessage[];
   review?: BookingReview;
+  paymentStatus?: "unpaid" | "free" | "paid";
+  freeViaPoints?: boolean;
+  meetingLink?: string;
+  meetingLinkLocked?: boolean;
+}
+
+export interface AdminBooking {
+  bookingId: string;
+  consultantName: string;
+  clientName: string;
+  clientEmail: string;
+  scheduledAt: string;
+  status: string;
+  paymentStatus: "unpaid" | "free" | "paid";
+  freeViaPoints: boolean;
+  hasMeetingLink: boolean;
+  createdAt: string;
 }
 
 export interface BookingSessionConfirmation {

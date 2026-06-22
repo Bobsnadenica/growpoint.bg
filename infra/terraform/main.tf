@@ -1042,6 +1042,32 @@ resource "aws_apigatewayv2_route" "bookings_ics" {
   authorization_type = "JWT"
 }
 
+# Consultant sets the online-meeting link on a confirmed booking.
+resource "aws_apigatewayv2_route" "bookings_meeting_link" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "PUT /bookings/{bookingId}/meeting-link"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "admin_bookings_list" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /admin/bookings"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+# Admin manual "mark paid" bridge until Stripe is wired.
+resource "aws_apigatewayv2_route" "admin_booking_paid" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "PUT /admin/bookings/{bookingId}/paid"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
 resource "aws_apigatewayv2_route" "admin_metrics" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "GET /admin/metrics"

@@ -1812,6 +1812,7 @@ export function ConsultantPage() {
   const [consultant, setConsultant] = useState<ConsultantProfile | null>(null);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [note, setNote] = useState("");
+  const [useFreePoints, setUseFreePoints] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [shareMessage, setShareMessage] = useState("");
@@ -1980,7 +1981,8 @@ export function ConsultantPage() {
       await api.createBooking(bookingToken, {
         consultantId: consultant.consultantId,
         scheduledAt: selectedSlot,
-        note: note.trim()
+        note: note.trim(),
+        useFreePoints
       });
       setConfirmedBooking({
         slot: selectedSlot,
@@ -1989,6 +1991,7 @@ export function ConsultantPage() {
       });
       setNote("");
       setSelectedSlot("");
+      setUseFreePoints(false);
       setMessage("");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно създаване на заявка.");
@@ -2305,6 +2308,20 @@ export function ConsultantPage() {
                     placeholder="Какво искаш да обсъдиш в сесията?"
                   />
                 </label>
+
+                {!isConsultantViewer && (viewerProfile?.points ?? 0) >= 100 ? (
+                  <label className="booking-free-points">
+                    <input
+                      type="checkbox"
+                      checked={useFreePoints}
+                      onChange={(event) => setUseFreePoints(event.target.checked)}
+                    />
+                    <span>
+                      Използвай 100 точки за безплатна консултация (имаш{" "}
+                      {viewerProfile?.points ?? 0} точки)
+                    </span>
+                  </label>
+                ) : null}
 
                 <div
                   className={`booking-summary ${
@@ -4553,6 +4570,8 @@ export function DashboardPage() {
             {error ? <div className="panel panel--error">{error}</div> : null}
           </div>
 
+          {profile.role === "client" ? <PointsCard profile={profile} /> : null}
+
           <Link className="dashboard-ad" to="/contact" aria-label="Рекламно пространство">
             <span className="dashboard-ad__tag">Реклама</span>
             {dashboardAdAsset.endsWith(".mp4") ? (
@@ -6092,6 +6111,23 @@ export function DashboardPage() {
                         Срокът за отзив е изтекъл (60 дни след сесията).
                       </p>
                     ) : null}
+                    {booking.freeViaPoints ? (
+                      <p className="form-note">Безплатна консултация (платена с точки).</p>
+                    ) : null}
+                    {token ? (
+                      <BookingMeetingLink
+                        booking={booking}
+                        consultantView={consultantView}
+                        token={token}
+                        onSaved={(updated) =>
+                          setBookings((current) =>
+                            current.map((item) =>
+                              item.bookingId === updated.bookingId ? updated : item
+                            )
+                          )
+                        }
+                      />
+                    ) : null}
                     {consultantView && (booking.clientSharedDocuments || []).length ? (
                       <div className="booking-shared-documents">
                         <strong>Документи, споделени от потребителя</strong>
@@ -6406,6 +6442,157 @@ function formatRelativeBg(iso: string) {
   if (diffSec < 86400) return `преди ${Math.round(diffSec / 3600)} ч`;
   if (diffSec < 7 * 86400) return `преди ${Math.round(diffSec / 86400)} дни`;
   return formatDate(iso);
+}
+
+function PointsCard({ profile }: { profile: UserProfile }) {
+  const [copied, setCopied] = useState(false);
+  const points = profile.points ?? 0;
+  const toFree = Math.max(0, 100 - points);
+  const base =
+    typeof window !== "undefined" ? window.location.origin : "https://www.growpoint.bg";
+  const referralLink = profile.referralCode ? `${base}/auth?ref=${profile.referralCode}` : "";
+  const history = [...(profile.pointsHistory || [])].slice(-6).reverse();
+
+  const copy = async () => {
+    if (!referralLink) return;
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable — the field is selectable as a fallback.
+    }
+  };
+
+  return (
+    <section className="panel points-card">
+      <div className="dashboard-form-head">
+        <p className="eyebrow">Точки</p>
+        <h2>Имаш {points} точки</h2>
+      </div>
+      <p className="form-note">
+        Събери 100 точки за 1 безплатна консултация. Печелиш точки за: попълнен профил
+        (20), покана на приятел (30), проведена консултация (10) и оставен отзив (10).
+      </p>
+      <div className="points-progress" role="img" aria-label={`${points} от 100 точки`}>
+        <span className="points-progress__bar" style={{ width: `${Math.min(100, points)}%` }} />
+      </div>
+      <p className="form-note">
+        {toFree === 0
+          ? "Имаш достатъчно точки за безплатна консултация — избери я при резервация."
+          : `Още ${toFree} точки до безплатна консултация.`}
+      </p>
+      {referralLink ? (
+        <div className="points-referral">
+          <label className="form-note" htmlFor="referral-link">
+            Покани приятел с тази връзка
+          </label>
+          <div className="points-referral__row">
+            <input
+              id="referral-link"
+              readOnly
+              value={referralLink}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+            <button className="ghost-button" type="button" onClick={copy}>
+              {copied ? "Копирано!" : "Копирай"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {history.length ? (
+        <ul className="points-history">
+          {history.map((entry) => (
+            <li key={entry.id}>
+              <span>{entry.reason}</span>
+              <strong>{entry.points >= 0 ? `+${entry.points}` : entry.points}</strong>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+function BookingMeetingLink({
+  booking,
+  consultantView,
+  token,
+  onSaved
+}: {
+  booking: Booking;
+  consultantView: boolean;
+  token: string;
+  onSaved: (updated: Booking) => void;
+}) {
+  const [draft, setDraft] = useState(booking.meetingLink || "");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  if (booking.status !== "confirmed") return null;
+
+  if (consultantView) {
+    const save = async () => {
+      const link = draft.trim();
+      if (!link) return;
+      setSaving(true);
+      setErr("");
+      try {
+        const updated = await api.setBookingMeetingLink(token, booking.bookingId, link);
+        onSaved(updated);
+      } catch (value) {
+        setErr(value instanceof Error ? value.message : "Неуспешно записване на линк.");
+      } finally {
+        setSaving(false);
+      }
+    };
+    return (
+      <div className="booking-meeting-link">
+        <label className="form-note" htmlFor={`ml-${booking.bookingId}`}>
+          Линк за онлайн срещата (потребителят го вижда след плащане)
+        </label>
+        <div className="booking-meeting-link__row">
+          <input
+            id={`ml-${booking.bookingId}`}
+            type="url"
+            placeholder="https://meet.google.com/..."
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            disabled={saving}
+          />
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={save}
+            disabled={saving || !draft.trim()}
+          >
+            {saving ? "Записваме..." : booking.meetingLink ? "Обнови линк" : "Запази линк"}
+          </button>
+        </div>
+        {err ? <p className="form-note">{err}</p> : null}
+      </div>
+    );
+  }
+
+  if (booking.meetingLink && !booking.meetingLinkLocked) {
+    return (
+      <p className="booking-meeting-link">
+        Връзка за срещата:{" "}
+        <a href={booking.meetingLink} target="_blank" rel="noreferrer">
+          {booking.meetingLink}
+        </a>
+      </p>
+    );
+  }
+  if (booking.meetingLinkLocked) {
+    return (
+      <p className="form-note">
+        Линкът за срещата ще се отвори след плащане. Онлайн плащането се подготвя
+        (Stripe — очаквай скоро).
+      </p>
+    );
+  }
+  return null;
 }
 
 function BookingMessages({

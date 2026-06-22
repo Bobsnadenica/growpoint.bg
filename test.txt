@@ -42,6 +42,18 @@ Open items (details + ready-to-run prompts in plan.txt)
   P2  Delete old careerdoc-dev-* tables/buckets once the rename is confirmed stable.
 
 Change history (newest first)
+  2026-06-22  Points/rewards (clients only) + booking pay-gate. Earn: profile 100%
+              =20, referral (friend completes profile) =30, attended+confirmed
+              consultation =10, review =10. Spend: 100 points = 1 free consultation
+              (applied at booking; refunded if declined/cancelled). Atomic +
+              idempotent (DynamoDB conditional updates). Booking flow: consultant
+              adds a meeting link on/after approval; the client sees it only once
+              paid — free-via-points releases it immediately, otherwise it's gated
+              ("Stripe скоро") with an admin manual "mark paid" bridge (/admin →
+              Чакащи плащане). Referral link ?ref=CODE; dashboard PointsCard
+              (balance, progress, referral, history). Backend live + verified
+              (new endpoints 401 anon); build/tsc/secret-scan PASS; PointsCard
+              DOM-verified. Next: Stripe replaces the manual mark-paid.
   2026-06-14  Logo: header uses logo.svg wordmark (light + dark variants), dropped
               the separate "GrowPoint" text. Docs simplified (README/CLAUDE/test).
   2026-06-14  Paid-mentor model: all tiers paid (no free), email invites -> comped

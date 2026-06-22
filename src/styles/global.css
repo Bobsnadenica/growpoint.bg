@@ -308,6 +308,80 @@ main {
   }
 }
 
+/* Points / rewards card + meeting-link blocks (theme-safe: variables only). */
+.points-card {
+  display: grid;
+  gap: 12px;
+}
+
+.points-progress {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.points-progress__bar {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.points-referral__row,
+.booking-meeting-link__row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.points-referral__row input,
+.booking-meeting-link__row input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.points-history {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.points-history li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+}
+
+.points-history strong {
+  color: var(--text);
+}
+
+.booking-meeting-link {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.booking-free-points {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+}
+
+.booking-free-points input {
+  margin-top: 3px;
+}
+
 .brand-mark {
   position: relative;
   width: 30px;

@@ -1,7 +1,13 @@
-import { clearInviteToken, readInviteToken } from "./auth-flow";
+import {
+  clearInviteToken,
+  clearReferralCode,
+  readInviteToken,
+  readReferralCode
+} from "./auth-flow";
 import { config, isApiConfigured } from "./config";
 import { getCvUploadContentType, getDocumentUploadContentType } from "./uploads";
 import type {
+  AdminBooking,
   AdminConsultantDetail,
   AdminConsultantSummary,
   AdminInvite,
@@ -36,6 +42,9 @@ type BootstrapInput = {
   // Admin email-invite token (?invite=...) — redeemed server-side to grant a
   // free comped consultant account.
   inviteToken?: string;
+  // Referral code (?ref=...) — credits the referrer when this user completes
+  // their profile.
+  ref?: string;
 };
 
 type UpdateProfileInput = Partial<
@@ -199,12 +208,14 @@ export const api = {
     // redeem it and grant a free comped consultant account. Single-use: clear
     // it once bootstrap succeeds.
     const inviteToken = input.inviteToken || readInviteToken() || undefined;
+    const ref = input.ref || readReferralCode() || undefined;
     const profile = await request<UserProfile>(
       "/auth/bootstrap",
-      { method: "POST", body: JSON.stringify({ ...input, inviteToken }) },
+      { method: "POST", body: JSON.stringify({ ...input, inviteToken, ref }) },
       token
     );
     if (inviteToken) clearInviteToken();
+    if (ref) clearReferralCode();
     return profile;
   },
 
@@ -238,7 +249,12 @@ export const api = {
 
   async createBooking(
     token: string,
-    input: { consultantId: string; scheduledAt: string; note?: string }
+    input: {
+      consultantId: string;
+      scheduledAt: string;
+      note?: string;
+      useFreePoints?: boolean;
+    }
   ) {
     return request<Booking>(
       "/bookings",
@@ -255,10 +271,23 @@ export const api = {
     );
   },
 
-  async acceptBooking(token: string, bookingId: string) {
+  async acceptBooking(token: string, bookingId: string, meetingLink?: string) {
     return request<Booking>(
       `/bookings/${encodeURIComponent(bookingId)}/status`,
-      { method: "PATCH", body: JSON.stringify({ status: "confirmed" }) },
+      {
+        method: "PATCH",
+        body: JSON.stringify(
+          meetingLink ? { status: "confirmed", meetingLink } : { status: "confirmed" }
+        )
+      },
+      token
+    );
+  },
+
+  async setBookingMeetingLink(token: string, bookingId: string, meetingLink: string) {
+    return request<Booking>(
+      `/bookings/${encodeURIComponent(bookingId)}/meeting-link`,
+      { method: "PUT", body: JSON.stringify({ meetingLink }) },
       token
     );
   },
@@ -521,6 +550,19 @@ export const api = {
     return request<{ userId: string; restricted: boolean; restrictedAt?: string }>(
       `/admin/users/${encodeURIComponent(userId)}/restrict`,
       { method: "PUT", body: JSON.stringify({ restricted }) },
+      token
+    );
+  },
+
+  async adminListBookings(token: string) {
+    const payload = await request<{ items: AdminBooking[] }>("/admin/bookings", undefined, token);
+    return payload.items || [];
+  },
+
+  async adminMarkBookingPaid(token: string, bookingId: string) {
+    return request<{ bookingId: string; paymentStatus: string; paidAt: string }>(
+      `/admin/bookings/${encodeURIComponent(bookingId)}/paid`,
+      { method: "PUT", body: JSON.stringify({}) },
       token
     );
   },

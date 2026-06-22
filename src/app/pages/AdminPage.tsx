@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import type {
+  AdminBooking,
   AdminConsultantSummary,
   AdminInvite,
   AdminMetrics,
@@ -82,6 +83,8 @@ export default function AdminPage() {
   const [invites, setInvites] = useState<AdminInvite[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [adminBookings, setAdminBookings] = useState<AdminBooking[]>([]);
+  const [paidActionId, setPaidActionId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     if (!token) return;
@@ -111,6 +114,15 @@ export default function AdminPage() {
     }
   }, [token]);
 
+  const loadAdminBookings = useCallback(async () => {
+    if (!token) return;
+    try {
+      setAdminBookings(await api.adminListBookings(token));
+    } catch {
+      // Bookings list is non-critical for the moderation list.
+    }
+  }, [token]);
+
   useEffect(() => {
     if (!isAdmin || !token) return;
     let active = true;
@@ -123,10 +135,11 @@ export default function AdminPage() {
         // Metrics are non-critical; the moderation list still works without them.
       });
     void loadInvites();
+    void loadAdminBookings();
     return () => {
       active = false;
     };
-  }, [isAdmin, token, loadInvites]);
+  }, [isAdmin, token, loadInvites, loadAdminBookings]);
 
   const counts = useMemo(() => {
     return {
@@ -329,6 +342,28 @@ export default function AdminPage() {
       setAdminMessageBusy(false);
     }
   }
+
+  async function markBookingPaid(booking: AdminBooking) {
+    if (!token || paidActionId) return;
+    setPaidActionId(booking.bookingId);
+    setError("");
+    setSuccessMessage("");
+    try {
+      await api.adminMarkBookingPaid(token, booking.bookingId);
+      await loadAdminBookings();
+      setSuccessMessage(
+        `Резервацията на ${booking.clientName || booking.clientEmail || "потребител"} е маркирана като платена.`
+      );
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Неуспешно маркиране като платена.");
+    } finally {
+      setPaidActionId(null);
+    }
+  }
+
+  const awaitingPayment = adminBookings.filter(
+    (b) => b.status === "confirmed" && b.paymentStatus === "unpaid"
+  );
 
   const filterChips: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "Всички", count: counts.all },
@@ -602,6 +637,42 @@ export default function AdminPage() {
               </ul>
             ) : (
               <p className="form-note">Все още няма изпратени покани.</p>
+            )}
+          </article>
+
+          <article className="panel admin-invite-panel">
+            <div className="dashboard-form-head">
+              <p className="eyebrow">Плащания</p>
+              <h2>Чакащи плащане</h2>
+            </div>
+            <p className="form-note">
+              До интеграцията на Stripe можеш ръчно да маркираш платена резервация —
+              това отключва линка за срещата за потребителя.
+            </p>
+            {awaitingPayment.length ? (
+              <ul className="admin-invite-list">
+                {awaitingPayment.map((booking) => (
+                  <li key={booking.bookingId}>
+                    <span className="admin-invite-list__email">
+                      {booking.clientName || booking.clientEmail || "Потребител"} →{" "}
+                      {booking.consultantName}
+                      {booking.hasMeetingLink ? " · линк готов" : " · без линк"}
+                    </span>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={paidActionId === booking.bookingId}
+                      onClick={() => markBookingPaid(booking)}
+                    >
+                      {paidActionId === booking.bookingId
+                        ? "Записваме..."
+                        : "Маркирай като платена"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="form-note">Няма потвърдени резервации, чакащи плащане.</p>
             )}
           </article>
 

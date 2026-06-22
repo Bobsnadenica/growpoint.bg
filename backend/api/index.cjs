@@ -263,6 +263,237 @@ async function getUserBySub(userId) {
   return result.Item || null;
 }
 
+// --- Points / rewards (clients only) ----------------------------------------
+// Users earn points for engagement and spend 100 for a free consultation.
+const POINTS = Object.freeze({
+  profileComplete: 20,
+  referral: 30,
+  sessionConfirmed: 10,
+  review: 10,
+  freeConsultation: 100
+});
+const POINTS_HISTORY_KEEP = 50;
+const REFERRAL_PREFIX = "referral#";
+
+function generateReferralCode() {
+  return randomUUID().replace(/-/g, "").slice(0, 8);
+}
+
+function pointsHistoryEntry(amount, type, reason) {
+  return {
+    id: `p-${randomUUID()}`,
+    type,
+    points: amount,
+    reason: String(reason || "").slice(0, 160),
+    createdAt: new Date().toISOString()
+  };
+}
+
+// Atomically add (or subtract) points and append a capped history entry.
+async function addPointsEntry(userId, amount, type, reason) {
+  if (!userId || !Number.isFinite(amount) || amount === 0) return;
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: env.usersTable,
+        Key: { userId },
+        UpdateExpression:
+          "SET points = if_not_exists(points, :zero) + :amt, " +
+          "pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
+        ExpressionAttributeValues: {
+          ":zero": 0,
+          ":amt": amount,
+          ":empty": [],
+          ":entry": [pointsHistoryEntry(amount, type, reason)]
+        }
+      })
+    );
+  } catch (error) {
+    console.error("[points] add failed", { userId, type, error: error?.message || error });
+  }
+}
+
+// Award `amount` once, guarded by a boolean flag on the user record. Returns
+// true only on the first award (so callers can chain referral payouts etc.).
+async function awardOnceUser(userId, flagAttr, amount, type, reason) {
+  if (!userId) return false;
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: env.usersTable,
+        Key: { userId },
+        UpdateExpression:
+          "SET points = if_not_exists(points, :zero) + :amt, #flag = :true, " +
+          "pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
+        ConditionExpression: "attribute_not_exists(#flag) OR #flag <> :true",
+        ExpressionAttributeNames: { "#flag": flagAttr },
+        ExpressionAttributeValues: {
+          ":zero": 0,
+          ":amt": amount,
+          ":true": true,
+          ":empty": [],
+          ":entry": [pointsHistoryEntry(amount, type, reason)]
+        }
+      })
+    );
+    return true;
+  } catch (error) {
+    if (error.name === "ConditionalCheckFailedException") return false;
+    console.error("[points] awardOnce failed", { userId, flagAttr, error: error?.message || error });
+    return false;
+  }
+}
+
+// Spend points with a balance guard (no negative balances under races).
+async function spendPoints(userId, amount, type, reason) {
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: env.usersTable,
+        Key: { userId },
+        UpdateExpression:
+          "SET points = points - :amt, " +
+          "pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
+        ConditionExpression: "points >= :amt",
+        ExpressionAttributeValues: {
+          ":amt": amount,
+          ":empty": [],
+          ":entry": [pointsHistoryEntry(-amount, type, reason)]
+        }
+      })
+    );
+    return true;
+  } catch (error) {
+    if (error.name === "ConditionalCheckFailedException") return false;
+    throw error;
+  }
+}
+
+// Set a boolean flag on a booking only if unset; true on first set. Used to make
+// per-booking point awards (and refunds) idempotent.
+async function setBookingFlagOnce(bookingId, flagAttr) {
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: env.bookingsTable,
+        Key: { bookingId },
+        UpdateExpression: "SET #flag = :true",
+        ConditionExpression: "attribute_not_exists(#flag)",
+        ExpressionAttributeNames: { "#flag": flagAttr },
+        ExpressionAttributeValues: { ":true": true }
+      })
+    );
+    return true;
+  } catch (error) {
+    if (error.name === "ConditionalCheckFailedException") return false;
+    throw error;
+  }
+}
+
+// Set a boolean flag on a user once (no points). True on first set.
+async function setUserFlagOnce(userId, flagAttr) {
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: env.usersTable,
+        Key: { userId },
+        UpdateExpression: "SET #flag = :true",
+        ConditionExpression: "attribute_not_exists(#flag) OR #flag <> :true",
+        ExpressionAttributeNames: { "#flag": flagAttr },
+        ExpressionAttributeValues: { ":true": true }
+      })
+    );
+    return true;
+  } catch (error) {
+    if (error.name === "ConditionalCheckFailedException") return false;
+    throw error;
+  }
+}
+
+// Client profile completeness (0-100). 100% earns the profile-complete bonus.
+function computeUserProfileCompletion(user) {
+  const has = (value) =>
+    Array.isArray(value)
+      ? value.length > 0
+      : typeof value === "string"
+        ? value.trim().length > 0
+        : value != null && value !== "";
+  const checks = [
+    has(user.name),
+    has(user.avatarUrl) || has(user.avatarStorageKey),
+    has(user.city),
+    has(user.occupation),
+    has(user.bio),
+    has(user.goals)
+  ];
+  const filled = checks.filter(Boolean).length;
+  return Math.round((filled / checks.length) * 100);
+}
+
+// Validate + normalize a consultant-provided meeting link (https/http only).
+function normalizeMeetingLink(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    return raw.slice(0, 2000);
+  } catch {
+    return "";
+  }
+}
+
+// The meeting link is released to the client only once the booking is paid for
+// (Stripe later), redeemed with points ("free"), or an admin marks it paid.
+function isBookingPaid(booking) {
+  return booking?.paymentStatus === "free" || booking?.paymentStatus === "paid";
+}
+
+// Refund the 100 points spent on a free consultation if the booking is
+// declined/cancelled before it happens. Idempotent (pointsRefunded flag).
+async function refundFreePointsIfNeeded(booking) {
+  if (!booking || booking.freeViaPoints !== true || booking.pointsRefunded === true) {
+    return;
+  }
+  if (await setBookingFlagOnce(booking.bookingId, "pointsRefunded")) {
+    await addPointsEntry(
+      booking.clientId,
+      POINTS.freeConsultation,
+      "refund",
+      "Върнати точки за отменена безплатна консултация"
+    );
+  }
+}
+
+// Resolve a referral code -> owner userId via a mapping row (referral#<code>).
+async function resolveReferralCode(code) {
+  const normalized = String(code || "").trim().toLowerCase();
+  if (!normalized) return null;
+  const row = await getUserBySub(`${REFERRAL_PREFIX}${normalized}`);
+  return row?.refUserId || null;
+}
+
+// Ensure the user has a referral code and an O(1) lookup mapping row. Returns
+// the code. Idempotent.
+async function ensureReferralCode(userId, existingCode) {
+  if (existingCode) return existingCode;
+  const code = generateReferralCode();
+  try {
+    await dynamo.send(
+      new PutCommand({
+        TableName: env.usersTable,
+        Item: { userId: `${REFERRAL_PREFIX}${code}`, recordType: "referral", refUserId: userId },
+        ConditionExpression: "attribute_not_exists(userId)"
+      })
+    );
+  } catch (error) {
+    if (error.name !== "ConditionalCheckFailedException") {
+      console.error("[referral] mapping write failed", error?.message || error);
+    }
+  }
+  return code;
+}
+
 async function getConsultantBySlug(slug) {
   const normalizedSlug = normalizeSlug(decodePathSegment(slug), String(slug || ""));
   const result = await dynamo.send(
@@ -2060,6 +2291,16 @@ async function bootstrapUser(event) {
     typeof body.consultantProfileType === "undefined"
       ? null
       : normalizeConsultantProfileType(body.consultantProfileType, "consultant");
+
+  // Points / referral state. Bootstrap rewrites the whole user record (PutCommand
+  // below), so every persistent field must be carried over or points reset to 0.
+  const referralCode = await ensureReferralCode(claims.sub, existing?.referralCode);
+  let referredByUserId = existing?.referredByUserId || "";
+  if (!existing && body.ref) {
+    const refOwner = await resolveReferralCode(body.ref);
+    if (refOwner && refOwner !== claims.sub) referredByUserId = refOwner;
+  }
+
   const nextUser = {
     userId: claims.sub,
     email: claims.email || normalizeText(body.email, "", 320),
@@ -2067,6 +2308,14 @@ async function bootstrapUser(event) {
     role: requestedRole,
     compedConsultant,
     restricted: existing?.restricted === true,
+    points: existing?.points ?? 0,
+    pointsHistory: Array.isArray(existing?.pointsHistory)
+      ? existing.pointsHistory.slice(-POINTS_HISTORY_KEEP)
+      : [],
+    referralCode,
+    referredByUserId,
+    awardedProfileComplete: existing?.awardedProfileComplete === true,
+    referralCredited: existing?.referralCredited === true,
     plan: currentPlan,
     avatarUrl: normalizeText(
       body.avatarUrl ?? claims.picture,
@@ -2507,7 +2756,47 @@ async function updateMeProfile(event) {
     console.error("[profile] orphan cleanup failed", error?.message || error);
   }
 
-  return response(200, await decorateUserMedia(nextUser));
+  // Points: first time a client's profile reaches 100% -> 20 pts; and if they
+  // were referred, pay the referrer 30 pts (once).
+  let resultUser = nextUser;
+  if (
+    nextUser.role === "client" &&
+    computeUserProfileCompletion(nextUser) === 100 &&
+    nextUser.awardedProfileComplete !== true
+  ) {
+    const firstAward = await awardOnceUser(
+      claims.sub,
+      "awardedProfileComplete",
+      POINTS.profileComplete,
+      "profile",
+      "Попълнен профил на 100%"
+    );
+    if (firstAward) {
+      resultUser = {
+        ...nextUser,
+        awardedProfileComplete: true,
+        points: (nextUser.points || 0) + POINTS.profileComplete
+      };
+      if (nextUser.referredByUserId && nextUser.referralCredited !== true) {
+        const credited = await setUserFlagOnce(claims.sub, "referralCredited");
+        if (credited) {
+          await addPointsEntry(
+            nextUser.referredByUserId,
+            POINTS.referral,
+            "referral",
+            "Покана: приятел завърши профила си"
+          );
+          await appendUserNotification(nextUser.referredByUserId, {
+            type: "admin_message",
+            title: `Спечели ${POINTS.referral} точки от покана`,
+            body: "Приятел, когото покани, завърши профила си в GrowPoint."
+          });
+        }
+      }
+    }
+  }
+
+  return response(200, await decorateUserMedia(resultUser));
 }
 
 async function getMyConsultant(event) {
@@ -2884,6 +3173,15 @@ async function createBooking(event) {
     });
   }
 
+  // Redeem points for a free consultation (decided at booking time). The points
+  // deduction is part of the booking transaction below, so it's all-or-nothing.
+  const useFreePoints = body.useFreePoints === true;
+  if (useFreePoints && (Number(user.points) || 0) < POINTS.freeConsultation) {
+    return badRequest(
+      `Нямаш достатъчно точки. Безплатна консултация струва ${POINTS.freeConsultation} точки.`
+    );
+  }
+
   const booking = {
     bookingId: `booking-${randomUUID()}`,
     consultantId: consultant.consultantId,
@@ -2894,42 +3192,70 @@ async function createBooking(event) {
     scheduledAt: normalizedScheduledAt,
     sessionLengthMinutes,
     status: "pending",
+    // Payment gate: "free" (redeemed with points) reveals the meeting link once
+    // the consultant adds it; "unpaid" stays gated until Stripe (or admin marks
+    // it paid). The link is only released to the client when free/paid.
+    paymentStatus: useFreePoints ? "free" : "unpaid",
+    freeViaPoints: useFreePoints,
+    meetingLink: "",
     note: String(body.note || "").trim().slice(0, 1200),
     createdAt: new Date().toISOString()
   };
 
+  const bookingTransactItems = [
+    {
+      Update: {
+        TableName: env.consultantsTable,
+        Key: { consultantId: consultant.consultantId },
+        UpdateExpression:
+          "SET bookedSlots = list_append(if_not_exists(bookedSlots, :emptySlots), :slotList)",
+        ConditionExpression:
+          "contains(availability, :scheduledAt) AND (attribute_not_exists(bookedSlots) OR NOT contains(bookedSlots, :scheduledAt))",
+        ExpressionAttributeValues: {
+          ":scheduledAt": normalizedScheduledAt,
+          ":emptySlots": [],
+          ":slotList": [normalizedScheduledAt]
+        }
+      }
+    },
+    {
+      Put: {
+        TableName: env.bookingsTable,
+        Item: booking,
+        ConditionExpression: "attribute_not_exists(bookingId)"
+      }
+    }
+  ];
+
+  if (useFreePoints) {
+    bookingTransactItems.push({
+      Update: {
+        TableName: env.usersTable,
+        Key: { userId: user.userId },
+        UpdateExpression:
+          "SET points = points - :cost, " +
+          "pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
+        ConditionExpression: "points >= :cost",
+        ExpressionAttributeValues: {
+          ":cost": POINTS.freeConsultation,
+          ":empty": [],
+          ":entry": [
+            pointsHistoryEntry(-POINTS.freeConsultation, "redeem", "Безплатна консултация")
+          ]
+        }
+      }
+    });
+  }
+
   try {
-    await dynamo.send(
-      new TransactWriteCommand({
-        TransactItems: [
-          {
-            Update: {
-              TableName: env.consultantsTable,
-              Key: { consultantId: consultant.consultantId },
-              UpdateExpression:
-                "SET bookedSlots = list_append(if_not_exists(bookedSlots, :emptySlots), :slotList)",
-              ConditionExpression:
-                "contains(availability, :scheduledAt) AND (attribute_not_exists(bookedSlots) OR NOT contains(bookedSlots, :scheduledAt))",
-              ExpressionAttributeValues: {
-                ":scheduledAt": normalizedScheduledAt,
-                ":emptySlots": [],
-                ":slotList": [normalizedScheduledAt]
-              }
-            }
-          },
-          {
-            Put: {
-              TableName: env.bookingsTable,
-              Item: booking,
-              ConditionExpression: "attribute_not_exists(bookingId)"
-            }
-          }
-        ]
-      })
-    );
+    await dynamo.send(new TransactWriteCommand({ TransactItems: bookingTransactItems }));
   } catch (error) {
     if (error.name === "TransactionCanceledException") {
-      return badRequest("The selected slot already has an active booking request.");
+      return badRequest(
+        useFreePoints
+          ? "Слотът вече е зает или точките ти не достигат. Опитай отново."
+          : "The selected slot already has an active booking request."
+      );
     }
 
     throw error;
@@ -3120,6 +3446,18 @@ async function confirmBookingSession(event) {
       : "Очаква се потвърждение и от другата страна."
   });
 
+  // Both parties confirmed an attended session -> award the client points (once).
+  if (isBookingSessionConfirmedByBoth(updated)) {
+    if (await setBookingFlagOnce(bookingId, "pointsAwardedSession")) {
+      await addPointsEntry(
+        booking.clientId,
+        POINTS.sessionConfirmed,
+        "session",
+        "Проведена и потвърдена консултация"
+      );
+    }
+  }
+
   return response(200, updated);
 }
 
@@ -3223,7 +3561,7 @@ async function sendBookingMessage(event) {
   });
 }
 
-async function acceptBooking({ claims, bookingId }) {
+async function acceptBooking({ claims, bookingId, meetingLink }) {
   const { booking, consultant } = await loadBookingAndConsultant(bookingId);
 
   if (!booking) return notFound("Booking not found.");
@@ -3238,24 +3576,34 @@ async function acceptBooking({ claims, bookingId }) {
     return badRequest("Only pending bookings can be accepted.");
   }
 
+  const normalizedLink = normalizeMeetingLink(meetingLink);
+  if (typeof meetingLink === "string" && meetingLink.trim() && !normalizedLink) {
+    return badRequest("Линкът за срещата трябва да е валиден https адрес.");
+  }
+
   const now = new Date().toISOString();
 
   await dynamo.send(
     new UpdateCommand({
       TableName: env.bookingsTable,
       Key: { bookingId },
-      UpdateExpression: "SET #s = :confirmed, decidedAt = :now",
+      UpdateExpression:
+        "SET #s = :confirmed, decidedAt = :now" +
+        (normalizedLink ? ", meetingLink = :link" : ""),
       ConditionExpression: "#s = :pending",
       ExpressionAttributeNames: { "#s": "status" },
-      ExpressionAttributeValues: {
-        ":confirmed": "confirmed",
-        ":pending": "pending",
-        ":now": now
-      }
+      ExpressionAttributeValues: normalizedLink
+        ? { ":confirmed": "confirmed", ":pending": "pending", ":now": now, ":link": normalizedLink }
+        : { ":confirmed": "confirmed", ":pending": "pending", ":now": now }
     })
   );
 
-  const updated = { ...booking, status: "confirmed", decidedAt: now };
+  const updated = {
+    ...booking,
+    status: "confirmed",
+    decidedAt: now,
+    ...(normalizedLink ? { meetingLink: normalizedLink } : {})
+  };
 
   try {
     const consultantOwner = await getUserBySub(consultant.ownerUserId);
@@ -3339,6 +3687,8 @@ async function declineBooking({ claims, bookingId, reason }) {
     decidedAt: now,
     ...(trimmedReason ? { declineReason: trimmedReason } : {})
   };
+
+  await refundFreePointsIfNeeded(booking);
 
   try {
     const client = await getUserBySub(booking.clientId);
@@ -3546,7 +3896,7 @@ async function updateBookingStatus(event) {
   }
 
   if (requestedStatus === "confirmed") {
-    return acceptBooking({ claims, bookingId });
+    return acceptBooking({ claims, bookingId, meetingLink: body.meetingLink });
   }
 
   if (requestedStatus === "declined") {
@@ -3628,6 +3978,8 @@ async function updateBookingStatus(event) {
     cancelledAt: new Date().toISOString(),
     cancelledBy
   };
+
+  await refundFreePointsIfNeeded(booking);
 
   try {
     if (cancelledBy === "consultant") {
@@ -3888,6 +4240,10 @@ async function submitReview(event) {
     throw error;
   }
 
+  // The transaction above writes the review exactly once (attribute_not_exists),
+  // so this awards the client review points exactly once.
+  await addPointsEntry(booking.clientId, POINTS.review, "review", "Оставен отзив след консултация");
+
   await appendUserNotification(consultant.ownerUserId, {
     type: "review_received",
     title: `${booking.clientName || "Потребител"} остави отзив`,
@@ -4051,7 +4407,16 @@ async function listBookings(event) {
     })
   );
 
-  return response(200, result.Items || []);
+  // Gate the meeting link: the client only sees it once the booking is paid
+  // (Stripe later), free (redeemed with points), or admin-marked paid.
+  const clientBookings = (result.Items || []).map((booking) => {
+    if (isBookingPaid(booking)) {
+      return { ...booking, meetingLinkLocked: false };
+    }
+    return { ...booking, meetingLink: "", meetingLinkLocked: true };
+  });
+
+  return response(200, clientBookings);
 }
 
 async function scanAllItems(tableName, { maxPages = 100 } = {}) {
@@ -4177,10 +4542,14 @@ async function getAdminMetrics(event) {
     getCognitoUserStats()
   ]);
 
-  // Exclude internal rows (page-view counter, pending invites) from user metrics.
+  // Exclude internal rows (page-view counter, invites, referral maps) from metrics.
   const users = allUsers.filter((u) => {
     const id = String(u.userId || "");
-    return !id.startsWith("system#") && !id.startsWith(INVITE_PREFIX);
+    return (
+      !id.startsWith("system#") &&
+      !id.startsWith(INVITE_PREFIX) &&
+      !id.startsWith(REFERRAL_PREFIX)
+    );
   });
 
   // Dedupe by owner: an owner can have several draft rows, which would inflate
@@ -4825,6 +5194,111 @@ async function adminMessageUser(event) {
   });
 }
 
+// Consultant adds/updates the meeting link on a confirmed booking (e.g. when
+// they approved without one). Released to the client only once paid/free.
+async function setBookingMeetingLink(event) {
+  const claims = requireAuth(event);
+  const bookingId = event.pathParameters?.bookingId;
+  const body = parseBody(event);
+  if (!bookingId) return badRequest("bookingId is required.");
+
+  const link = normalizeMeetingLink(body.meetingLink);
+  if (!link) return badRequest("Линкът за срещата трябва да е валиден https адрес.");
+
+  const { booking, consultant } = await loadBookingAndConsultant(bookingId);
+  if (!booking) return notFound("Booking not found.");
+  if (!consultant) return notFound("Consultant not found.");
+  if (consultant.ownerUserId !== claims.sub) {
+    return forbidden("Only the consultant can set the meeting link.");
+  }
+  if (booking.status !== "confirmed") {
+    return badRequest("Линк може да се добави само към потвърдена резервация.");
+  }
+
+  await dynamo.send(
+    new UpdateCommand({
+      TableName: env.bookingsTable,
+      Key: { bookingId },
+      UpdateExpression: "SET meetingLink = :link",
+      ExpressionAttributeValues: { ":link": link }
+    })
+  );
+
+  await appendUserNotification(booking.clientId, {
+    type: "booking_accepted",
+    title: "Линк за срещата е добавен",
+    body: isBookingPaid(booking)
+      ? "Линкът за онлайн срещата вече е наличен в таблото ти."
+      : "Линкът ще се отвори след плащане на консултацията."
+  });
+
+  return response(200, { ...booking, meetingLink: link });
+}
+
+// Admin manually marks a booking as paid (bridge until Stripe). Releases the
+// meeting link to the client.
+async function adminMarkBookingPaid(event) {
+  const claims = requireAdmin(event);
+  const bookingId = event.pathParameters?.bookingId;
+  if (!bookingId) return badRequest("bookingId is required.");
+
+  const result = await dynamo.send(
+    new GetCommand({ TableName: env.bookingsTable, Key: { bookingId } })
+  );
+  const booking = result.Item;
+  if (!booking) return notFound("Booking not found.");
+
+  const now = new Date().toISOString();
+  await dynamo.send(
+    new UpdateCommand({
+      TableName: env.bookingsTable,
+      Key: { bookingId },
+      UpdateExpression: "SET paymentStatus = :paid, paidAt = :now, paidBy = :by",
+      ExpressionAttributeValues: {
+        ":paid": "paid",
+        ":now": now,
+        ":by": claims.email || claims.sub
+      }
+    })
+  );
+
+  await appendUserNotification(booking.clientId, {
+    type: "booking_accepted",
+    title: "Плащането е потвърдено",
+    body: booking.meetingLink
+      ? "Линкът за онлайн срещата вече е наличен в таблото ти."
+      : "Линкът ще се появи, щом консултантът го добави."
+  });
+
+  return response(
+    200,
+    { bookingId, paymentStatus: "paid", paidAt: now },
+    { "Cache-Control": "no-store" }
+  );
+}
+
+// Admin booking list (for the manual-paid bridge). Returns lightweight rows.
+async function adminListBookings(event) {
+  requireAdmin(event);
+  const bookings = await scanAllItems(env.bookingsTable);
+  const items = bookings
+    .filter((b) => typeof b.bookingId === "string")
+    .map((b) => ({
+      bookingId: b.bookingId,
+      consultantName: b.consultantName || "",
+      clientName: b.clientName || "",
+      clientEmail: b.clientEmail || "",
+      scheduledAt: b.scheduledAt || "",
+      status: b.status || "",
+      paymentStatus: b.paymentStatus || "unpaid",
+      freeViaPoints: b.freeViaPoints === true,
+      hasMeetingLink: Boolean(b.meetingLink),
+      createdAt: b.createdAt || ""
+    }))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return response(200, { items }, { "Cache-Control": "no-store" });
+}
+
 function health() {
   return response(200, { ok: true, service: "growpoint-api" }, {
     "Cache-Control": "no-store"
@@ -4912,8 +5386,21 @@ exports.handler = async (event) => {
       return await downloadBookingIcs(event);
     }
 
+    const bookingMeetingLinkMatch = /^\/bookings\/([^/]+)\/meeting-link$/.exec(path);
+    if (method === "PUT" && bookingMeetingLinkMatch) {
+      event.pathParameters = { ...(event.pathParameters || {}), bookingId: bookingMeetingLinkMatch[1] };
+      return await setBookingMeetingLink(event);
+    }
+
     if (method === "GET" && path === "/admin/metrics") return await getAdminMetrics(event);
     if (method === "GET" && path === "/admin/consultants") return await listConsultantsForAdmin(event);
+    if (method === "GET" && path === "/admin/bookings") return await adminListBookings(event);
+
+    const adminBookingPaidMatch = /^\/admin\/bookings\/([^/]+)\/paid$/.exec(path);
+    if (method === "PUT" && adminBookingPaidMatch) {
+      event.pathParameters = { ...(event.pathParameters || {}), bookingId: adminBookingPaidMatch[1] };
+      return await adminMarkBookingPaid(event);
+    }
 
     if (method === "POST" && path === "/admin/invites") return await createInvite(event);
     if (method === "GET" && path === "/admin/invites") return await listInvites(event);
