@@ -458,39 +458,38 @@ function getProfileCompletion(
   profile: UserProfile,
   consultantProfile: ConsultantProfile | null
 ) {
+  // Clients: use the SAME 6 fields that earn the profile-completion points, so
+  // the sidebar %, the points card, and the backend +20 award stay in lockstep
+  // (see PROFILE_COMPLETION_FIELDS + backend computeUserProfileCompletion).
+  if (profile.role !== "consultant") {
+    const checks = PROFILE_COMPLETION_FIELDS.map((field) => field.done(profile));
+    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  }
+
+  // Consultants don't earn points; their completion is a richer profile-quality
+  // measure across the public-profile fields.
   const baseChecks = [
     Boolean(profile.name.trim()),
     Boolean((profile.city || "").trim()),
     Boolean((profile.occupation || "").trim()),
     Boolean(profile.age),
     Boolean((profile.headline || "").trim()),
-    Boolean((profile.bio || "").trim()),
-    Boolean((profile.experienceSummary || "").trim()),
-    Boolean((profile.experienceHighlights || []).length),
-    Boolean((profile.educationHighlights || []).length),
-    Boolean((profile.skills || []).length),
-    Boolean((profile.interests || []).length),
-    Boolean((profile.keywords || []).length),
-    Boolean((profile.goals || "").trim()),
-    Boolean(profile.cvDocument)
+    Boolean((profile.bio || "").trim())
   ];
 
-  const consultantChecks =
-    profile.role === "consultant"
-      ? [
-          Boolean((consultantProfile?.headline || "").trim()),
-          Boolean((consultantProfile?.bio || "").trim()),
-          Boolean((consultantProfile?.experienceSummary || "").trim()),
-          Boolean((consultantProfile?.experienceHighlights || []).length),
-          Boolean((consultantProfile?.educationHighlights || []).length),
-          Boolean((consultantProfile?.specializations || []).length),
-          Boolean((consultantProfile?.languages || []).length),
-          Boolean((consultantProfile?.idealFor || []).length),
-          Boolean((consultantProfile?.consultationTopics || []).length),
-          Boolean((consultantProfile?.workApproach || "").trim()),
-          Boolean((consultantProfile?.availability || []).length)
-        ]
-      : [];
+  const consultantChecks = [
+    Boolean((consultantProfile?.headline || "").trim()),
+    Boolean((consultantProfile?.bio || "").trim()),
+    Boolean((consultantProfile?.experienceSummary || "").trim()),
+    Boolean((consultantProfile?.experienceHighlights || []).length),
+    Boolean((consultantProfile?.educationHighlights || []).length),
+    Boolean((consultantProfile?.specializations || []).length),
+    Boolean((consultantProfile?.languages || []).length),
+    Boolean((consultantProfile?.idealFor || []).length),
+    Boolean((consultantProfile?.consultationTopics || []).length),
+    Boolean((consultantProfile?.workApproach || "").trim()),
+    Boolean((consultantProfile?.availability || []).length)
+  ];
 
   const checks = [...baseChecks, ...consultantChecks];
   const completed = checks.filter(Boolean).length;

@@ -465,6 +465,43 @@ async function refundFreePointsIfNeeded(booking) {
   }
 }
 
+// Award the one-time profile-completion bonus (+ referral payout) the first time
+// a client reaches 100%. Called on profile SAVE *and* READ, so accounts that were
+// already complete before the points feature get credited on their next load.
+// Returns the points delta added to this user (0 or POINTS.profileComplete).
+async function awardProfileCompletionIfEligible(userId, user) {
+  if (!user || user.role !== "client") return 0;
+  if (user.awardedProfileComplete === true) return 0;
+  if (computeUserProfileCompletion(user) !== 100) return 0;
+
+  const first = await awardOnceUser(
+    userId,
+    "awardedProfileComplete",
+    POINTS.profileComplete,
+    "profile",
+    "Попълнен профил на 100%"
+  );
+  if (!first) return 0;
+
+  if (user.referredByUserId && user.referralCredited !== true) {
+    const credited = await setUserFlagOnce(userId, "referralCredited");
+    if (credited) {
+      await addPointsEntry(
+        user.referredByUserId,
+        POINTS.referral,
+        "referral",
+        "Покана: приятел завърши профила си"
+      );
+      await appendUserNotification(user.referredByUserId, {
+        type: "admin_message",
+        title: `Спечели ${POINTS.referral} точки от покана`,
+        body: "Приятел, когото покани, завърши профила си в GrowPoint."
+      });
+    }
+  }
+  return POINTS.profileComplete;
+}
+
 // Resolve a referral code -> owner userId via a mapping row (referral#<code>).
 async function resolveReferralCode(code) {
   const normalized = String(code || "").trim().toLowerCase();
@@ -2660,6 +2697,14 @@ async function getMeProfile(event) {
     }
   }
 
+  // Retroactively credit the profile-completion bonus for accounts that were
+  // already 100% complete before the points feature shipped.
+  const delta = await awardProfileCompletionIfEligible(claims.sub, user);
+  if (delta) {
+    user.points = (user.points || 0) + delta;
+    user.awardedProfileComplete = true;
+  }
+
   return response(200, await decorateUserMedia(user));
 }
 
@@ -2778,44 +2823,16 @@ async function updateMeProfile(event) {
     console.error("[profile] orphan cleanup failed", error?.message || error);
   }
 
-  // Points: first time a client's profile reaches 100% -> 20 pts; and if they
-  // were referred, pay the referrer 30 pts (once).
+  // Points: first time a client's profile reaches 100% -> +20 (and pay the
+  // referrer +30, once). Shared with getMeProfile so it's awarded consistently.
   let resultUser = nextUser;
-  if (
-    nextUser.role === "client" &&
-    computeUserProfileCompletion(nextUser) === 100 &&
-    nextUser.awardedProfileComplete !== true
-  ) {
-    const firstAward = await awardOnceUser(
-      claims.sub,
-      "awardedProfileComplete",
-      POINTS.profileComplete,
-      "profile",
-      "Попълнен профил на 100%"
-    );
-    if (firstAward) {
-      resultUser = {
-        ...nextUser,
-        awardedProfileComplete: true,
-        points: (nextUser.points || 0) + POINTS.profileComplete
-      };
-      if (nextUser.referredByUserId && nextUser.referralCredited !== true) {
-        const credited = await setUserFlagOnce(claims.sub, "referralCredited");
-        if (credited) {
-          await addPointsEntry(
-            nextUser.referredByUserId,
-            POINTS.referral,
-            "referral",
-            "Покана: приятел завърши профила си"
-          );
-          await appendUserNotification(nextUser.referredByUserId, {
-            type: "admin_message",
-            title: `Спечели ${POINTS.referral} точки от покана`,
-            body: "Приятел, когото покани, завърши профила си в GrowPoint."
-          });
-        }
-      }
-    }
+  const delta = await awardProfileCompletionIfEligible(claims.sub, nextUser);
+  if (delta) {
+    resultUser = {
+      ...nextUser,
+      awardedProfileComplete: true,
+      points: (nextUser.points || 0) + delta
+    };
   }
 
   return response(200, await decorateUserMedia(resultUser));
