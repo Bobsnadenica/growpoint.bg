@@ -1,6 +1,6 @@
 GrowPoint — QA & change log
 ===========================
-Last updated: 2026-06-14. Public file — no secrets here.
+Last updated: 2026-06-23. Public file — no secrets here.
 Deep docs: README.md · agent/dev notes: CLAUDE.md · upcoming work: plan.txt
 
 Targets
@@ -15,8 +15,9 @@ How to test (gates — all must pass before shipping)
   npm run smoke:prod             # 14 read-only production checks -> expect 14/14
   terraform -chdir=infra/terraform validate   # for infra changes (review `plan` before apply)
 
-Verified working (as of 2026-06-14)
-  - Build + secret scan + tsc + backend syntax: PASS. smoke:prod 14/14.
+Verified working (as of 2026-06-23)
+  - Build + tsc + backend syntax: PASS. smoke:prod:live 29/29
+    (run lvtk9zj8a9l) with disposable cleanup verified.
   - Security: no XSS sinks; all /me, /bookings, /admin endpoints reject anonymous (401);
     auth via Cognito JWT authorizer; IAM scoped to the 3 tables + CV bucket + SES +
     read-only/enable-disable Cognito; secrets only in gitignored tfvars.
@@ -42,6 +43,15 @@ Open items (details + ready-to-run prompts in plan.txt)
   P2  Delete old careerdoc-dev-* tables/buckets once the rename is confirmed stable.
 
 Change history (newest first)
+  2026-06-23  Referral links hardened + live-tested. Existing referral codes now
+              always repair/create their referral#CODE lookup row; code collisions
+              retry instead of returning an unusable link. Live smoke creates a
+              referrer + referred client, bootstraps the referred user with
+              ?ref=CODE, completes the referred profile, verifies +30 points for
+              the referrer and +20 for the referred profile, repeats the save to
+              prove idempotency, then cleans up Cognito/DynamoDB/S3 data. Run
+              lvtk9zj8a9l passed 29/29; follow-up cleanup audit found 0 leftover
+              smoke users, consultants, bookings, or Cognito accounts.
   2026-06-22  Points/rewards (clients only) + booking pay-gate. Earn: profile 100%
               =20, referral (friend completes profile) =30, attended+confirmed
               consultation =10, review =10. Spend: 100 points = 1 free consultation

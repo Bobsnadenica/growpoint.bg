@@ -14,6 +14,7 @@ const state = {
   checks: [],
   runId: Math.random().toString(36).slice(2, 14),
   client: null,
+  referredClient: null,
   consultant: null,
   consultantId: "",
   bookingId: "",
@@ -350,6 +351,7 @@ async function scanDynamo(config, tableName, filterExpression, values, projectio
 async function cleanup(config) {
   const consultantSub = state.consultant?.sub;
   const clientSub = state.client?.sub;
+  const referredClientSub = state.referredClient?.sub;
 
   if (clientSub || state.consultantId) {
     const bookingItems = await scanDynamo(
@@ -384,14 +386,33 @@ async function cleanup(config) {
     }
   }
 
-  if (clientSub) {
-    await deleteDynamoItem(config, config.usersTable, { userId: { S: clientSub } });
-  }
-  if (consultantSub) {
-    await deleteDynamoItem(config, config.usersTable, { userId: { S: consultantSub } });
+  const accountSubs = [clientSub, referredClientSub, consultantSub].filter(Boolean);
+  if (accountSubs.length) {
+    const expressionValues = Object.fromEntries(
+      accountSubs.map((sub, index) => [`:sub${index}`, { S: sub }])
+    );
+    const filterExpression = accountSubs
+      .map((_, index) => `refUserId = :sub${index}`)
+      .join(" OR ");
+    const referralItems = await scanDynamo(
+      config,
+      config.usersTable,
+      filterExpression,
+      expressionValues,
+      "userId"
+    );
+    for (const item of referralItems) {
+      if (item.userId?.S) {
+        await deleteDynamoItem(config, config.usersTable, { userId: { S: item.userId.S } });
+      }
+    }
   }
 
-  for (const account of [state.client, state.consultant].filter(Boolean)) {
+  for (const sub of [clientSub, referredClientSub, consultantSub].filter(Boolean)) {
+    await deleteDynamoItem(config, config.usersTable, { userId: { S: sub } });
+  }
+
+  for (const account of [state.client, state.referredClient, state.consultant].filter(Boolean)) {
     await awsJson([
       "cognito-idp",
       "admin-delete-user",
@@ -459,8 +480,10 @@ async function liveMutationChecks(config) {
 
   const password = `Aa1GrowPoint${state.runId}`;
   const clientEmail = `codex-${state.runId}-client@growpoint.bg`;
+  const referredClientEmail = `codex-${state.runId}-referred@growpoint.bg`;
   const consultantEmail = `codex-${state.runId}-consultant@growpoint.bg`;
   const clientName = `Codex QA Client ${state.runId}`;
+  const referredClientName = `Codex QA Referred ${state.runId}`;
   const consultantName = `Codex QA Mentor ${state.runId}`;
   const slug = `codex-qa-${state.runId}`;
   const futureSlot = futureIso(14, 0);
@@ -500,27 +523,38 @@ async function liveMutationChecks(config) {
 
   await check("Live signup + resend confirmation + admin confirm", async () => {
     const clientSub = await signUpUser(config, clientEmail, password, clientName);
+    const referredClientSub = await signUpUser(
+      config,
+      referredClientEmail,
+      password,
+      referredClientName
+    );
     const consultantSub = await signUpUser(config, consultantEmail, password, consultantName);
     state.client = { email: clientEmail, sub: clientSub };
+    state.referredClient = { email: referredClientEmail, sub: referredClientSub };
     state.consultant = { email: consultantEmail, sub: consultantSub };
-    return "2 disposable users";
+    return "3 disposable users";
   });
 
   let clientToken = "";
+  let referredClientToken = "";
   let consultantToken = "";
 
   await check("Live login for disposable users", async () => {
     const clientLogin = await login(config, clientEmail, password);
+    const referredClientLogin = await login(config, referredClientEmail, password);
     const consultantLogin = await login(config, consultantEmail, password);
     state.client.sub = clientLogin.claims.sub;
+    state.referredClient.sub = referredClientLogin.claims.sub;
     state.consultant.sub = consultantLogin.claims.sub;
     clientToken = clientLogin.token;
+    referredClientToken = referredClientLogin.token;
     consultantToken = consultantLogin.token;
-    return "client + consultant tokens";
+    return "client + referred client + consultant tokens";
   });
 
   await check("Live bootstrap client and consultant", async () => {
-    await api(config, "/auth/bootstrap", {
+    const clientProfile = await api(config, "/auth/bootstrap", {
       method: "POST",
       body: JSON.stringify({
         email: clientEmail,
@@ -529,6 +563,19 @@ async function liveMutationChecks(config) {
         plan: "free"
       })
     }, clientToken);
+    if (!clientProfile.referralCode) {
+      throw new Error("Bootstrap client did not receive a referral code.");
+    }
+    await api(config, "/auth/bootstrap", {
+      method: "POST",
+      body: JSON.stringify({
+        email: referredClientEmail,
+        name: referredClientName,
+        role: "client",
+        plan: "free",
+        ref: clientProfile.referralCode
+      })
+    }, referredClientToken);
     await api(config, "/auth/bootstrap", {
       method: "POST",
       body: JSON.stringify({
@@ -538,7 +585,85 @@ async function liveMutationChecks(config) {
         plan: "free"
       })
     }, consultantToken);
-    return "profiles created";
+    return "profiles created + referral code captured";
+  });
+
+  await check("Live referral reward is credited once", async () => {
+    const completeProfileInput = {
+      name: referredClientName,
+      avatarUrl: "https://www.growpoint.bg/assets/logo/icon_dark.png",
+      city: "София",
+      occupation: "Product manager",
+      bio: "Disposable referred client profile for GrowPoint production referral smoke testing.",
+      goals: "Complete the profile to verify referral reward points are credited exactly once."
+    };
+
+    const completed = await api(config, "/me/profile", {
+      method: "PUT",
+      body: JSON.stringify(completeProfileInput)
+    }, referredClientToken);
+    if ((completed.points || 0) < 20) {
+      throw new Error("Referred client did not receive profile-completion points.");
+    }
+
+    const referrer = await api(config, "/me/profile", {}, clientToken);
+    const referrerPoints = referrer.points || 0;
+    const referralEntries = (referrer.pointsHistory || []).filter(
+      (entry) => entry.type === "referral"
+    );
+    if (referrerPoints < 30 || referralEntries.length !== 1) {
+      throw new Error("Referrer did not receive exactly one referral reward.");
+    }
+
+    await api(config, "/me/profile", {
+      method: "PUT",
+      body: JSON.stringify(completeProfileInput)
+    }, referredClientToken);
+    const referrerAfterRepeat = await api(config, "/me/profile", {}, clientToken);
+    const repeatedReferralEntries = (referrerAfterRepeat.pointsHistory || []).filter(
+      (entry) => entry.type === "referral"
+    );
+    if ((referrerAfterRepeat.points || 0) !== referrerPoints || repeatedReferralEntries.length !== 1) {
+      throw new Error("Referral reward was not idempotent.");
+    }
+
+    return `referrer +${referrerPoints}, referred +${completed.points || 0}`;
+  });
+
+  await check("Live disposable consultant package activation", async () => {
+    const draft = await api(config, "/consultants/me", {}, consultantToken);
+    if (!draft?.consultantId) {
+      throw new Error("Consultant draft was not created during bootstrap.");
+    }
+    state.consultantId = draft.consultantId;
+
+    await awsJson([
+      "dynamodb",
+      "update-item",
+      "--region",
+      config.region,
+      "--table-name",
+      config.consultantsTable,
+      "--key",
+      JSON.stringify({ consultantId: { S: state.consultantId } }),
+      "--update-expression",
+      [
+        "SET packageSource = :source",
+        "packageTier = :tier",
+        "packageStatus = :status",
+        "packageGrantedAt = :now",
+        "updatedAt = :now"
+      ].join(", "),
+      "--expression-attribute-values",
+      JSON.stringify({
+        ":source": { S: "granted" },
+        ":tier": { S: "smoke-test" },
+        ":status": { S: "active" },
+        ":now": { S: new Date().toISOString() }
+      })
+    ]);
+
+    return "packageSource=granted";
   });
 
   await check("Live consultant profile save and public route", async () => {

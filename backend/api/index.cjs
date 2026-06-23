@@ -279,6 +279,10 @@ function generateReferralCode() {
   return randomUUID().replace(/-/g, "").slice(0, 8);
 }
 
+function normalizeReferralCode(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function pointsHistoryEntry(amount, type, reason) {
   return {
     id: `p-${randomUUID()}`,
@@ -504,31 +508,57 @@ async function awardProfileCompletionIfEligible(userId, user) {
 
 // Resolve a referral code -> owner userId via a mapping row (referral#<code>).
 async function resolveReferralCode(code) {
-  const normalized = String(code || "").trim().toLowerCase();
+  const normalized = normalizeReferralCode(code);
   if (!normalized) return null;
   const row = await getUserBySub(`${REFERRAL_PREFIX}${normalized}`);
   return row?.refUserId || null;
 }
 
-// Ensure the user has a referral code and an O(1) lookup mapping row. Returns
-// the code. Idempotent.
-async function ensureReferralCode(userId, existingCode) {
-  if (existingCode) return existingCode;
-  const code = generateReferralCode();
+async function putReferralMapping(userId, code) {
+  const normalized = normalizeReferralCode(code);
+  if (!userId || !normalized) return false;
+
   try {
     await dynamo.send(
       new PutCommand({
         TableName: env.usersTable,
-        Item: { userId: `${REFERRAL_PREFIX}${code}`, recordType: "referral", refUserId: userId },
+        Item: {
+          userId: `${REFERRAL_PREFIX}${normalized}`,
+          recordType: "referral",
+          refUserId: userId
+        },
         ConditionExpression: "attribute_not_exists(userId)"
       })
     );
+    return true;
   } catch (error) {
-    if (error.name !== "ConditionalCheckFailedException") {
-      console.error("[referral] mapping write failed", error?.message || error);
+    if (error.name === "ConditionalCheckFailedException") {
+      const existing = await getUserBySub(`${REFERRAL_PREFIX}${normalized}`);
+      return existing?.refUserId === userId;
+    }
+    console.error("[referral] mapping write failed", error?.message || error);
+    return false;
+  }
+}
+
+// Ensure the user has a referral code and an O(1) lookup mapping row. Returns
+// the code. Idempotent.
+async function ensureReferralCode(userId, existingCode) {
+  const existing = normalizeReferralCode(existingCode);
+  if (existing && await putReferralMapping(userId, existing)) {
+    return existing;
+  }
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = generateReferralCode();
+    if (await putReferralMapping(userId, code)) {
+      return code;
     }
   }
-  return code;
+
+  const fallback = `${generateReferralCode()}${Date.now().toString(36).slice(-4)}`;
+  await putReferralMapping(userId, fallback);
+  return fallback;
 }
 
 async function getConsultantBySlug(slug) {
@@ -2675,26 +2705,25 @@ async function getMeProfile(event) {
     return notFound("Profile not found. Call /auth/bootstrap first.");
   }
 
-  // Backfill a referral code for accounts created before the points feature, so
-  // the "invite a friend" link always resolves.
-  if (!user.referralCode) {
-    const code = await ensureReferralCode(claims.sub, "");
-    user.referralCode = code;
+  // Backfill/repair referral codes for accounts created before the points
+  // feature, including users that have a code but are missing the lookup row.
+  const referralCode = await ensureReferralCode(claims.sub, user.referralCode);
+  if (referralCode && referralCode !== user.referralCode) {
+    user.referralCode = referralCode;
     try {
       await dynamo.send(
         new UpdateCommand({
           TableName: env.usersTable,
           Key: { userId: claims.sub },
           UpdateExpression: "SET referralCode = :code",
-          ConditionExpression: "attribute_not_exists(referralCode)",
-          ExpressionAttributeValues: { ":code": code }
+          ExpressionAttributeValues: { ":code": referralCode }
         })
       );
     } catch (error) {
-      if (error.name !== "ConditionalCheckFailedException") {
-        console.error("[referral] backfill failed", error?.message || error);
-      }
+      console.error("[referral] backfill failed", error?.message || error);
     }
+  } else if (referralCode) {
+    user.referralCode = referralCode;
   }
 
   // Retroactively credit the profile-completion bonus for accounts that were
