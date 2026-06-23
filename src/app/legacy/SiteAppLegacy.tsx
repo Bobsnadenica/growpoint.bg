@@ -2442,7 +2442,8 @@ export function AuthPage() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const resolvedRedirect = resolveAuthRedirectPath(params.get("redirect"));
-  const initialTab = params.get("tab") === "register" ? "register" : "login";
+  const initialTab =
+    params.get("tab") === "register" || params.has("ref") ? "register" : "login";
   const initialRole = params.get("role") === "consultant" ? "consultant" : "client";
   const isSocialOnboarding = params.get("social") === "1";
 
@@ -6477,7 +6478,9 @@ function PointsCard({
   const toFree = Math.max(0, 100 - points);
   const base =
     typeof window !== "undefined" ? window.location.origin : "https://www.growpoint.bg";
-  const referralLink = profile.referralCode ? `${base}/auth?ref=${profile.referralCode}` : "";
+  const referralLink = profile.referralCode
+    ? `${base}/auth?tab=register&ref=${encodeURIComponent(profile.referralCode)}`
+    : "";
   const history = [...(profile.pointsHistory || [])].slice(-6).reverse();
 
   const completion = PROFILE_COMPLETION_FIELDS.map((field) => ({

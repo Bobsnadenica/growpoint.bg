@@ -52,6 +52,9 @@ Change history (newest first)
               prove idempotency, then cleans up Cognito/DynamoDB/S3 data. Run
               lvtk9zj8a9l passed 29/29; follow-up cleanup audit found 0 leftover
               smoke users, consultants, bookings, or Cognito accounts.
+              Follow-up same day: generated invite links use
+              /auth?tab=register&ref=CODE and older /auth?ref=CODE links now
+              also land on the registration tab before signup.
   2026-06-22  Points/rewards (clients only) + booking pay-gate. Earn: profile 100%
               =20, referral (friend completes profile) =30, attended+confirmed
               consultation =10, review =10. Spend: 100 points = 1 free consultation

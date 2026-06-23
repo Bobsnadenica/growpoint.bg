@@ -99,7 +99,7 @@ npm run deploy:cloudfront       # push the built site to the S3/CloudFront test 
 - Old `careerdoc-dev-*` tables/buckets are kept as a rollback backup — delete once the rename is confirmed stable.
 
 ### Recent changes (condensed)
-- **2026-06-23:** referral links hardened and live-tested end to end: `?ref=CODE` signup, referred profile completion, +30 referrer reward, +20 referred profile reward, idempotency, and disposable cleanup all pass in production smoke.
+- **2026-06-23:** referral links hardened and live-tested end to end: invite links now open registration directly (`/auth?tab=register&ref=CODE`), legacy `?ref=CODE` links also select registration, referred profile completion grants +30 to the referrer and +20 to the referred user once, and disposable cleanup passes in production smoke.
 - **2026-06-22:** points/rewards for clients (earn for profile completion, referrals, attended consultations, reviews; 100 points = a free consultation applied at booking) + a booking pay-gate (consultant adds a meeting link on approval; the client sees it only after payment — free-via-points releases it now, otherwise an admin manual "mark paid" bridge until Stripe).
 - **2026-06:** rebrand `careerdoc → growpoint` (zero-downtime data migration); paid-mentor model + email invites + admin restrict/suspend (approval removed); Cognito-authoritative admin monitoring; header switched to the `logo.svg` wordmark (light + dark variants).
 
