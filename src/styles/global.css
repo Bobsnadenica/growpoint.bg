@@ -382,6 +382,76 @@ main {
   margin-top: 3px;
 }
 
+/* Profile-completion checklist. Missing items get an amber glow (a different
+   accent from the green primary) so the user sees what's left for 100%. */
+.profile-completion {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.profile-completion__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-completion__reward {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.profile-completion__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.profile-completion__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+}
+
+.profile-completion__item.is-done span {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.profile-completion__item.is-missing {
+  color: var(--text);
+  background: rgba(245, 158, 11, 0.12);
+  box-shadow: 0 0 0 1.5px rgba(245, 158, 11, 0.5);
+  animation: completionGlow 2.4s ease-in-out infinite;
+}
+
+@keyframes completionGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1.5px rgba(245, 158, 11, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 10px 1px rgba(245, 158, 11, 0.65);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-completion__item.is-missing {
+    animation: none;
+  }
+}
+
 .brand-mark {
   position: relative;
   width: 30px;

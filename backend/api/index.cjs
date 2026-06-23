@@ -2638,6 +2638,28 @@ async function getMeProfile(event) {
     return notFound("Profile not found. Call /auth/bootstrap first.");
   }
 
+  // Backfill a referral code for accounts created before the points feature, so
+  // the "invite a friend" link always resolves.
+  if (!user.referralCode) {
+    const code = await ensureReferralCode(claims.sub, "");
+    user.referralCode = code;
+    try {
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: env.usersTable,
+          Key: { userId: claims.sub },
+          UpdateExpression: "SET referralCode = :code",
+          ConditionExpression: "attribute_not_exists(referralCode)",
+          ExpressionAttributeValues: { ":code": code }
+        })
+      );
+    } catch (error) {
+      if (error.name !== "ConditionalCheckFailedException") {
+        console.error("[referral] backfill failed", error?.message || error);
+      }
+    }
+  }
+
   return response(200, await decorateUserMedia(user));
 }
 

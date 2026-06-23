@@ -4570,7 +4570,12 @@ export function DashboardPage() {
             {error ? <div className="panel panel--error">{error}</div> : null}
           </div>
 
-          {profile.role === "client" ? <PointsCard profile={profile} /> : null}
+          {profile.role === "client" ? (
+            <PointsCard
+              profile={profile}
+              onEditProfile={() => scrollToDashboardSection("profile-basics")}
+            />
+          ) : null}
 
           <Link className="dashboard-ad" to="/contact" aria-label="Рекламно пространство">
             <span className="dashboard-ad__tag">Реклама</span>
@@ -6444,7 +6449,30 @@ function formatRelativeBg(iso: string) {
   return formatDate(iso);
 }
 
-function PointsCard({ profile }: { profile: UserProfile }) {
+const PROFILE_COMPLETION_FIELDS: {
+  key: string;
+  label: string;
+  done: (profile: UserProfile) => boolean;
+}[] = [
+  { key: "name", label: "Име", done: (p) => Boolean((p.name || "").trim()) },
+  {
+    key: "avatar",
+    label: "Профилна снимка",
+    done: (p) => Boolean(p.avatarUrl || p.avatarStorageKey)
+  },
+  { key: "city", label: "Град", done: (p) => Boolean((p.city || "").trim()) },
+  { key: "occupation", label: "Професия / роля", done: (p) => Boolean((p.occupation || "").trim()) },
+  { key: "bio", label: "Кратко представяне", done: (p) => Boolean((p.bio || "").trim()) },
+  { key: "goals", label: "Цели", done: (p) => Boolean((p.goals || "").trim()) }
+];
+
+function PointsCard({
+  profile,
+  onEditProfile
+}: {
+  profile: UserProfile;
+  onEditProfile?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const points = profile.points ?? 0;
   const toFree = Math.max(0, 100 - points);
@@ -6452,6 +6480,15 @@ function PointsCard({ profile }: { profile: UserProfile }) {
     typeof window !== "undefined" ? window.location.origin : "https://www.growpoint.bg";
   const referralLink = profile.referralCode ? `${base}/auth?ref=${profile.referralCode}` : "";
   const history = [...(profile.pointsHistory || [])].slice(-6).reverse();
+
+  const completion = PROFILE_COMPLETION_FIELDS.map((field) => ({
+    ...field,
+    isDone: field.done(profile)
+  }));
+  const completionPct = Math.round(
+    (completion.filter((field) => field.isDone).length / completion.length) * 100
+  );
+  const profileComplete = completionPct === 100;
 
   const copy = async () => {
     if (!referralLink) return;
@@ -6462,6 +6499,26 @@ function PointsCard({ profile }: { profile: UserProfile }) {
     } catch {
       // Clipboard unavailable — the field is selectable as a fallback.
     }
+  };
+
+  const share = async () => {
+    if (!referralLink) return;
+    const nav = navigator as Navigator & {
+      share?: (data: ShareData) => Promise<void>;
+    };
+    if (typeof nav.share === "function") {
+      try {
+        await nav.share({
+          title: "GrowPoint",
+          text: "Присъедини се към GrowPoint с моята покана:",
+          url: referralLink
+        });
+        return;
+      } catch {
+        return; // user dismissed the share sheet
+      }
+    }
+    void copy();
   };
 
   return (
@@ -6482,10 +6539,49 @@ function PointsCard({ profile }: { profile: UserProfile }) {
           ? "Имаш достатъчно точки за безплатна консултация — избери я при резервация."
           : `Още ${toFree} точки до безплатна консултация.`}
       </p>
+
+      <div className={`profile-completion ${profileComplete ? "is-complete" : ""}`}>
+        <div className="profile-completion__head">
+          <strong>Попълненост на профила: {completionPct}%</strong>
+          {!profileComplete ? (
+            <span className="profile-completion__reward">+20 точки при 100%</span>
+          ) : null}
+        </div>
+        <div
+          className="points-progress"
+          role="img"
+          aria-label={`Профил ${completionPct}% попълнен`}
+        >
+          <span className="points-progress__bar" style={{ width: `${completionPct}%` }} />
+        </div>
+        {profileComplete ? (
+          <p className="form-note">Профилът ти е напълно попълнен. 🎉</p>
+        ) : (
+          <>
+            <p className="form-note">Остава да попълниш:</p>
+            <ul className="profile-completion__list">
+              {completion.map((field) => (
+                <li
+                  key={field.key}
+                  className={`profile-completion__item ${field.isDone ? "is-done" : "is-missing"}`}
+                >
+                  <span aria-hidden="true">{field.isDone ? "✓" : "○"}</span> {field.label}
+                </li>
+              ))}
+            </ul>
+            {onEditProfile ? (
+              <button className="ghost-button" type="button" onClick={onEditProfile}>
+                Допълни профила
+              </button>
+            ) : null}
+          </>
+        )}
+      </div>
+
       {referralLink ? (
         <div className="points-referral">
           <label className="form-note" htmlFor="referral-link">
-            Покани приятел с тази връзка
+            Покани приятел — получаваш 30 точки, когато попълни профила си
           </label>
           <div className="points-referral__row">
             <input
@@ -6497,9 +6593,13 @@ function PointsCard({ profile }: { profile: UserProfile }) {
             <button className="ghost-button" type="button" onClick={copy}>
               {copied ? "Копирано!" : "Копирай"}
             </button>
+            <button className="primary-button" type="button" onClick={share}>
+              Сподели
+            </button>
           </div>
         </div>
       ) : null}
+
       {history.length ? (
         <ul className="points-history">
           {history.map((entry) => (

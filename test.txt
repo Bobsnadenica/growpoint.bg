@@ -54,6 +54,11 @@ Change history (newest first)
               (balance, progress, referral, history). Backend live + verified
               (new endpoints 401 anon); build/tsc/secret-scan PASS; PointsCard
               DOM-verified. Next: Stripe replaces the manual mark-paid.
+              Follow-up same day: referral "invite a friend" link is always shown
+              (getMeProfile backfills referralCode for older accounts) with
+              Copy + Share (Web Share API); PointsCard now shows a profile-
+              completion checklist (the 6 fields) with the missing ones glowing
+              amber + "Допълни профила" link.
   2026-06-14  Logo: header uses logo.svg wordmark (light + dark variants), dropped
               the separate "GrowPoint" text. Docs simplified (README/CLAUDE/test).
   2026-06-14  Paid-mentor model: all tiers paid (no free), email invites -> comped
