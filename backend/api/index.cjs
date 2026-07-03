@@ -185,6 +185,19 @@ function isAdmin(claims) {
   return getClaimGroups(claims).includes(ADMIN_GROUP);
 }
 
+// Restricted (admin-suspended) accounts: Cognito disable blocks NEW logins, but
+// an already-issued JWT stays valid up to ~1h. Enforce the restriction on
+// mutations too — call this wherever the caller's own user/consultant record is
+// already loaded (zero extra reads).
+function assertNotRestricted(record) {
+  if (record?.restricted === true) {
+    throw Object.assign(
+      new Error("Акаунтът е ограничен от администратор. Свържи се с нас за повече информация."),
+      { statusCode: 403 }
+    );
+  }
+}
+
 function requireAdmin(event) {
   const claims = requireAuth(event);
 
@@ -2326,6 +2339,7 @@ async function bootstrapUser(event) {
   const now = new Date().toISOString();
 
   const existing = await getUserBySub(claims.sub);
+  assertNotRestricted(existing);
   const currentPlan = normalizePlanTier(existing?.plan, "free");
   const currentRole = normalizeUserRole(existing?.role, "client");
   // Redeem an admin email invite (?invite=TOKEN) — grants a free, "comped"
@@ -2607,6 +2621,81 @@ async function purgeUserAccount(userId) {
   };
 }
 
+// Keep the seeded example consultants bookable: when one runs low on FUTURE
+// availability, roll its slots forward (same pattern the manual
+// scripts/refresh-example-availability.cjs uses). Runs on the hourly scheduled
+// event; no-op unless a profile is actually stale, and never touches real
+// (non-isExample) consultants. Without this the demo catalog silently goes
+// "Свободните часове се подготвят" and nothing on the site is bookable.
+const EXAMPLE_REFRESH_DAY_OFFSETS = [1, 2, 4, 7, 9, 11, 14];
+const EXAMPLE_REFRESH_FALLBACK_HOURS = [10, 14, 17];
+const EXAMPLE_REFRESH_MIN_FUTURE_SLOTS = 3;
+
+async function refreshExampleAvailability() {
+  const now = Date.now();
+  const consultants = await scanAllItems(env.consultantsTable);
+  let refreshed = 0;
+
+  for (const item of consultants) {
+    if (item.isExample !== true || !isConsultantRecord(item)) continue;
+    const futureCount = (item.availability || []).filter(
+      (slot) => new Date(slot).getTime() > now
+    ).length;
+    if (futureCount >= EXAMPLE_REFRESH_MIN_FUTURE_SLOTS) continue;
+
+    // Preserve each profile's characteristic hours; fall back to a default set.
+    const hours = Array.from(
+      new Set(
+        (item.availability || [])
+          .map((slot) => new Date(slot))
+          .filter((date) => !Number.isNaN(date.getTime()))
+          .map((date) => date.getHours())
+      )
+    ).sort((a, b) => a - b);
+    const useHours = hours.length ? hours : EXAMPLE_REFRESH_FALLBACK_HOURS;
+
+    const availability = [];
+    for (const offset of EXAMPLE_REFRESH_DAY_OFFSETS) {
+      const day = new Date(now);
+      day.setDate(day.getDate() + offset);
+      const weekday = day.getDay();
+      if (weekday === 0 || weekday === 6) continue;
+      for (const hour of useHours) {
+        const slot = new Date(day);
+        slot.setHours(hour, 0, 0, 0);
+        if (slot.getTime() > now) availability.push(slot.toISOString());
+      }
+    }
+    if (!availability.length) continue;
+
+    try {
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: env.consultantsTable,
+          Key: { consultantId: item.consultantId },
+          UpdateExpression: "SET availability = :a, nextAvailable = :n, updatedAt = :now",
+          ConditionExpression: "isExample = :true",
+          ExpressionAttributeValues: {
+            ":a": availability,
+            ":n": availability[0],
+            ":true": true,
+            ":now": new Date().toISOString()
+          }
+        })
+      );
+      refreshed += 1;
+    } catch (error) {
+      console.error("[example-refresh] failed", {
+        consultantId: item.consultantId,
+        error: error?.message || error
+      });
+    }
+  }
+
+  if (refreshed) console.log(`[example-refresh] rolled ${refreshed} profile(s) forward`);
+  return refreshed;
+}
+
 async function processScheduledDeletions() {
   const nowIso = new Date().toISOString();
   const { items } = await scanWithFilter({
@@ -2786,6 +2875,7 @@ async function updateMeProfile(event) {
   if (!current) {
     return notFound("Profile not found.");
   }
+  assertNotRestricted(current);
 
   const nextUser = {
     ...current,
@@ -2889,6 +2979,7 @@ async function updateMyConsultant(event) {
   const claims = requireAuth(event);
   const body = parseBody(event);
   const user = await getUserBySub(claims.sub);
+  assertNotRestricted(user);
 
   if (!user || user.role !== "consultant") {
     return forbidden("Only consultant accounts can manage consultant profiles.");
@@ -3099,6 +3190,7 @@ async function createUploadUrl(event) {
   if (kind === "cv" || kind === "document") {
     const fileSize = Number(body.fileSize) || 0;
     const user = await getUserBySub(claims.sub);
+    assertNotRestricted(user);
     let usedBytes = 0;
     if (user?.cvDocument?.sizeBytes) {
       usedBytes += Number(user.cvDocument.sizeBytes) || 0;
@@ -3167,6 +3259,7 @@ async function createBooking(event) {
   if (!user) {
     return notFound("User profile not found.");
   }
+  assertNotRestricted(user);
 
   if (user.role !== "client") {
     return forbidden("Only users can create consultation bookings.");
@@ -3586,6 +3679,7 @@ async function sendBookingMessage(event) {
   assertConfirmedBookingThread({ booking, participantRole });
 
   const senderUser = await getUserBySub(claims.sub);
+  assertNotRestricted(senderUser);
   const message = {
     id: `message-${randomUUID()}`,
     senderUserId: claims.sub,
@@ -3644,6 +3738,7 @@ async function acceptBooking({ claims, bookingId, meetingLink }) {
   if (consultant.ownerUserId !== claims.sub) {
     return forbidden("Only the consultant can accept this booking.");
   }
+  assertNotRestricted(consultant);
   if (booking.status === "confirmed") {
     return response(200, booking);
   }
@@ -3716,6 +3811,7 @@ async function declineBooking({ claims, bookingId, reason }) {
   if (consultant.ownerUserId !== claims.sub) {
     return forbidden("Only the consultant can decline this booking.");
   }
+  assertNotRestricted(consultant);
   if (booking.status === "declined") {
     return response(200, booking);
   }
@@ -5286,6 +5382,7 @@ async function setBookingMeetingLink(event) {
   if (consultant.ownerUserId !== claims.sub) {
     return forbidden("Only the consultant can set the meeting link.");
   }
+  assertNotRestricted(consultant);
   if (booking.status !== "confirmed") {
     return badRequest("Линк може да се добави само към потвърдена резервация.");
   }
@@ -5389,7 +5486,8 @@ exports.handler = async (event) => {
     ) {
       const deletionSweep = await processScheduledDeletions();
       const reminders = await sendDueReminders();
-      return { deletionSweep, reminders };
+      const exampleRefresh = await refreshExampleAvailability();
+      return { deletionSweep, reminders, exampleRefresh };
     }
 
     if (event.requestContext?.http?.method === "OPTIONS") {

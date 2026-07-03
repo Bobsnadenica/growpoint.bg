@@ -43,6 +43,23 @@ Open items (details + ready-to-run prompts in plan.txt)
   P2  Delete old careerdoc-dev-* tables/buckets once the rename is confirmed stable.
 
 Change history (newest first)
+  2026-07-03  Hardening round after the review: (1) demo availability now
+              AUTO-refreshes in the hourly scheduled Lambda run (only isExample
+              rows, only when future slots < 3) — the dead-booking failure can't
+              recur silently; verified via a manual scheduled-event invoke.
+              (2) `restricted` is now enforced per request at every mutation
+              site where the caller's record is already loaded (bootstrap,
+              profile save, uploads, booking create/accept/decline/messages,
+              meeting-link) — closes the ~1h valid-token window after a suspend.
+              (3) CloudWatch alarms (Lambda Errors + Throttles) -> SNS ->
+              contactus@growpoint.bg (owner must confirm the SNS subscription
+              email once). API throttling confirmed already in place (20 rps).
+              (4) ACM cert drift parked: cert domains emptied in tfvars until
+              the DNS cutover (past certs all FAILED — validation CNAMEs were
+              never added at the DNS host); terraform plan is clean again.
+              (5) Rerun a transiently FAILED GitHub Pages deploy — review fixes
+              confirmed live on www. NOTE: 4 old FAILED ACM certs remain in
+              us-east-1 for the owner to delete (unusable, cosmetic only).
   2026-06-24  Full site review (flow + UI + live). Fixed: (1) /auth?invite= now
               opens the register tab like ?ref (mentor invite emails landed on
               login); (2) points-refund abuse hole — cancelling a free

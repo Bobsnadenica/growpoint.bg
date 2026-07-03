@@ -1181,6 +1181,53 @@ resource "aws_lambda_permission" "api_gateway" {
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }
 
+# --- Basic observability: email the team when the API Lambda errors/throttles.
+# The SNS email subscription must be confirmed once (SNS sends a confirmation
+# link to the address; independent of SES, so it delivers even in SES sandbox).
+resource "aws_sns_topic" "alerts" {
+  name = "${local.name_prefix}-alerts"
+  tags = local.common_tags
+}
+
+resource "aws_sns_topic_subscription" "alerts_email" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = "contactus@growpoint.bg"
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_errors" {
+  alarm_name          = "${local.name_prefix}-api-errors"
+  alarm_description   = "API Lambda reported function errors in the last 5 minutes."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.api.function_name }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  tags                = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_throttles" {
+  alarm_name          = "${local.name_prefix}-api-throttles"
+  alarm_description   = "API Lambda invocations are being throttled."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Throttles"
+  dimensions          = { FunctionName = aws_lambda_function.api.function_name }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  tags                = local.common_tags
+}
+
 resource "aws_cloudwatch_event_rule" "booking_reminders" {
   name                = "${local.name_prefix}-booking-reminders"
   description         = "Hourly trigger to send day-before booking reminder emails."

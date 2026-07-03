@@ -38,12 +38,10 @@ addresses."
 
 P1 — HARDENING & EDGE CASES
 ---------------------------
-3. Enforce `restricted` on every request
-Prompt: "Today, restricting an account disables Cognito login (blocks new logins)
-but an already-issued JWT stays valid ~1h. Add a lightweight check so a restricted
-user is blocked immediately: in backend/api/index.cjs load the user in requireAuth
-(or a requireActiveUser wrapper) and return 403 if user.restricted === true. Keep
-it cheap (one GetItem). Make sure admins can still unrestrict. Add a smoke check."
+3. Enforce `restricted` on every request — DONE 2026-07-03
+(assertNotRestricted at every mutation site where the caller's record is already
+loaded: bootstrap, profile save, uploads, booking create/accept/decline/messages,
+meeting-link. Zero extra reads. Reads remain accessible during the ≤1h token tail.)
 
 4. Invite system edge cases
 Prompt: "Harden the admin invite flow (backend/api/index.cjs createInvite/
@@ -83,10 +81,13 @@ Prompt: "The main JS bundle is ~560KB. Code-split it: lazy-load the admin pages,
 the booking calendar, and the Lottie hero animation with dynamic import(). Confirm
 the gate (npm run build) stays green and the smoke test passes; measure before/after."
 
-10. Observability — error alerts
-Prompt: "Add CloudWatch alarms for Lambda errors/throttles and SES bounce/complaint
-rates, with an SNS email to the team. Make backend errors easier to trace (request
-ids in logs). Keep IAM minimal. Define this in terraform."
+10. Observability — error alerts (PARTIALLY DONE 2026-07-03)
+Done: CloudWatch alarms for Lambda Errors + Throttles -> SNS topic
+growpoint-dev-alerts -> email contactus@growpoint.bg (owner must click the SNS
+confirmation email once). API throttling already existed (20 rps / 50 burst).
+Prompt for the rest: "Add SES bounce/complaint-rate alarms to the existing
+growpoint-dev-alerts SNS topic, and add request ids to backend error logs for
+tracing. Keep IAM minimal. Define in terraform."
 
 11. Branded social preview + logo hardening
 Prompt: "Create a branded og-image for link previews (currently a leftover). Also
