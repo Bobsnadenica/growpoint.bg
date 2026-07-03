@@ -454,11 +454,18 @@ function isBookingPaid(booking) {
 }
 
 // Refund the 100 points spent on a free consultation if the booking is
-// declined/cancelled before it happens. Idempotent (pointsRefunded flag).
+// declined/cancelled BEFORE the session takes place. Idempotent (pointsRefunded
+// flag). A decline always refunds (the session never happened); a cancellation
+// refunds only while the session start is still in the future — otherwise a
+// client could attend a free session and cancel afterwards to reclaim points.
 async function refundFreePointsIfNeeded(booking) {
   if (!booking || booking.freeViaPoints !== true || booking.pointsRefunded === true) {
     return;
   }
+  const sessionStarted =
+    booking.status === "confirmed" &&
+    new Date(booking.scheduledAt || 0).getTime() <= Date.now();
+  if (sessionStarted) return;
   if (await setBookingFlagOnce(booking.bookingId, "pointsRefunded")) {
     await addPointsEntry(
       booking.clientId,

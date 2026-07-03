@@ -2442,8 +2442,12 @@ export function AuthPage() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const resolvedRedirect = resolveAuthRedirectPath(params.get("redirect"));
+  // Referral (?ref) and admin mentor-invite (?invite) links are for people
+  // WITHOUT an account yet — land them straight on registration.
   const initialTab =
-    params.get("tab") === "register" || params.has("ref") ? "register" : "login";
+    params.get("tab") === "register" || params.has("ref") || params.has("invite")
+      ? "register"
+      : "login";
   const initialRole = params.get("role") === "consultant" ? "consultant" : "client";
   const isSocialOnboarding = params.get("social") === "1";
 

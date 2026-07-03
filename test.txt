@@ -43,6 +43,18 @@ Open items (details + ready-to-run prompts in plan.txt)
   P2  Delete old careerdoc-dev-* tables/buckets once the rename is confirmed stable.
 
 Change history (newest first)
+  2026-06-24  Full site review (flow + UI + live). Fixed: (1) /auth?invite= now
+              opens the register tab like ?ref (mentor invite emails landed on
+              login); (2) points-refund abuse hole — cancelling a free
+              (points-paid) booking AFTER the session no longer refunds the 100
+              points (decline/pre-session cancel still refunds); (3) demo
+              consultants' availability had gone fully stale (0 future slots →
+              site had nothing bookable) — refreshed via the example-availability
+              script, calendar verified rendering again. Verified live: referral
+              link lands on Регистрация + code captured; retroactive profile
+              points (+20) confirmed on the QA account; sidebar/card completion
+              now agree; sessions popup + pay-gate states correct; 1280/390 +
+              dark clean; smoke:prod 14/14; CORS temp-QA reverted & re-verified.
   2026-06-23  Referral links hardened + live-tested. Existing referral codes now
               always repair/create their referral#CODE lookup row; code collisions
               retry instead of returning an unusable link. Live smoke creates a
