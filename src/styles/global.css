@@ -1,3 +1,50 @@
+/* Monitoring uses shared tokens, including their dark-theme overrides. */
+.monitor-page { padding-block: 56px 72px; }
+.monitor-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 36px; }
+.monitor-header h1 { font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.12; letter-spacing: -0.045em; margin: 12px 0; }
+.monitor-header p, .monitor-footnote, .monitor-meta { color: var(--muted); }
+.monitor-actions, .monitor-tabs { display: flex; flex-wrap: wrap; gap: 10px; }
+.monitor-tabs { margin: 24px 0; }
+.monitor-login { max-width: 440px; margin: 64px auto; padding: 32px; }
+.monitor-login label { display: grid; gap: 8px; }
+.monitor-login input { width: 100%; }
+.monitor-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 0.8rem; }
+.monitor-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-block: 20px; }
+.monitor-stat { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px; }
+.monitor-stat > span { color: var(--text-soft); font-size: 0.85rem; }
+.monitor-stat > strong { color: var(--text); font-size: 2.5rem; font-variant-numeric: tabular-nums; line-height: 1.35; letter-spacing: -0.04em; margin-top: 12px; }
+.monitor-stat > small { color: var(--muted); line-height: 1.5; margin-top: 6px; }
+.monitor-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-block: 24px; }
+.monitor-columns > .panel { margin: 0; min-width: 0; }
+.monitor-page h2 { font-size: 1.2rem; margin: 0 0 20px; }
+.monitor-list { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 20px; margin: 0; }
+.monitor-list dt { color: var(--text-soft); }
+.monitor-list dd { margin: 0; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.monitor-dl-row { display: contents; }
+.monitor-section-title { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.monitor-section-title > span { color: var(--muted); font-size: 0.8rem; }
+.monitor-bars { display: flex; align-items: flex-end; height: 180px; gap: 5px; padding-top: 20px; border-bottom: 1px solid var(--border); }
+.monitor-bar-slot { flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
+.monitor-bar-slot > span { display: block; width: 100%; background: var(--primary); border-radius: 3px 3px 0 0; }
+.monitor-chart-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.75rem; margin-top: 8px; }
+.monitor-chart summary { cursor: pointer; margin-top: 20px; color: var(--text-soft); }
+.monitor-data-table { max-height: 230px; overflow: auto; margin-top: 12px; }
+.monitor-data-table table { width: 100%; text-align: left; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.monitor-data-table td, .monitor-data-table th { padding: 8px; border-bottom: 1px solid var(--border); }
+.monitor-footnote { font-size: 0.8rem; line-height: 1.7; margin-top: 28px; }
+@media (max-width: 900px) {
+  .monitor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .monitor-columns { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .monitor-page { padding-block: 32px 48px; }
+  .monitor-header { align-items: flex-start; flex-direction: column; }
+  .monitor-stat { padding: 16px; }
+  .monitor-stat > strong { font-size: 2rem; }
+  .monitor-grid { gap: 10px; }
+  .monitor-login { margin-block: 32px; padding: 24px; }
+}
+
 :root {
   --bg: #eef2ef;
   --surface: #ffffff;
@@ -9090,25 +9137,6 @@ textarea {
   }
 }
 
-.example-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.32);
-  width: fit-content;
-}
-
-.profile-stage__example {
-  margin-bottom: 10px;
-}
-
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -10711,12 +10739,6 @@ textarea {
 
 :root[data-theme="dark"] .persona-card__code {
   color: #0f1412;
-}
-
-:root[data-theme="dark"] .example-badge {
-  color: #f7d08a;
-  background: rgba(245, 158, 11, 0.14);
-  border-color: rgba(247, 208, 138, 0.38);
 }
 
 :root[data-theme="dark"] .directory-hero__next,

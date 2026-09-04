@@ -140,7 +140,6 @@ export interface UploadedDocument {
 export interface ConsultantProfile {
   consultantId: string;
   ownerUserId: string;
-  isExample?: boolean;
   profileType?: ConsultantProfileType;
   theme?: ConsultantProfileTheme;
   profileStatus?: ConsultantProfileStatus | "active";

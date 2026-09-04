@@ -147,9 +147,8 @@ function isStablePublicImageUrl(value, allowedHosts = []) {
 }
 
 // Only trust images hosted by GrowPoint itself or our own S3 bucket for SEO /
-// social metadata. Demo/example profiles use external avatar hosts (e.g.
-// randomuser.me) that should never leak into og:image/Twitter cards, and signed
-// S3 URLs are temporary — both fall back to the stable branded default image.
+// social metadata. Signed S3 URLs are temporary, so they fall back to the
+// stable branded default image rather than becoming stale social-card assets.
 function seoImageHosts(seoData) {
   const hosts = new Set(["amazonaws.com"]);
   try {
@@ -211,34 +210,38 @@ async function fetchApprovedConsultantRoutes(seoData) {
   const apiBase = String(env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 
   if (!apiBase) {
-    console.warn("[seo] VITE_API_BASE_URL is not set; using static profile routes only.");
-    return [];
+    throw new Error("VITE_API_BASE_URL is required to generate current public profile routes.");
   }
 
   try {
-    const response = await fetch(`${apiBase}/consultants`, {
-      headers: { Accept: "application/json" }
-    });
-
-    if (!response.ok) {
-      throw new Error(`GET /consultants returned ${response.status}`);
-    }
-
-    const payload = await response.json();
-    const items = Array.isArray(payload) ? payload : payload.items || [];
+    const items = [];
+    const cursors = new Set();
+    let cursor = "";
+    do {
+      const response = await fetch(`${apiBase}/consultants?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, {
+        headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15000)
+      });
+      if (!response.ok) throw new Error(`GET /consultants returned ${response.status}`);
+      const payload = await response.json();
+      if (!Array.isArray(payload) && !Array.isArray(payload.items)) throw new Error("Invalid consultant response");
+      items.push(...(Array.isArray(payload) ? payload : payload.items));
+      cursor = Array.isArray(payload) ? "" : payload.nextCursor || "";
+      if (cursor && cursors.has(cursor)) throw new Error("Repeated consultant cursor");
+      if (cursor) cursors.add(cursor);
+    } while (cursor);
     const routes = items
+      .filter((item) => !item.isExample && !String(item.ownerUserId || "").startsWith("example-owner-"))
       .map((item) => consultantRoute(item, seoData))
       .filter(Boolean);
 
     console.log(`[seo] Added ${routes.length} public consultant routes from API.`);
     return routes;
   } catch (error) {
-    console.warn(
+    throw new Error(
       `[seo] Could not load public consultants for static routes: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
-    return [];
   }
 }
 

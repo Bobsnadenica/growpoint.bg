@@ -178,14 +178,16 @@ async function publicChecks(config) {
     const payload = await api(config, "/consultants");
     const items = Array.isArray(payload) ? payload : payload.items || [];
     if (!items.length) throw new Error("No public consultants returned.");
+    if (items.some((item) => item.isExample || String(item.ownerUserId || "").startsWith("example-owner-"))) throw new Error("Example profiles are still publicly visible.");
     firstConsultantSlug = items[0].slug;
     return `${items.length} profiles`;
   });
 
-  await check("Known Cyrillic consultant profile", async () => {
-    const payload = await api(config, "/consultants/%D0%B4%D0%B8%D0%BC%D0%B8%D1%82%D1%8A%D1%80-%D0%BC%D0%B5%D0%BD%D1%82%D0%BE%D1%80%D1%81%D0%BA%D0%B8");
+  await check("Live consultant profile", async () => {
+    if (!firstConsultantSlug) throw new Error("No active expert available to check.");
+    const payload = await api(config, `/consultants/${encodeURIComponent(firstConsultantSlug)}`);
     if (!payload?.consultantId) throw new Error("Profile payload missing consultantId.");
-    return payload.name || payload.slug;
+    return "active profile returned";
   });
 
   const siteRoutes = [

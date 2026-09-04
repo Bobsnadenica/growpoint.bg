@@ -66,13 +66,9 @@ You can wire one, two, or all three providers — each is independent.
    apple_client_id   = "com.yourcompany.signin"
    apple_team_id     = "ABCDE12345"
    apple_key_id      = "XYZ789ABCD"
-   apple_private_key = <<EOT
-   -----BEGIN PRIVATE KEY-----
-   MIGT...
-   -----END PRIVATE KEY-----
-   EOT
+   apple_private_key = file("/private/path/to/AuthKey.p8")
    ```
-   Apple's private key is multi-line — use HCL heredoc to keep formatting.
+   Keep the downloaded key outside the repository; `file()` preserves its formatting.
 
 ### LinkedIn (OIDC)
 

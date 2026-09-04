@@ -40,7 +40,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
@@ -51,6 +51,12 @@ jobs:
 
       - name: Backend syntax check
         run: node --check backend/api/index.cjs
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend/api
+
+      - name: Backend regression tests
+        run: npm test
 
   terraform:
     name: Terraform validate

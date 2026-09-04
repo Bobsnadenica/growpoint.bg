@@ -3,6 +3,7 @@ variable "project_name" {
   default = "growpoint"
 }
 
+
 variable "environment" {
   type    = string
   default = "dev"

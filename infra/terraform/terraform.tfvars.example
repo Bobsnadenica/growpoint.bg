@@ -59,11 +59,7 @@ frontend_origins = [
 # apple_client_id   = ""
 # apple_team_id     = ""
 # apple_key_id      = ""
-# apple_private_key = <<EOF
-# -----BEGIN PRIVATE KEY-----
-# ...
-# -----END PRIVATE KEY-----
-# EOF
+# apple_private_key = file("/private/path/to/AuthKey.p8")
 #
 # linkedin_client_id     = ""
 # linkedin_client_secret = ""

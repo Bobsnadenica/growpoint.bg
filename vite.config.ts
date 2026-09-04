@@ -16,7 +16,16 @@ export default defineConfig(({ mode }) => {
     base: env.VITE_BASE_PATH || "/",
     build: {
       outDir: path.join(projectDir, "dist"),
-      emptyOutDir: true
+      emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            if (/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom)\//.test(id)) return "react-vendor";
+            return "auth-vendor";
+          }
+        }
+      }
     }
   };
 });

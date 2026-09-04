@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -16,8 +16,6 @@ import type { NotificationItem } from "../../lib/types";
 import NotificationDetailModal from "../components/NotificationDetailModal";
 import AboutPage from "../pages/AboutPage";
 import AccountPage from "../pages/AccountPage";
-import AdminConsultantPreviewPage from "../pages/AdminConsultantPreviewPage";
-import AdminPage from "../pages/AdminPage";
 import AuthPage from "../pages/AuthPage";
 import ConsultantProfilePage from "../pages/ConsultantProfilePage";
 import ContactPage from "../pages/ContactPage";
@@ -33,6 +31,10 @@ import TermsPage from "../pages/TermsPage";
 import NotFoundPage from "../pages/NotFoundPage";
 import ProfilePage from "../pages/ProfilePage";
 import UsersPage from "../pages/UsersPage";
+
+const AdminPage = lazy(() => import("../pages/AdminPage"));
+const AdminConsultantPreviewPage = lazy(() => import("../pages/AdminConsultantPreviewPage"));
+const MonitoringDashboardPage = lazy(() => import("../pages/MonitoringDashboardPage"));
 
 const primaryNavigation = [
   { to: "/", label: "Начало" },
@@ -344,6 +346,7 @@ export default function AppShell() {
 
   useEffect(() => {
     // First-party page-view beacon: count one visit per browser session per day.
+    if (!import.meta.env.PROD || window.location.pathname.startsWith("/admin")) return;
     try {
       const key = `growpoint.visit.${new Date().toISOString().slice(0, 10)}`;
       if (window.sessionStorage.getItem(key)) return;
@@ -884,6 +887,7 @@ export default function AppShell() {
       ) : null}
 
       <main id="main-content" className="page-main">
+        <Suspense fallback={<div className="container panel" role="status">Зареждане…</div>}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/users" element={<UsersPage />} />
@@ -905,6 +909,7 @@ export default function AppShell() {
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/files" element={<FilesPage />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/dashboard" element={<MonitoringDashboardPage />} />
           <Route
             path="/admin/preview/:consultantId"
             element={<AdminConsultantPreviewPage />}
@@ -912,6 +917,7 @@ export default function AppShell() {
           <Route path="/pricing" element={<Navigate to="/users" replace />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </Suspense>
       </main>
 
       <footer className="site-footer">

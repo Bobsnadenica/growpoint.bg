@@ -3,8 +3,6 @@ import {
   type ChangeEvent,
   FormEvent,
   ReactNode,
-  Suspense,
-  lazy,
   useEffect,
   useMemo,
   useRef,
@@ -51,6 +49,7 @@ import {
   normalizeAvailabilitySlots
 } from "./availability";
 import AvailabilityCalendar from "./AvailabilityCalendar";
+import HeroAnimation from "./HeroAnimation";
 import { NOTIFICATION_ICONS, getNotificationCategory } from "../../lib/notifications";
 import { applyConsultantProfileSeo } from "../../lib/seo";
 import {
@@ -73,7 +72,6 @@ import type {
   UserRole
 } from "../../lib/types";
 
-const HeroAnimation = lazy(() => import("./HeroAnimation"));
 const NOTIFICATIONS_MARKED_READ_EVENT = "growpoint:notifications-marked-read";
 
 async function uploadFileToSignedUrl(
@@ -836,17 +834,6 @@ function AvatarMedia({
   );
 }
 
-function ExampleBadge({ className = "" }: { className?: string }) {
-  return (
-    <span
-      className={`example-badge${className ? ` ${className}` : ""}`}
-      title="Този профил е примерен и служи за визуализация."
-    >
-      Пример
-    </span>
-  );
-}
-
 function CoverMedia({
   src,
   name,
@@ -1361,9 +1348,7 @@ export function HomePage() {
           </div>
 
           <aside className="home-hero__visual" aria-hidden="true">
-            <Suspense fallback={<div className="home-hero__visual-skeleton" />}>
-              <HeroAnimation />
-            </Suspense>
+            <HeroAnimation />
           </aside>
         </div>
       </section>
@@ -2033,9 +2018,6 @@ export function ConsultantPage() {
 
               <div className="profile-stage__body">
                 <div>
-                  {consultant.isExample ? (
-                    <ExampleBadge className="profile-stage__example" />
-                  ) : null}
                   <h1>{consultant.name}</h1>
                   <p className="profile-stage__headline">{consultant.headline}</p>
                 </div>
@@ -4856,7 +4838,6 @@ export function DashboardPage() {
                           >
                             {match ? `${match.score}% съвпадение` : "Профил"}
                           </span>
-                          {consultant.isExample ? <ExampleBadge /> : null}
                           <h3>{consultant.name}</h3>
                           <p>{consultant.headline}</p>
                         </div>
@@ -7369,7 +7350,6 @@ function ConsultantCard({
             {formatConsultantTypeLabel(getConsultantProfileType(consultant))}
           </span>
           {consultant.featured ? <span className="status-badge">Подбран</span> : null}
-          {consultant.isExample ? <ExampleBadge /> : null}
           {match ? <span className="plan-pill">{match.score}%</span> : null}
         </div>
 

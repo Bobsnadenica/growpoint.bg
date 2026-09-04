@@ -29,6 +29,10 @@ dist/
 
 # Local .terraform directories
 .terraform/
+.terraform-build/
+*.tfplan
+output/playwright/
+.playwright-cli/
 
 # .tfstate files
 *.tfstate

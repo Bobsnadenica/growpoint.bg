@@ -185,12 +185,20 @@ export const api = {
     const params = new URLSearchParams();
     if (filters.query) params.set("query", filters.query);
     if (filters.city) params.set("city", filters.city);
-    const queryString = params.toString();
-
-    const payload = await request<
-      { items: ConsultantProfile[]; nextCursor?: string | null } | ConsultantProfile[]
-    >(`/consultants${queryString ? `?${queryString}` : ""}`);
-    return Array.isArray(payload) ? payload : payload.items;
+    params.set("limit", "100");
+    const items: ConsultantProfile[] = [];
+    const cursors = new Set<string>();
+    for (;;) {
+      const payload = await request<
+        { items: ConsultantProfile[]; nextCursor?: string | null } | ConsultantProfile[]
+      >(`/consultants?${params}`);
+      items.push(...(Array.isArray(payload) ? payload : payload.items));
+      const next = Array.isArray(payload) ? null : payload.nextCursor;
+      if (!next) return Array.from(new Map(items.map((item) => [item.consultantId, item])).values());
+      if (cursors.has(next)) throw new Error("Каталогът не може да бъде зареден. Опитай отново.");
+      cursors.add(next);
+      params.set("cursor", next);
+    }
   },
 
   async getConsultant(slug: string) {
@@ -538,6 +546,7 @@ export const api = {
       profileType: ConsultantProfileType;
       invitedAt: string;
       expiresAt: string;
+      emailStatus: "accepted" | "failed" | "skipped";
     }>("/admin/invites", { method: "POST", body: JSON.stringify({ email, profileType }) }, token);
   },
 

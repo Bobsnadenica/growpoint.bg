@@ -13,18 +13,11 @@ set -uo pipefail
 fail=0
 err() { printf '::error::%s\n' "$1" >&2; fail=1; }
 
-# Paths intentionally excluded from value scanning:
-#  docs (may quote patterns), example templates, the lockfile, vendored deps,
-#  build output, and the scanner config/script itself.
+# Scan public documentation and deploy assets too. Only exclude the scanner
+# definitions themselves. Untracked, non-ignored files are included before commit.
 EXCLUDES=(
-  ':!*.md'
-  ':!test.txt'
-  ':!*.example'
-  ':!*.sample'
-  ':!package-lock.json'
   ':!backend/api/node_modules'
   ':!dist'
-  ':!assets'
   ':!scripts/check-secrets.sh'
   ':!.gitleaks.toml'
 )
@@ -43,9 +36,10 @@ fi
 
 # 2) Scan tracked text for high-signal secret value patterns.
 PATTERNS='GOCSPX-[A-Za-z0-9_-]{10,}|WPL_AP1\.[A-Za-z0-9]|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----|aws_secret_access_key[[:space:]]*[:=]|xox[baprs]-[0-9A-Za-z-]{10,}'
-hits=$(git grep -nIE "$PATTERNS" -- . "${EXCLUDES[@]}" 2>/dev/null || true)
+PATTERNS="$PATTERNS|scrypt\\\$[a-f0-9]{32}\\\$[a-f0-9]{128}"
+hits=$(git grep --untracked --exclude-standard -lIE "$PATTERNS" -- . "${EXCLUDES[@]}" 2>/dev/null || true)
 if [ -n "$hits" ]; then
-  err "Possible secret material found in tracked files:"
+  err "Possible secret material found in public files (paths only; values withheld):"
   printf '%s\n' "$hits" >&2
 fi
 

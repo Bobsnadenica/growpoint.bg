@@ -1,4 +1,5 @@
 const { randomUUID } = require("node:crypto");
+const { createMonitoring, monitoringSummary } = require("./monitoring.cjs");
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DeleteCommand,
@@ -17,7 +18,7 @@ const {
   DeleteObjectCommand
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-const { SESv2Client, SendEmailCommand } = require("@aws-sdk/client-sesv2");
+const { SESv2Client, SendEmailCommand, GetAccountCommand } = require("@aws-sdk/client-sesv2");
 const {
   CognitoIdentityProviderClient,
   ListUsersCommand,
@@ -50,6 +51,7 @@ const env = {
 };
 
 let activeRequestOrigin = "";
+const monitoring = createMonitoring({ dynamo, table: env.usersTable });
 
 function headerValue(headers, name) {
   const expected = String(name || "").toLowerCase();
@@ -148,7 +150,9 @@ function parseBody(event) {
   }
 
   try {
-    return JSON.parse(event.body);
+    const value = JSON.parse(event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf8") : event.body);
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid body");
+    return value;
   } catch {
     throw Object.assign(new Error("Request body must be valid JSON."), {
       statusCode: 400
@@ -464,6 +468,12 @@ function normalizeMeetingLink(value) {
 // (Stripe later), redeemed with points ("free"), or an admin marks it paid.
 function isBookingPaid(booking) {
   return booking?.paymentStatus === "free" || booking?.paymentStatus === "paid";
+}
+
+function bookingForViewer(booking, userId) {
+  if (booking.clientId !== userId) return booking;
+  const locked = !isBookingPaid(booking);
+  return { ...booking, meetingLink: locked ? "" : booking.meetingLink, meetingLinkLocked: locked };
 }
 
 // Refund the 100 points spent on a free consultation if the booking is
@@ -958,12 +968,9 @@ function textToEmailHtml(text) {
 }
 
 async function sendEmail({ to, subject, text, html }) {
-  if (!env.sesFromEmail) {
-    console.log("[email] skipped (SES_FROM_EMAIL not set)", { to, subject });
-    return;
-  }
-  if (!to) {
-    return;
+  if (!env.sesFromEmail || !to) {
+    await monitoring.record("emailSkipped");
+    return { status: "skipped" };
   }
   const textBody = appendEmailFooter(text);
   try {
@@ -990,8 +997,12 @@ async function sendEmail({ to, subject, text, html }) {
         }
       })
     );
+    await monitoring.record("emailAccepted");
+    return { status: "accepted" };
   } catch (error) {
-    console.error("[email] send failed", { to, subject, error: error?.message || error });
+    await monitoring.record("emailFailed");
+    console.error("[email] send failed", { error: error.name });
+    return { status: "failed" };
   }
 }
 
@@ -1908,6 +1919,7 @@ function consultantMembershipActive(consultant) {
 
 function isVisibleConsultant(consultant) {
   if (!isConsultantRecord(consultant)) return false;
+  if (consultant.isExample === true || String(consultant.ownerUserId || "").startsWith("example-owner-")) return false;
   if (consultant.isPublic === false) return false;
   if (consultant.restricted === true) return false;
   if (consultant.deletionScheduledAt || consultant.anonymizedAt) return false;
@@ -2017,7 +2029,9 @@ async function scanWithFilter({ tableName, filter, pageSize, startKey }) {
     const result = await dynamo.send(
       new ScanCommand({
         TableName: tableName,
-        Limit: LIST_SCAN_PAGE_LIMIT,
+        // Never read past the number we can return: a page-end cursor would
+        // otherwise silently skip valid rows from the remainder of this batch.
+        Limit: Math.min(LIST_SCAN_PAGE_LIMIT, pageSize - collected.length),
         ExclusiveStartKey: exclusiveStartKey
       })
     );
@@ -2067,7 +2081,7 @@ async function queryConsultantsByStatus({ status, filter, pageSize, startKey }) 
         KeyConditionExpression: "#profileStatus = :status",
         ExpressionAttributeNames: { "#profileStatus": "profileStatus" },
         ExpressionAttributeValues: { ":status": status },
-        Limit: LIST_SCAN_PAGE_LIMIT,
+        Limit: Math.min(LIST_SCAN_PAGE_LIMIT, pageSize - collected.length),
         ExclusiveStartKey: exclusiveStartKey
       })
     );
@@ -2292,7 +2306,13 @@ async function getPublicUser(event) {
 
   const user = await getUserBySub(id);
 
-  if (!user || String(user.userId || "").startsWith("system#")) {
+  if (
+    !user ||
+    String(user.userId || "").startsWith("system#") ||
+    user.restricted === true ||
+    user.deletionScheduledAt ||
+    user.deletionEffectiveAt
+  ) {
     return notFound("Profile not found.");
   }
 
@@ -2390,6 +2410,7 @@ async function bootstrapUser(event) {
   }
 
   const nextUser = {
+    ...existing,
     userId: claims.sub,
     email: claims.email || normalizeText(body.email, "", 320),
     name: normalizeText(body.name || claims.name, existing?.name || "", 120),
@@ -2514,7 +2535,7 @@ async function exportMyData(event) {
     email: claims.email || user?.email || "",
     profile: user || null,
     consultantProfile: consultant || null,
-    bookingsAsClient: clientBookings.Items || [],
+    bookingsAsClient: (clientBookings.Items || []).map((booking) => bookingForViewer(booking, claims.sub)),
     bookingsAsConsultant: consultantBookings.Items || [],
     notes: [
       "Този файл съдържа цялата информация, която GrowPoint съхранява за теб.",
@@ -2619,81 +2640,6 @@ async function purgeUserAccount(userId) {
     anonymizedBookings: (clientBookings.Items || []).length,
     cognitoSubRetained: true
   };
-}
-
-// Keep the seeded example consultants bookable: when one runs low on FUTURE
-// availability, roll its slots forward (same pattern the manual
-// scripts/refresh-example-availability.cjs uses). Runs on the hourly scheduled
-// event; no-op unless a profile is actually stale, and never touches real
-// (non-isExample) consultants. Without this the demo catalog silently goes
-// "Свободните часове се подготвят" and nothing on the site is bookable.
-const EXAMPLE_REFRESH_DAY_OFFSETS = [1, 2, 4, 7, 9, 11, 14];
-const EXAMPLE_REFRESH_FALLBACK_HOURS = [10, 14, 17];
-const EXAMPLE_REFRESH_MIN_FUTURE_SLOTS = 3;
-
-async function refreshExampleAvailability() {
-  const now = Date.now();
-  const consultants = await scanAllItems(env.consultantsTable);
-  let refreshed = 0;
-
-  for (const item of consultants) {
-    if (item.isExample !== true || !isConsultantRecord(item)) continue;
-    const futureCount = (item.availability || []).filter(
-      (slot) => new Date(slot).getTime() > now
-    ).length;
-    if (futureCount >= EXAMPLE_REFRESH_MIN_FUTURE_SLOTS) continue;
-
-    // Preserve each profile's characteristic hours; fall back to a default set.
-    const hours = Array.from(
-      new Set(
-        (item.availability || [])
-          .map((slot) => new Date(slot))
-          .filter((date) => !Number.isNaN(date.getTime()))
-          .map((date) => date.getHours())
-      )
-    ).sort((a, b) => a - b);
-    const useHours = hours.length ? hours : EXAMPLE_REFRESH_FALLBACK_HOURS;
-
-    const availability = [];
-    for (const offset of EXAMPLE_REFRESH_DAY_OFFSETS) {
-      const day = new Date(now);
-      day.setDate(day.getDate() + offset);
-      const weekday = day.getDay();
-      if (weekday === 0 || weekday === 6) continue;
-      for (const hour of useHours) {
-        const slot = new Date(day);
-        slot.setHours(hour, 0, 0, 0);
-        if (slot.getTime() > now) availability.push(slot.toISOString());
-      }
-    }
-    if (!availability.length) continue;
-
-    try {
-      await dynamo.send(
-        new UpdateCommand({
-          TableName: env.consultantsTable,
-          Key: { consultantId: item.consultantId },
-          UpdateExpression: "SET availability = :a, nextAvailable = :n, updatedAt = :now",
-          ConditionExpression: "isExample = :true",
-          ExpressionAttributeValues: {
-            ":a": availability,
-            ":n": availability[0],
-            ":true": true,
-            ":now": new Date().toISOString()
-          }
-        })
-      );
-      refreshed += 1;
-    } catch (error) {
-      console.error("[example-refresh] failed", {
-        consultantId: item.consultantId,
-        error: error?.message || error
-      });
-    }
-  }
-
-  if (refreshed) console.log(`[example-refresh] rolled ${refreshed} profile(s) forward`);
-  return refreshed;
 }
 
 async function processScheduledDeletions() {
@@ -3310,7 +3256,7 @@ async function createBooking(event) {
   const newEnd = newStart + sessionMs;
 
   const hasConflictingBooking = existingBookings.some((item) => {
-    if (item.status === "cancelled") return false;
+    if (item.status === "cancelled" || item.status === "declined") return false;
     const existingStart = new Date(item.scheduledAt).getTime();
     if (Number.isNaN(existingStart)) return false;
     const existingEnd = existingStart + sessionMs;
@@ -3626,7 +3572,7 @@ async function confirmBookingSession(event) {
     }
   }
 
-  return response(200, updated);
+  return response(200, bookingForViewer(updated, claims.sub));
 }
 
 function assertConfirmedBookingThread({ booking, participantRole }) {
@@ -3700,16 +3646,20 @@ async function sendBookingMessage(event) {
     new UpdateCommand({
       TableName: env.bookingsTable,
       Key: { bookingId },
-      UpdateExpression: "SET messages = :messages",
-      ConditionExpression: "#s = :confirmed",
+      UpdateExpression: "SET messages = :messages, messageCount = if_not_exists(messageCount, :previousCount) + :one",
+      ConditionExpression: "#s = :confirmed AND (attribute_not_exists(messages) OR messages = :previous)",
       ExpressionAttributeNames: { "#s": "status" },
       ExpressionAttributeValues: {
         ":messages": nextMessages,
-        ":confirmed": "confirmed"
+        ":confirmed": "confirmed",
+        ":previous": booking.messages || [],
+        ":previousCount": (booking.messages || []).length,
+        ":one": 1
       }
     })
   );
 
+  await monitoring.record("chatSent");
   const otherUserId =
     participantRole === "client" ? consultant.ownerUserId : booking.clientId;
   await appendUserNotification(otherUserId, {
@@ -3722,10 +3672,7 @@ async function sendBookingMessage(event) {
   });
 
   return response(201, {
-    booking: {
-      ...booking,
-      messages: nextMessages
-    },
+    booking: bookingForViewer({ ...booking, messages: nextMessages, messageCount: (Number(booking.messageCount) || (booking.messages || []).length) + 1 }, claims.sub),
     message
   });
 }
@@ -4053,7 +4000,7 @@ async function rescheduleBooking(event) {
         : "")
   });
 
-  return response(200, updated);
+  return response(200, bookingForViewer(updated, claims.sub));
 }
 
 async function updateBookingStatus(event) {
@@ -4105,7 +4052,7 @@ async function updateBookingStatus(event) {
   }
 
   if (booking.status === "cancelled") {
-    return response(200, booking);
+    return response(200, bookingForViewer(booking, claims.sub));
   }
 
   const cancelledBy = isOwnerConsultant ? "consultant" : "client";
@@ -4189,7 +4136,7 @@ async function updateBookingStatus(event) {
     });
   }
 
-  return response(200, updated);
+  return response(200, bookingForViewer(updated, claims.sub));
 }
 
 function formatIcsTimestamp(date) {
@@ -4424,7 +4371,7 @@ async function submitReview(event) {
   });
 
   return response(200, {
-    booking: { ...booking, review },
+    booking: bookingForViewer({ ...booking, review }, claims.sub),
     consultant: {
       consultantId: consultant.consultantId,
       reviewCount: priorCount + 1,
@@ -4580,12 +4527,7 @@ async function listBookings(event) {
 
   // Gate the meeting link: the client only sees it once the booking is paid
   // (Stripe later), free (redeemed with points), or admin-marked paid.
-  const clientBookings = (result.Items || []).map((booking) => {
-    if (isBookingPaid(booking)) {
-      return { ...booking, meetingLinkLocked: false };
-    }
-    return { ...booking, meetingLink: "", meetingLinkLocked: true };
-  });
+  const clientBookings = (result.Items || []).map((booking) => bookingForViewer(booking, claims.sub));
 
   return response(200, clientBookings);
 }
@@ -4606,6 +4548,7 @@ async function scanAllItems(tableName, { maxPages = 100 } = {}) {
     exclusiveStartKey = result.LastEvaluatedKey;
     pages += 1;
   } while (exclusiveStartKey && pages < maxPages);
+  if (exclusiveStartKey) throw Object.assign(new Error("Data scan limit reached; refusing incomplete results."), { statusCode: 503 });
   return items;
 }
 
@@ -4701,6 +4644,10 @@ async function getCognitoUserStats() {
 
 async function getAdminMetrics(event) {
   requireAdmin(event);
+  return response(200, await buildAdminMetrics());
+}
+
+async function buildAdminMetrics() {
 
   const [allUsers, consultantRows, bookings, visitsItem, cognitoStats] = await Promise.all([
     scanAllItems(env.usersTable),
@@ -4719,14 +4666,16 @@ async function getAdminMetrics(event) {
     return (
       !id.startsWith("system#") &&
       !id.startsWith(INVITE_PREFIX) &&
-      !id.startsWith(REFERRAL_PREFIX)
+      !id.startsWith(REFERRAL_PREFIX) &&
+      !id.startsWith("example-owner-") &&
+      u.isExample !== true
     );
   });
 
   // Dedupe by owner: an owner can have several draft rows, which would inflate
   // the "consultants by status" counts. Use the same canonical-pick logic as the
   // admin list so the metrics match what admins actually see.
-  const consultants = dedupeConsultantsByOwner(consultantRows);
+  const consultants = dedupeConsultantsByOwner(consultantRows.filter((c) => c.isExample !== true && !String(c.ownerUserId || "").startsWith("example-owner-")));
 
   // Page views (first-party counter stored as v_<date> on the system#visits row)
   const visitsPerDay = lastNDays(30).map((date) => ({
@@ -4773,7 +4722,7 @@ async function getAdminMetrics(event) {
   let upcomingConfirmed = 0;
   for (const b of bookings) {
     if (bookingsByStatus[b.status] !== undefined) bookingsByStatus[b.status] += 1;
-    if (Array.isArray(b.messages)) totalMessages += b.messages.length;
+    totalMessages += Number(b.messageCount) || (Array.isArray(b.messages) ? b.messages.length : 0);
     const rating = Number(b.review?.rating);
     if (b.review && rating > 0) {
       totalReviews += 1;
@@ -4791,7 +4740,15 @@ async function getAdminMetrics(event) {
     ? Math.round((reviewRatingSum / totalReviews) * 10) / 10
     : 0;
 
-  return response(200, {
+  const emailService = await ses.send(new GetAccountCommand({})).then((account) => ({
+    available: true, productionAccess: account.ProductionAccessEnabled === true,
+    sendingEnabled: account.SendingEnabled === true, sentLast24Hours: account.SendQuota?.SentLast24Hours ?? null,
+    max24HourSend: account.SendQuota?.Max24HourSend ?? null
+  })).catch(() => ({ available: false }));
+
+  return {
+    ...monitoringSummary({ users, consultants, bookings, allUsers, days: lastNDays(30) }),
+    emailService,
     generatedAt: new Date().toISOString(),
     // Authoritative account count from the Cognito user pool (source of truth
     // for registrations). `users` below is the DynamoDB mirror, which only fills
@@ -4829,7 +4786,7 @@ async function getAdminMetrics(event) {
       last7: visitsLast7,
       perDay: visitsPerDay
     }
-  });
+  };
 }
 
 // Public, unauthenticated page-view beacon. Atomically increments a per-day
@@ -5197,8 +5154,7 @@ async function createInvite(event) {
   await dynamo.send(new PutCommand({ TableName: env.usersTable, Item: invite }));
 
   const link = appUrl(`auth?invite=${encodeURIComponent(token)}`);
-  try {
-    await sendEmail({
+  const delivery = await sendEmail({
       to: email,
       subject: "Покана за GrowPoint — създай безплатен експертен профил",
       text:
@@ -5208,14 +5164,12 @@ async function createInvite(event) {
         `Линкът е валиден до ${new Date(expiresAt).toLocaleDateString("bg-BG")}. ` +
         "Ако не очакваш тази покана, просто игнорирай това съобщение."
     });
-  } catch (error) {
-    console.error("[invite] email failed", error?.message || error);
-  }
 
   return response(
     201,
     {
       email: invite.email,
+      emailStatus: delivery.status,
       status: invite.status,
       profileType: invite.profileType,
       invitedAt: invite.invitedAt,
@@ -5345,6 +5299,7 @@ async function adminMessageUser(event) {
     body: message,
     href: "/dashboard"
   });
+  await monitoring.record("adminMessages");
 
   try {
     await sendEmail({
@@ -5486,8 +5441,7 @@ exports.handler = async (event) => {
     ) {
       const deletionSweep = await processScheduledDeletions();
       const reminders = await sendDueReminders();
-      const exampleRefresh = await refreshExampleAvailability();
-      return { deletionSweep, reminders, exampleRefresh };
+      return { deletionSweep, reminders };
     }
 
     if (event.requestContext?.http?.method === "OPTIONS") {
@@ -5496,6 +5450,18 @@ exports.handler = async (event) => {
 
     const method = event.requestContext?.http?.method;
     const path = event.rawPath;
+
+
+    // Suspension must apply to every authenticated mutation, including older
+    // booking/review endpoints. Scheduled deletion must not be reset by bootstrap.
+    const caller = getClaims(event);
+    if (caller?.sub && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+      const account = await getUserBySub(caller.sub);
+      assertNotRestricted(account);
+      if (account?.deletionScheduledAt && !(method === "DELETE" && path === "/me")) {
+        return forbidden("Профилът е насрочен за изтриване.");
+      }
+    }
 
     if (method === "GET" && path === "/health") return await health();
     if (method === "POST" && path === "/metrics/visit") return await recordVisit();
@@ -5616,15 +5582,16 @@ exports.handler = async (event) => {
 
     return notFound("Route not found.");
   } catch (error) {
-    const statusCode = error.statusCode || 500;
+    const statusCode = error.statusCode || (error.name === "ConditionalCheckFailedException" ? 409 : 500);
     if (statusCode >= 500) {
-      console.error(error);
+      await monitoring.record("apiErrors");
+      console.error("[api] request failed", { requestId: event.requestContext?.requestId, error: error.name });
     }
     return response(statusCode, {
       message:
         statusCode >= 500
           ? "Unexpected server error."
-          : error.message || "Unexpected server error."
+          : statusCode === 409 ? "Данните бяха променени. Обнови и опитай отново." : error.message || "Unexpected server error."
     });
   } finally {
     activeRequestOrigin = "";

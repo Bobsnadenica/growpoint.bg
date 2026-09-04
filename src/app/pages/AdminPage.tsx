@@ -233,9 +233,13 @@ export default function AdminPage() {
     setError("");
     setSuccessMessage("");
     try {
-      await api.adminCreateInvite(token, email);
-      setInviteEmail("");
-      setSuccessMessage(`Поканата е изпратена на ${email}.`);
+      const result = await api.adminCreateInvite(token, email);
+      if (result.emailStatus === "accepted") {
+        setInviteEmail("");
+        setSuccessMessage(`Имейлът с поканата е приет за изпращане до ${email}.`);
+      } else {
+        setError("Поканата е създадена, но имейлът не е изпратен. Провери SES настройките и опитай отново.");
+      }
       await loadInvites();
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно изпращане на покана.");
@@ -400,6 +404,7 @@ export default function AdminPage() {
           <div className="page-intro">
             <p className="eyebrow">Админ</p>
             <h1>Управление на профили</h1>
+            <Link className="primary-button" to="/admin/dashboard">Статистика и мониторинг</Link>
             <p className="hero__lede">
               Кани нови експерти, следи активните профили и ограничавай акаунти при
               нужда. Одобрение вече не е необходимо — експертните профили са платени

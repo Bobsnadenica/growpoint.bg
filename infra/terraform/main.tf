@@ -590,6 +590,7 @@ resource "aws_dynamodb_table" "users" {
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "userId"
 
+
   attribute {
     name = "userId"
     type = "S"
@@ -757,7 +758,8 @@ resource "aws_iam_role_policy" "lambda" {
       {
         Effect = "Allow"
         Action = [
-          "ses:SendEmail"
+          "ses:SendEmail",
+          "ses:GetAccount"
         ]
         Resource = "*"
       },
@@ -787,7 +789,7 @@ data "archive_file" "api" {
 resource "aws_lambda_function" "api" {
   function_name                  = "${local.name_prefix}-api"
   role                           = aws_iam_role.lambda.arn
-  runtime                        = "nodejs20.x"
+  runtime                        = "nodejs22.x"
   handler                        = "index.handler"
   filename                       = data.archive_file.api.output_path
   source_code_hash               = data.archive_file.api.output_base64sha256
@@ -855,6 +857,7 @@ resource "aws_apigatewayv2_route" "health" {
   route_key = "GET /health"
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
+
 
 # Public page-view beacon (no JWT authorizer).
 resource "aws_apigatewayv2_route" "metrics_visit" {
@@ -1170,6 +1173,13 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_rate_limit  = var.api_throttle_rate_limit
   }
 
+
+  route_settings {
+    route_key              = aws_apigatewayv2_route.admin_metrics.route_key
+    throttling_burst_limit = 5
+    throttling_rate_limit  = 1
+  }
+
   tags = local.common_tags
 }
 
@@ -1205,6 +1215,25 @@ resource "aws_cloudwatch_metric_alarm" "api_errors" {
   period              = 300
   evaluation_periods  = 1
   threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+  tags                = local.common_tags
+}
+
+# Lambda Errors alone does not catch handled HTTP 500 responses.
+# HTTP APIs use the lowercase metric name "5xx" (not REST API "5XXError").
+resource "aws_cloudwatch_metric_alarm" "http_server_errors" {
+  alarm_name          = "${local.name_prefix}-http-server-errors"
+  alarm_description   = "API Gateway returned server errors, including handled Lambda failures and timeouts."
+  namespace           = "AWS/ApiGateway"
+  metric_name         = "5xx"
+  dimensions          = { ApiId = aws_apigatewayv2_api.http.id }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 3
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
