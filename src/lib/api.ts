@@ -165,8 +165,9 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
     let message = text || "API request failed.";
 
     try {
-      const parsed = JSON.parse(text) as { message?: string };
+      const parsed = JSON.parse(text) as { message?: string; code?: string };
       message = parsed.message || message;
+      if (token && parsed.code === "ACCOUNT_UNAVAILABLE") window.dispatchEvent(new Event("growpoint:session-revoked"));
     } catch {}
 
     throw new Error(message);

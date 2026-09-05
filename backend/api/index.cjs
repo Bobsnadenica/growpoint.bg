@@ -1,5 +1,8 @@
 const { randomUUID } = require("node:crypto");
 const { createMonitoring, monitoringSummary } = require("./monitoring.cjs");
+const { createIdentityChecks } = require("./identity.cjs");
+const { createMetricsCache } = require("./metrics-cache.cjs");
+const { createAccountLifecycle } = require("./account-lifecycle.cjs");
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DeleteCommand,
@@ -14,6 +17,7 @@ const {
 const {
   S3Client,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   DeleteObjectCommand
 } = require("@aws-sdk/client-s3");
@@ -22,6 +26,8 @@ const { SESv2Client, SendEmailCommand, GetAccountCommand } = require("@aws-sdk/c
 const {
   CognitoIdentityProviderClient,
   ListUsersCommand,
+  AdminGetUserCommand,
+  AdminDeleteUserCommand,
   AdminDisableUserCommand,
   AdminEnableUserCommand
 } = require("@aws-sdk/client-cognito-identity-provider");
@@ -52,6 +58,9 @@ const env = {
 
 let activeRequestOrigin = "";
 const monitoring = createMonitoring({ dynamo, table: env.usersTable });
+const identity = createIdentityChecks({ cognito, userPoolId: env.userPoolId });
+const cachedAdminMetrics = createMetricsCache({ dynamo, table: env.usersTable, collect: buildAdminMetrics });
+const lifecycle = createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listConsultantsByOwner, queryAllItems, scanAllItems, refundFreePointsIfNeeded });
 
 function headerValue(headers, name) {
   const expected = String(name || "").toLowerCase();
@@ -251,6 +260,7 @@ async function appendUserNotification(userId, notification) {
         Key: { userId },
         UpdateExpression:
           "SET notifications = list_append(if_not_exists(notifications, :empty), :item)",
+        ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted)",
         ExpressionAttributeValues: {
           ":empty": [],
           ":item": [payload]
@@ -321,6 +331,7 @@ async function addPointsEntry(userId, amount, type, reason) {
         UpdateExpression:
           "SET points = if_not_exists(points, :zero) + :amt, " +
           "pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
+        ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted)",
         ExpressionAttributeValues: {
           ":zero": 0,
           ":amt": amount,
@@ -346,7 +357,7 @@ async function awardOnceUser(userId, flagAttr, amount, type, reason) {
         UpdateExpression:
           "SET points = if_not_exists(points, :zero) + :amt, #flag = :true, " +
           "pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
-        ConditionExpression: "attribute_not_exists(#flag) OR #flag <> :true",
+        ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND (attribute_not_exists(#flag) OR #flag <> :true)",
         ExpressionAttributeNames: { "#flag": flagAttr },
         ExpressionAttributeValues: {
           ":zero": 0,
@@ -419,7 +430,7 @@ async function setUserFlagOnce(userId, flagAttr) {
         TableName: env.usersTable,
         Key: { userId },
         UpdateExpression: "SET #flag = :true",
-        ConditionExpression: "attribute_not_exists(#flag) OR #flag <> :true",
+        ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND (attribute_not_exists(#flag) OR #flag <> :true)",
         ExpressionAttributeNames: { "#flag": flagAttr },
         ExpressionAttributeValues: { ":true": true }
       })
@@ -489,13 +500,25 @@ async function refundFreePointsIfNeeded(booking) {
     booking.status === "confirmed" &&
     new Date(booking.scheduledAt || 0).getTime() <= Date.now();
   if (sessionStarted) return;
-  if (await setBookingFlagOnce(booking.bookingId, "pointsRefunded")) {
-    await addPointsEntry(
-      booking.clientId,
-      POINTS.freeConsultation,
-      "refund",
-      "Върнати точки за отменена безплатна консултация"
-    );
+  try {
+    await dynamo.send(new TransactWriteCommand({ TransactItems: [
+      { Update: {
+        TableName: env.bookingsTable, Key: { bookingId: booking.bookingId },
+        UpdateExpression: "SET pointsRefunded = :yes",
+        ConditionExpression: "attribute_exists(bookingId) AND (attribute_not_exists(pointsRefunded) OR pointsRefunded <> :yes)",
+        ExpressionAttributeValues: { ":yes": true }
+      } },
+      { Update: {
+        TableName: env.usersTable, Key: { userId: booking.clientId },
+        UpdateExpression: "SET points = if_not_exists(points, :zero) + :amount, pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
+        ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted)",
+        ExpressionAttributeValues: { ":zero": 0, ":amount": POINTS.freeConsultation, ":empty": [],
+          ":entry": [pointsHistoryEntry(POINTS.freeConsultation, "refund", "Върнати точки за отменена безплатна консултация")] }
+      } }
+    ] }));
+  } catch (error) {
+    if (error.name === "TransactionCanceledException" && error.CancellationReasons?.some((reason) => reason.Code === "ConditionalCheckFailed")) return;
+    throw error;
   }
 }
 
@@ -775,7 +798,7 @@ async function listConsultantsByOwner(ownerUserId) {
     exclusiveStartKey = result.LastEvaluatedKey;
     pages += 1;
   } while (exclusiveStartKey && pages < 10);
-
+  if (exclusiveStartKey) throw Object.assign(new Error("Owner query limit reached."), { statusCode: 503 });
   return items;
 }
 
@@ -1415,6 +1438,7 @@ async function queryAllItems(input, { maxPages = 50 } = {}) {
     exclusiveStartKey = result.LastEvaluatedKey;
     pages += 1;
   } while (exclusiveStartKey && pages < maxPages);
+  if (exclusiveStartKey) throw Object.assign(new Error("Query limit reached; refusing incomplete results."), { statusCode: 503 });
   return items;
 }
 
@@ -1922,6 +1946,7 @@ function isVisibleConsultant(consultant) {
   if (consultant.isExample === true || String(consultant.ownerUserId || "").startsWith("example-owner-")) return false;
   if (consultant.isPublic === false) return false;
   if (consultant.restricted === true) return false;
+  if (consultant.identityDisabled || consultant.identityDeleted) return false;
   if (consultant.deletionScheduledAt || consultant.anonymizedAt) return false;
   if (!consultantMembershipActive(consultant)) return false;
 
@@ -2237,8 +2262,11 @@ async function listConsultants(event) {
     return String(left.name || "").localeCompare(String(right.name || ""), "bg");
   });
 
+  const activeItems = (await Promise.all(orderedItems.map(async (item) =>
+    (await identity.publicAccountState(item.ownerUserId)).enabled ? item : null
+  ))).filter(Boolean);
   const decoratedItems = await Promise.all(
-    orderedItems.map((item) => decorateConsultantMedia(item))
+    activeItems.map((item) => decorateConsultantMedia(item))
   );
 
   return response(
@@ -2252,7 +2280,7 @@ async function listConsultants(event) {
     // Lambda (lower latency + cost), while consultant profile edits still
     // surface within ~60s. Note: responses include short-lived signed media
     // URLs, so the TTL is intentionally kept under their expiry.
-    { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" }
+    { "Cache-Control": "public, max-age=30, must-revalidate" }
   );
 }
 
@@ -2268,6 +2296,7 @@ async function getConsultant(event) {
   if (!isVisibleConsultant(consultant)) {
     return notFound("Consultant profile not found.");
   }
+  if (!(await identity.publicAccountState(consultant.ownerUserId)).enabled) return notFound("Consultant profile not found.");
 
   const [decorated, recentReviews] = await Promise.all([
     decorateConsultantMedia(consultant),
@@ -2282,7 +2311,7 @@ async function getConsultant(event) {
       // URLs in the payload are valid for 3600s, comfortably longer than the
       // max served age (max-age + stale-while-revalidate), so cached responses
       // never hand out an expired image URL.
-      "Cache-Control": "public, max-age=60, stale-while-revalidate=300"
+      "Cache-Control": "public, max-age=30, must-revalidate"
     }
   );
 }
@@ -2310,11 +2339,13 @@ async function getPublicUser(event) {
     !user ||
     String(user.userId || "").startsWith("system#") ||
     user.restricted === true ||
+    user.identityDisabled ||
     user.deletionScheduledAt ||
     user.deletionEffectiveAt
   ) {
     return notFound("Profile not found.");
   }
+  if (!(await identity.publicAccountState(user.userId)).enabled) return notFound("Profile not found.");
 
   // A missing name must not 404 the page (e.g. social signups that skipped the
   // onboarding step) — fall back to the email local-part so the owner's own
@@ -2412,6 +2443,7 @@ async function bootstrapUser(event) {
   const nextUser = {
     ...existing,
     userId: claims.sub,
+    cognitoUsername: claims["cognito:username"] || claims.username || claims.sub,
     email: claims.email || normalizeText(body.email, "", 320),
     name: normalizeText(body.name || claims.name, existing?.name || "", 120),
     role: requestedRole,
@@ -2558,88 +2590,7 @@ async function exportMyData(event) {
 }
 
 async function purgeUserAccount(userId) {
-  const user = await getUserBySub(userId);
-
-  // Collect all storage keys to scrub from S3.
-  const storageKeysToDelete = new Set();
-  if (user?.avatarStorageKey) storageKeysToDelete.add(user.avatarStorageKey);
-  if (user?.cvDocument?.storageKey) storageKeysToDelete.add(user.cvDocument.storageKey);
-  for (const doc of Array.isArray(user?.documents) ? user.documents : []) {
-    if (doc.storageKey) storageKeysToDelete.add(doc.storageKey);
-  }
-
-  const consultant = await getConsultantByOwner(userId);
-  if (consultant) {
-    if (consultant.avatarStorageKey) storageKeysToDelete.add(consultant.avatarStorageKey);
-    if (consultant.heroStorageKey) storageKeysToDelete.add(consultant.heroStorageKey);
-  }
-
-  // Anonymize bookings the user was the client on (we keep them for the consultant's history).
-  const clientBookings = await dynamo.send(
-    new QueryCommand({
-      TableName: env.bookingsTable,
-      IndexName: "client-index",
-      KeyConditionExpression: "clientId = :id",
-      ExpressionAttributeValues: { ":id": userId }
-    })
-  );
-  await Promise.allSettled(
-    (clientBookings.Items || []).map((booking) =>
-      dynamo.send(
-        new UpdateCommand({
-          TableName: env.bookingsTable,
-          Key: { bookingId: booking.bookingId },
-          UpdateExpression:
-            "SET clientName = :n, clientEmail = :e, anonymizedAt = :now REMOVE note",
-          ExpressionAttributeValues: {
-            ":n": "[Изтрит потребител]",
-            ":e": "",
-            ":now": new Date().toISOString()
-          }
-        })
-      )
-    )
-  );
-
-  // If the user is a consultant, hide their public profile and free remaining slots.
-  if (consultant) {
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: env.consultantsTable,
-        Key: { consultantId: consultant.consultantId },
-        UpdateExpression:
-          "SET isPublic = :false, profileStatus = :rejected, anonymizedAt = :now, " +
-          "#n = :placeholder, bio = :empty, headline = :empty",
-        ExpressionAttributeNames: { "#n": "name" },
-        ExpressionAttributeValues: {
-          ":false": false,
-          ":rejected": "rejected",
-          ":now": new Date().toISOString(),
-          ":placeholder": "[Изтрит профил]",
-          ":empty": ""
-        }
-      })
-    );
-  }
-
-  // Delete the user row outright; profile is gone from this point.
-  await dynamo.send(
-    new DeleteCommand({
-      TableName: env.usersTable,
-      Key: { userId }
-    })
-  );
-
-  // Best-effort S3 scrub. Don't fail the request if some objects can't be deleted.
-  await Promise.allSettled(
-    Array.from(storageKeysToDelete).map((key) => deleteS3Object(key))
-  );
-
-  return {
-    deleted: true,
-    anonymizedBookings: (clientBookings.Items || []).length,
-    cognitoSubRetained: true
-  };
+  return lifecycle.purgeUserAccount(userId);
 }
 
 async function processScheduledDeletions() {
@@ -2727,8 +2678,8 @@ async function deleteMyAccount(event) {
     );
   }
 
-  // We don't delete the Cognito identity here (no IAM permission granted, see infra/terraform/main.tf).
-  // The scheduled purge removes app data and S3 files after the grace window.
+  // The scheduled purge removes Cognito, private app data and S3 files after
+  // the grace window, preserving only anonymized counterpart booking history.
   return response(200, {
     deleted: false,
     deletionScheduledAt,
@@ -3447,7 +3398,7 @@ function normalizeBookingMessages(value) {
     return [];
   }
 
-  return value
+  const messages = value
     .filter((item) => item && typeof item === "object" && item.body)
     .map((item) => ({
       id: String(item.id || `message-${randomUUID()}`),
@@ -3467,6 +3418,10 @@ function normalizeBookingMessages(value) {
         new Date(right.createdAt || 0).getTime()
     )
     .slice(-BOOKING_MESSAGE_KEEP);
+  // DynamoDB items have a 400 KB limit; Bulgarian UTF-8 and emoji can make
+  // 200 messages much larger than 200 * 1200 bytes. Leave room for booking data.
+  while (messages.length && Buffer.byteLength(JSON.stringify(messages), "utf8") > 240000) messages.shift();
+  return messages;
 }
 
 function getBookingSessionConfirmation(booking) {
@@ -4644,7 +4599,7 @@ async function getCognitoUserStats() {
 
 async function getAdminMetrics(event) {
   requireAdmin(event);
-  return response(200, await buildAdminMetrics());
+  return response(200, await cachedAdminMetrics());
 }
 
 async function buildAdminMetrics() {
@@ -4661,7 +4616,7 @@ async function buildAdminMetrics() {
   ]);
 
   // Exclude internal rows (page-view counter, invites, referral maps) from metrics.
-  const users = allUsers.filter((u) => {
+  const userCandidates = allUsers.filter((u) => {
     const id = String(u.userId || "");
     return (
       !id.startsWith("system#") &&
@@ -4671,11 +4626,13 @@ async function buildAdminMetrics() {
       u.isExample !== true
     );
   });
+  const users = env.userPoolId ? (await Promise.all(userCandidates.map(async (u) => (await identity.publicAccountState(u.userId)).exists ? u : null))).filter(Boolean) : userCandidates;
 
   // Dedupe by owner: an owner can have several draft rows, which would inflate
   // the "consultants by status" counts. Use the same canonical-pick logic as the
   // admin list so the metrics match what admins actually see.
-  const consultants = dedupeConsultantsByOwner(consultantRows.filter((c) => c.isExample !== true && !String(c.ownerUserId || "").startsWith("example-owner-")));
+  const activeUserIds = new Set(users.map((u) => u.userId));
+  const consultants = dedupeConsultantsByOwner(consultantRows.filter((c) => c.isExample !== true && !String(c.ownerUserId || "").startsWith("example-owner-") && (!env.userPoolId || activeUserIds.has(c.ownerUserId))));
 
   // Page views (first-party counter stored as v_<date> on the system#visits row)
   const visitsPerDay = lastNDays(30).map((date) => ({
@@ -4820,7 +4777,7 @@ async function listConsultantsForAdmin(event) {
     tableName: env.consultantsTable,
     pageSize,
     startKey,
-    filter: isConsultantRecord
+    filter: (item) => isConsultantRecord(item) && !item.identityDeleted && !item.isExample
   });
   const consultants = dedupeConsultantsByOwner(scannedConsultants);
 
@@ -5299,7 +5256,7 @@ async function adminMessageUser(event) {
     body: message,
     href: "/dashboard"
   });
-  await monitoring.record("adminMessages");
+  if (notification) await monitoring.record("adminMessages");
 
   try {
     await sendEmail({
@@ -5435,13 +5392,15 @@ function health() {
 exports.handler = async (event) => {
   activeRequestOrigin = headerValue(event?.headers, "origin");
   try {
+    if (event.source === "aws.cognito-idp" && event["detail-type"] === "AWS API Call via CloudTrail") return await lifecycle.handleEvent(event);
     if (
       event?.source === "aws.events" ||
       event?.["detail-type"] === "Scheduled Event"
     ) {
       const deletionSweep = await processScheduledDeletions();
       const reminders = await sendDueReminders();
-      return { deletionSweep, reminders };
+      const identitySync = await lifecycle.reconcile();
+      return { deletionSweep, reminders, identitySync };
     }
 
     if (event.requestContext?.http?.method === "OPTIONS") {
@@ -5455,6 +5414,7 @@ exports.handler = async (event) => {
     // Suspension must apply to every authenticated mutation, including older
     // booking/review endpoints. Scheduled deletion must not be reset by bootstrap.
     const caller = getClaims(event);
+    if (caller?.sub) await identity.assertCallerActive(caller, { admin: path.startsWith("/admin/") });
     if (caller?.sub && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
       const account = await getUserBySub(caller.sub);
       assertNotRestricted(account);
@@ -5582,12 +5542,15 @@ exports.handler = async (event) => {
 
     return notFound("Route not found.");
   } catch (error) {
+    // EventBridge/Lambda must see a failure to retry asynchronous cleanup.
+    if (event.source === "aws.cognito-idp" || event.source === "aws.events") throw error;
     const statusCode = error.statusCode || (error.name === "ConditionalCheckFailedException" ? 409 : 500);
     if (statusCode >= 500) {
       await monitoring.record("apiErrors");
       console.error("[api] request failed", { requestId: event.requestContext?.requestId, error: error.name });
     }
     return response(statusCode, {
+      ...(error.code === "ACCOUNT_UNAVAILABLE" ? { code: error.code } : {}),
       message:
         statusCode >= 500
           ? "Unexpected server error."

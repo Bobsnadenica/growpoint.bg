@@ -195,6 +195,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [groups, setGroups] = useState<string[]>([]);
   const [oauthError, setOauthError] = useState("");
 
+  useEffect(() => {
+    const revoked = () => {
+      setUser(null); setToken(""); setGroups([]);
+      setOauthError("Акаунтът вече не е активен. Свържи се с екипа при нужда.");
+      if (isCognitoConfigured) void signOut().catch(() => {});
+    };
+    window.addEventListener("growpoint:session-revoked", revoked);
+    return () => window.removeEventListener("growpoint:session-revoked", revoked);
+  }, []);
+
   async function refreshSignedInSession(userIdFallback: string) {
     const session = await fetchAuthSession();
     const idToken = session.tokens?.idToken?.toString() || "";

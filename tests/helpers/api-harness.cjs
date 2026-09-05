@@ -19,7 +19,7 @@ function loadApi({ send = async () => ({}), environment = {} } = {}) {
       return actual;
     }
   };
-  vm.runInNewContext(readFileSync(filename, "utf8") + "\nexports.test = { scanWithFilter, queryConsultantsByStatus, scanAllItems, buildAdminMetrics, bookingForViewer, parseBody, isVisibleConsultant, sendEmail };", context, { filename });
+  vm.runInNewContext(readFileSync(filename, "utf8") + "\nexports.test = { scanWithFilter, queryConsultantsByStatus, scanAllItems, buildAdminMetrics, bookingForViewer, parseBody, isVisibleConsultant, sendEmail, refundFreePointsIfNeeded };", context, { filename });
   return context.exports;
 }
 module.exports = { loadApi };

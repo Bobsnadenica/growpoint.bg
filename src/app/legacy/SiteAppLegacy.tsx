@@ -18,6 +18,7 @@ import {
   useSearchParams
 } from "react-router-dom";
 import { api } from "../../lib/api";
+import { usePublicRefresh } from "../../lib/use-public-refresh";
 import { NewPasswordRequiredError, useAuth } from "../../lib/auth";
 import {
   clearPendingBootstrap,
@@ -50,6 +51,7 @@ import {
 } from "./availability";
 import AvailabilityCalendar from "./AvailabilityCalendar";
 import HeroAnimation from "./HeroAnimation";
+import PaymentPlaceholder from "../components/PaymentPlaceholder";
 import { NOTIFICATION_ICONS, getNotificationCategory } from "../../lib/notifications";
 import { applyConsultantProfileSeo } from "../../lib/seo";
 import {
@@ -151,7 +153,7 @@ const homeRoleChoices = [
 ] as const;
 
 // Expert visibility packages (Стр. 6 of the designer doc). Payments go through
-// Stripe later (handoff: Цецо) — until then buttons are disabled and admins can
+// DKS integration is pending — until then previews cannot charge and admins can
 // grant a package from the admin panel.
 const PACKAGE_PLANS: Array<{
   tier: "start" | "grow" | "spotlight";
@@ -1260,6 +1262,7 @@ function SuggestionPills({
 }
 
 export function HomePage() {
+  const publicRevision = usePublicRefresh();
   const [homeConsultants, setHomeConsultants] = useState<ConsultantProfile[]>([]);
   const [homeLoading, setHomeLoading] = useState(true);
   const [homeError, setHomeError] = useState("");
@@ -1294,7 +1297,7 @@ export function HomePage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [publicRevision]);
 
   const featured = useMemo(
     () =>
@@ -1384,6 +1387,7 @@ export function HomePage() {
 }
 
 export function UsersPage() {
+  const publicRevision = usePublicRefresh();
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const city = searchParams.get("city") || "";
@@ -1423,7 +1427,7 @@ export function UsersPage() {
     return () => {
       mounted = false;
     };
-  }, [city, query]);
+  }, [city, query, publicRevision]);
 
   const rankedConsultants = useMemo(() => {
     return consultants
@@ -1794,6 +1798,7 @@ export function ConsultantPage() {
     };
   }, [token, viewerProfile?.role]);
   const [consultant, setConsultant] = useState<ConsultantProfile | null>(null);
+  const publicRevision = usePublicRefresh();
   const [selectedSlot, setSelectedSlot] = useState("");
   const [note, setNote] = useState("");
   const [useFreePoints, setUseFreePoints] = useState(false);
@@ -1815,7 +1820,8 @@ export function ConsultantPage() {
       .then((value) => {
         if (!mounted) return;
         setConsultant(value);
-        setSelectedSlot(getUpcomingAvailabilitySlots(value.availability, 1)[0] || "");
+        setError("");
+        setSelectedSlot((current) => value.availability.includes(current) ? current : getUpcomingAvailabilitySlots(value.availability, 1)[0] || "");
       })
       .catch((value) => {
         if (!mounted) return;
@@ -1825,7 +1831,7 @@ export function ConsultantPage() {
     return () => {
       mounted = false;
     };
-  }, [slug]);
+  }, [slug, publicRevision]);
 
   useEffect(() => {
     if (!shareMessage) {
@@ -1853,9 +1859,8 @@ export function ConsultantPage() {
               <p className="eyebrow">Публичен профил</p>
               <h1>Профилът ти още не е публичен.</h1>
               <p className="section-caption">
-                Страницата се показва на потребителите след одобрение от екипа на
-                GrowPoint. Допълни профила си и изчакай одобрението — ще получиш
-                известие.
+                Страницата се показва, когато имаш активно членство, достатъчно
+                попълнен профил и бъдещи свободни часове. Не се изисква одобрение.
               </p>
               <div className="profile-actions">
                 <Link className="primary-button" to="/dashboard#consultant-profile">
@@ -1870,7 +1875,7 @@ export function ConsultantPage() {
             <div className="panel">
               <h1>Този профил не е наличен.</h1>
               <p className="section-caption">
-                Възможно е профилът още да не е одобрен или вече да не е публичен.
+                Възможно е профилът да е непълен, неактивен или вече да не е публичен.
               </p>
               <Link className="primary-button" to="/users">
                 Разгледай активните профили
@@ -2623,11 +2628,11 @@ export function AuthPage() {
     event.preventDefault();
     clearFeedback();
 
-    // Expert profiles are paid (Stripe pending) — until then a mentor account
+    // Expert profiles are paid (DKS pending) — until then a mentor account
     // can only be created from an admin email invite. Clients stay free + open.
     if (form.role === "consultant" && !readInviteToken()) {
       setError(
-        "Експертните профили са с покана засега. Онлайн плащането (Stripe) предстои — пиши ни на contactus@growpoint.bg за достъп."
+        "Експертните профили са с покана засега. Онлайн плащането (DKS) предстои — пиши ни на contactus@growpoint.bg за достъп."
       );
       return;
     }
@@ -3105,7 +3110,7 @@ export function AuthPage() {
                 {form.role === "consultant" && !readInviteToken() ? (
                   <p className="form-note auth-invite-note">
                     Експертните профили (консултанти и ментори) са платени. Онлайн
-                    плащането (Stripe) предстои — засега нов експертен профил се
+                    плащането (DKS) предстои — засега нов експертен профил се
                     създава само с покана от екипа на GrowPoint. Пиши ни на{" "}
                     <a href="mailto:contactus@growpoint.bg">contactus@growpoint.bg</a>.
                   </p>
@@ -4764,14 +4769,7 @@ export function DashboardPage() {
                             Текущ пакет
                           </span>
                         ) : (
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            disabled
-                            title="Онлайн плащането се подготвя — пиши ни на contactus@growpoint.bg за активиране."
-                          >
-                            Очаквай скоро
-                          </button>
+                          <PaymentPlaceholder description={`Пакет ${plan.name}`} amount={plan.price} />
                         )}
                       </div>
                     </article>
@@ -6673,10 +6671,7 @@ function BookingMeetingLink({
   }
   if (booking.meetingLinkLocked) {
     return (
-      <p className="form-note">
-        Линкът за срещата ще се отвори след плащане. Онлайн плащането се подготвя
-        (Stripe — очаквай скоро).
-      </p>
+      <div className="payment-preview-inline"><p className="form-note">Линкът за срещата ще се отвори след реално потвърдено плащане. DKS интеграцията предстои.</p><PaymentPlaceholder description={`Резервация с ${booking.consultantName || "експерт"}`} /></div>
     );
   }
   return null;

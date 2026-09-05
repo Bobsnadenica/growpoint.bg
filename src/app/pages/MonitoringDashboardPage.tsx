@@ -6,6 +6,7 @@ import type { AdminMetrics } from "../../lib/types";
 
 type Day = { date: string; count: number };
 type Metrics = AdminMetrics & {
+  snapshot?: { refreshMinutes: number; stale: boolean };
   completion: { total: number; clients: number; consultants: number; mentors: number; incomplete: number };
   expertTypes: { consultants: number; mentors: number };
   telemetry: { since: string | null; emailAccepted: number; emailFailed: number; emailSkipped: number; chatSent: number; adminMessages: number; apiErrors: number; perDay: { date: string; emailAccepted: number; chatSent: number }[] };
@@ -47,7 +48,7 @@ export default function MonitoringDashboardPage() {
   }, [token, isAdmin]);
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 60000);
+    const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 15 * 60000);
     return () => clearInterval(timer);
   }, [load]);
   if (loading) return <div className="container panel" role="status">Проверяваме достъпа…</div>;
@@ -64,7 +65,8 @@ export function MonitoringDashboardView({ metrics, error, busy, onRefresh }: {
     <header className="monitor-header"><div><p className="eyebrow">GrowPoint · вътрешен достъп</p><h1>Пулсът на платформата.</h1><p>Регистрации, активност и качество на профилите.</p></div><div className="monitor-actions"><Link className="ghost-button" to="/admin">Управление</Link><button className="primary-button" disabled={busy} onClick={onRefresh}>{busy ? "Обновяване…" : "Обнови"}</button></div></header>
     {error && <p className="panel panel--error" role="alert">{error}{metrics ? " Показани са последните успешно заредени данни." : ""}</p>}
     {!metrics ? <div className="panel" role="status">{busy ? "Зареждаме статистиката…" : "Обнови, за да заредиш статистиката."}</div> : <>
-      <div className="monitor-meta"><span>Последно обновяване: {dateTime(metrics.generatedAt)}</span><span>Обновява се всяка минута · дни по UTC</span></div>
+      <div className="monitor-meta"><span>Последно обновяване: {dateTime(metrics.generatedAt)}</span><span>Снимка на 15 минути при отворено табло · дни по UTC</span></div>
+      {metrics.snapshot?.stale && <p className="panel" role="status">Обновяването е в ход. Показана е предишната снимка; опитай отново след малко.</p>}
       {!metrics.cognito.available && <p className="panel panel--error">Регистрациите в Cognito не са достъпни. Показаният брой е само за създадени профили в приложението.</p>}
       {metrics.cognito.available && metrics.cognito.capped && <p className="panel panel--error">Регистрациите са частични: достигнат е лимитът за прочит.</p>}
       <nav className="monitor-tabs" aria-label="Изглед на статистиката"><button className={period === "overview" ? "primary-button" : "ghost-button"} onClick={() => setPeriod("overview")}>Общ преглед</button><button className={period === "activity" ? "primary-button" : "ghost-button"} onClick={() => setPeriod("activity")}>Последни 30 дни</button></nav>

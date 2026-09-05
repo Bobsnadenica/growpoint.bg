@@ -1,6 +1,72 @@
-# Archived GrowPoint Production Readiness Memory
+# GrowPoint working memory
 
-> Superseded by [memory.md](memory.md), which contains the current project context and a complete copy of this historical review. Update memory.md only; the older findings below are not current instructions.
+Last reviewed: 2026-09-05. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; this section supersedes conflicting historical claims.
+
+## Current product and deployment decisions
+
+- Bulgarian career marketplace: free clients; paid expert tiers Start 9.99, Grow 29.99, Spotlight 99.99 EUR/month. Expert onboarding is admin-invite/comped until real checkout. No manual approval step: active membership plus backend visibility/completeness rules.
+- Requested DKS payment is deliberately a mock preview, not Stripe and not a functioning checkout. No card fields, requests, payment state changes, or package activation. Keep the preview labels until provider specifications and verified webhooks arrive.
+- Admin statistics at /admin/dashboard use existing Cognito admin authorization only. The earlier separate-password request was cancelled; never restore it or put credentials in documentation.
+- Production www.growpoint.bg is GitHub Pages from committed root artifacts. Optional S3/CloudFront is test/cutover only. User handles Terraform apply and GitHub push. No apply, commit, or push performed by this implementation session.
+- Protect DynamoDB tables and the existing Cognito pool from replacement. Pool name is pinned to careerdoc-dev-users; resource prefixes otherwise use growpoint-dev. Secrets/state/tfvars stay ignored.
+- User wants near-zero idle cost, not weakened access control. No new always-on services; on-demand DynamoDB, shared 15-minute admin snapshot and refresh lease, daily reconciliation inside existing hourly maintenance, narrow lifecycle audit trail with 30-day retention.
+- Budget warns at about $1 actual / $5 forecast monthly account-wide; it is NOT a spending cap. Storage, PITR, alarms, domain and free-tier eligibility prevent promising $0.
+
+## Implementation map
+
+- Frontend React 18, React Router 7, Vite 6; Node 22 build/runtime. Most product UI remains src/app/legacy/SiteAppLegacy.tsx; routing/nav/notifications in AppShell.tsx.
+- Admin page and monitoring are lazy chunks. MonitoringDashboardPage.tsx covers account/role/completion, booking/payment, chat, email, invitation, document and 30-day activity statistics.
+- backend/api/index.cjs is route dispatch/business logic. New routes require matching Terraform API Gateway routes.
+- identity.cjs validates current caller existence/enabled state on every authenticated API request, plus current admin group on admin routes. Public checks use ListUsers (not bulk AdminGetUser MAU activation), cached 60 seconds.
+- account-lifecycle.cjs reconciles Cognito with DynamoDB and private S3; exact pool/sub required, authoritative absence check before deletion. CloudTrail/EventBridge handles delete/disable/enable; daily fallback repairs missed events.
+- External deletion removes private user/uploads, tombstones experts, anonymizes booking content, cancels future bookings, releases deleted-client slots with conditional list edits and retries, refunds other clients' points atomically. Self-service deletion retains seven-day grace. Direct DynamoDB edits are not a supported identity workflow.
+- ListUsers is eventually consistent; events are not instant/guaranteed. Public HTTP cache 30 seconds; visible public pages refresh every minute/focus. Private requests check Cognito independently of event delivery. Explain this honestly; never promise instant synchronization.
+- monitoring.cjs records aggregate lifetime/daily counters atomically. metrics-cache.cjs stores one shared snapshot in users table; no idle statistics scans. No personal messages/emails in aggregate payload.
+- Email counters mean SES accepted/failed/skipped from deployment onward, not delivery and not Cognito verification emails. Visits are browser-session/day, not unique humans. Old chat history may be incomplete before cumulative counts.
+- PaymentPlaceholder.tsx is portal-based, focus-managed, Escape-close, no backend mutation.
+- use-public-refresh.ts handles visible/focus catalogue and profile refresh. API ACCOUNT_UNAVAILABLE triggers local sign-out.
+- Tests use Node built-in test runner and stubbed SDK clients; no real AWS writes. tests/helpers/api-harness.cjs loads actual Lambda logic in VM.
+
+## Work completed and evidence
+
+- Removed 10 explicitly marked production example consultant records and their 10 matching slug claims earlier in this session; real accounts were not targeted. Latest dry-run found zero examples. Demo seed/avatar/availability jobs and generated sample routes removed. Recovery depends on existing DynamoDB PITR, not a separate export.
+- Fixed filtered pagination, meeting-link privacy in client serialization, restricted/deletion guards, JSON-object validation, bootstrap field preservation, chat write conflicts and byte-size cap, email outcome reporting.
+- Replaced Lottie with lightweight SVG and updated dependencies; clean warning-free production build. Root and backend npm audits report zero vulnerabilities.
+- 23 regression tests passed at latest verification; TypeScript/theme/build passed; Terraform fmt/validate passed. Read-only production smoke: 14/14, one real public expert returned. Re-run gates after further edits.
+- Browser: anonymous admin dashboard redirects to auth; local deterministic fixtures used to verify dashboard/mobile/dark charts and DKS modal. Fixtures/screenshots are ignored output/playwright files, never production accounts. These checks do not prove deployed authenticated flows.
+- Owner auto-committed changes during this session (HEAD observed 0a310dfe); preserve their work and recheck status/log before any future commit.
+- Terraform plan is read-only; review final plan again before apply. Temporary plan is outside repo. A deployment archive under infra/terraform/.terraform-build was already tracked by an owner commit despite ignore rules; do not add future generated archives to Git.
+
+## Remaining release gates and operational follow-ups
+
+- Apply reviewed Terraform, publish fresh frontend artifacts, then explicitly test disposable-account Cognito disable/enable/delete end-to-end: event delivery, DynamoDB cleanup, public disappearance, old-session rejection and fallback. Local tests alone are not production certification.
+- Verify SES production access and actual delivery to a non-verified recipient. Dashboard displays SES state; sandbox remains a potential launch blocker.
+- Exercise deployed registration/invites, booking lifecycle, uploads, chat, points and role boundaries with explicitly disposable accounts. Default smoke is read-only; live-mutate requires deliberate authorization.
+- DKS real integration remains intentionally pending provider details.
+- Existing CloudWatch log retention was unset at inspection; choose an explicit retention policy with owner before long-term accumulation. Keep recovery protections. Budget alerts are not an automatic kill switch.
+- Review residual legacy scaling/concurrency limitations as traffic grows: large handlers/UI, bounded scans, embedded histories. Do not claim all routes have exhaustive concurrency or browser test coverage.
+- No new password or sensitive configuration belongs in README, memory, fixtures or bundle.
+
+## Verification commands
+
+npm test
+npm run build
+node --check backend/api/index.cjs
+bash scripts/check-secrets.sh
+npm audit
+npm --prefix backend/api audit
+terraform -chdir=infra/terraform fmt -check -recursive
+terraform -chdir=infra/terraform validate
+terraform -chdir=infra/terraform plan
+npm run smoke:prod
+
+Build regenerates root GitHub Pages assets/routes. Preserve unrelated changes. Render overlays with createPortal(document.body); add dark-theme overrides. No production CORS changes were needed for local fixture tests.
+
+## Historical review archive
+
+The following May/June notes are retained verbatim. They contain obsolete findings (no tests, old approval model, prototype statuses, missing implemented features, old file sizes and transient deployment issues). Verify against current code before acting; use the current section above as authority.
+
+# GrowPoint Production Readiness Memory
 
 Review date: 2026-05-06
 Domain migration review: 2026-06-04
@@ -642,3 +708,4 @@ Before inviting real testers, all of this should be true:
 8. Add booking lifecycle actions.
 9. Replace demo media and tighten production copy.
 10. Add observability and final release checklist.
+

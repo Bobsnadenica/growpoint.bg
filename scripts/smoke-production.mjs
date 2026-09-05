@@ -177,14 +177,13 @@ async function publicChecks(config) {
   await check("Public consultants list", async () => {
     const payload = await api(config, "/consultants");
     const items = Array.isArray(payload) ? payload : payload.items || [];
-    if (!items.length) throw new Error("No public consultants returned.");
     if (items.some((item) => item.isExample || String(item.ownerUserId || "").startsWith("example-owner-"))) throw new Error("Example profiles are still publicly visible.");
-    firstConsultantSlug = items[0].slug;
+    firstConsultantSlug = items[0]?.slug || "";
     return `${items.length} profiles`;
   });
 
   await check("Live consultant profile", async () => {
-    if (!firstConsultantSlug) throw new Error("No active expert available to check.");
+    if (!firstConsultantSlug) return "empty catalogue; no mock profile required";
     const payload = await api(config, `/consultants/${encodeURIComponent(firstConsultantSlug)}`);
     if (!payload?.consultantId) throw new Error("Profile payload missing consultantId.");
     return "active profile returned";

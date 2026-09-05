@@ -764,12 +764,20 @@ resource "aws_iam_role_policy" "lambda" {
         Resource = "*"
       },
       {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.cv_documents.arn
+      },
+      {
         # Read-only: admin metrics count the real Cognito user pool (authoritative
         # registration numbers + provider/confirmation breakdown). No write/admin
         # mutation actions are granted.
         Effect = "Allow"
         Action = [
           "cognito-idp:ListUsers",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:AdminListGroupsForUser",
+          "cognito-idp:AdminDeleteUser",
           "cognito-idp:DescribeUserPool",
           "cognito-idp:AdminDisableUser",
           "cognito-idp:AdminEnableUser"

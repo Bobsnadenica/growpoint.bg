@@ -438,7 +438,7 @@ export default function AppShell() {
   }, [loading, location.key, navigate, token, user]);
 
   useEffect(() => {
-    if (loading || !user || !token || isAdmin) {
+    if (loading || !user || !token) {
       setHeaderNotifications([]);
       return;
     }
@@ -447,6 +447,7 @@ export default function AppShell() {
     let intervalId = 0;
 
     async function loadHeaderNotifications() {
+      if (document.hidden) return;
       try {
         const result = await api.listMyNotifications(token);
         if (!cancelled) {
@@ -461,10 +462,12 @@ export default function AppShell() {
 
     void loadHeaderNotifications();
     intervalId = window.setInterval(loadHeaderNotifications, 60_000);
+    window.addEventListener("focus", loadHeaderNotifications);
 
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+      window.removeEventListener("focus", loadHeaderNotifications);
     };
   }, [isAdmin, loading, location.pathname, token, user]);
 

@@ -40,9 +40,9 @@ node --check backend/api/index.cjs   # backend syntax
 - **CORS for local API testing:** temporarily add `http://localhost:5173` to `frontend_origins` in tfvars + apply; **always revert + re-verify** afterward.
 
 ## Business model (current)
-- All expert tiers are **paid** (Start 9.99 / Grow 29.99 / Spotlight 99.99 €/mo). **Clients are free.** Online payment (Stripe) is **not built yet** — pricing buttons show "Очаквай скоро".
+- All expert tiers are **paid** (Start 9.99 / Grow 29.99 / Spotlight 99.99 €/mo). **Clients are free.** DKS payment is a labelled preview only: no charging, card entry, or paid/package state changes.
 - **No approval step.** A consultant is public when their account is *active* (`comped` via admin invite, or a `granted`/`purchased` package) and the profile passes a completeness bar. Gate logic: `consultantMembershipActive()` in the backend.
-- **Mentor onboarding is invite-only** until Stripe: admin sends an email invite (`/admin`) → recipient signs up free (`comped`). Self-serve consultant signup is blocked with a notice.
+- **Mentor onboarding is invite-only** until real payment integration: admin sends an email invite (`/admin`) → recipient signs up free (`comped`). Self-serve consultant signup is blocked with a notice.
 - **Admin** can invite, restrict/suspend (hides profile + disables Cognito login), message users, grant packages, feature profiles.
 
 ## Security rules
@@ -51,4 +51,4 @@ node --check backend/api/index.cjs   # backend syntax
 - Don't dump production Cognito user data into logs/output.
 
 ## Known follow-ups
-See `plan.txt` for ready-to-run prompts. Biggest items: Stripe checkout, SES production access (sandbox today — email doesn't deliver to arbitrary recipients yet), per-request `restricted` enforcement.
+Read `memory.md` for current context and release gates; historical plans may be stale. Biggest gates: actual DKS integration, SES production delivery, and deployed disposable-account lifecycle tests. `/admin/dashboard` uses existing Cognito admin access only. Cognito lifecycle reconciliation, live account checks, and on-demand cached metrics are implemented; review/apply Terraform before expecting new behavior in AWS.

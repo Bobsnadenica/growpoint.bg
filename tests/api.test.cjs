@@ -6,8 +6,24 @@ function event(method, path, body, claims) {
   return { rawPath: path, body: body === undefined ? undefined : JSON.stringify(body), headers: {}, requestContext: { http: { method, sourceIp: "192.0.2.1" }, authorizer: claims ? { jwt: { claims } } : undefined } };
 }
 
+test("point refunds atomically credit the client and flag the booking, without recreating deleted users", async () => {
+  const commands = [];
+  const api = loadApi({ send: async (command) => { commands.push(command); return {}; } });
+  await api.test.refundFreePointsIfNeeded({ bookingId: "b", clientId: "c", freeViaPoints: true, status: "pending" });
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].constructor.name, "TransactWriteCommand");
+  assert.equal(commands[0].input.TransactItems.length, 2);
+  assert.match(commands[0].input.TransactItems[1].Update.ConditionExpression, /attribute_exists\(userId\)/);
+  const failure = loadApi({ send: async () => { throw new Error("storage unavailable"); } });
+  await assert.rejects(failure.test.refundFreePointsIfNeeded({ bookingId: "b", clientId: "c", freeViaPoints: true }), /storage unavailable/);
+});
+
 test("statistics require a Cognito admin, never a separate shared password", async () => {
-  const api = loadApi();
+  const api = loadApi({ environment: { USER_POOL_ID: "unit-pool" }, send: async (command) => {
+    if (command.constructor.name === "AdminGetUserCommand") return { Enabled: true, UserAttributes: [{ Name: "sub", Value: "a" }] };
+    if (command.constructor.name === "AdminListGroupsForUserCommand") return { Groups: [{ GroupName: "admin" }] };
+    return {};
+  } });
   assert.equal((await api.handler(event("GET", "/monitoring/metrics"))).statusCode, 404);
   assert.equal((await api.handler(event("GET", "/admin/metrics"))).statusCode, 401);
   assert.equal((await api.handler(event("GET", "/admin/metrics", undefined, { sub: "a", "cognito:groups": "clients" }))).statusCode, 403);
@@ -26,7 +42,7 @@ test("invalid JSON objects return 400, never server errors", async () => {
 
 test("suspended and deleting accounts cannot mutate using an existing JWT", async () => {
   for (const flags of [{ restricted: true }, { deletionScheduledAt: "2026-09-05" }]) {
-    const api = loadApi({ send: async () => ({ Item: { userId: "a", ...flags } }) });
+    const api = loadApi({ environment: { USER_POOL_ID: "unit-pool" }, send: async (command) => command.constructor.name === "AdminGetUserCommand" ? { Enabled: true, UserAttributes: [{ Name: "sub", Value: "a" }] } : { Item: { userId: "a", ...flags } } });
     const response = await api.handler(event("PUT", "/consultants/me", {}, { sub: "a" }));
     assert.equal(response.statusCode, 403);
   }
