@@ -14,17 +14,21 @@ The project is a React single-page app with a small serverless AWS backend. Its 
 - **Bookings:** a client chooses an available slot; the consultant can accept, decline, reschedule, or cancel. Confirmed bookings support calendar downloads, session confirmation, reviews, in-app notifications, and email notifications when SES is configured.
 - **Payments:** DKS is a clearly labelled preview only: no card input, payment request, paid status, or package activation. A booking is either unpaid, marked paid by an admin, or released through the client points reward. The meeting link remains hidden from the client while payment is unpaid. Real provider integration and verified webhooks remain future work.
 
-## Homepage examples
+## Example profiles and homepage animation
 
-While fewer than three real experts are available, the homepage fills its showcase with fictional cards labelled **Example / Пример**. Real profiles take priority. Examples are display-only: no Cognito accounts, DynamoDB records, bookings, ratings, or statistics entries. They use local illustrations and add no AWS resources. Edit `src/app/components/example-profiles.json` to change their presentation; do not seed them into production identity data.
+The homepage fills up to three showcase positions with fictional cards labelled **Example / Пример** when there are not enough real experts. Real profiles take priority. The “За хората, които търсят” catalogue also has a separate example section with **one profile for each of its six categories**, respecting category, text, city, and role filters. Examples are excluded from recommended/top-only results and never replace an API error.
+
+Each example has a local AI-generated fictional portrait and a detailed `/examples/:id` page with illustrative experience, education, topics, session format, and pricing. These pages are `noindex` and excluded from the sitemap. They cannot receive bookings, messages, or payments and create **no Cognito accounts, DynamoDB records, reviews, or admin statistics**. Edit `src/app/components/example-profiles.json`; never seed these fixtures into production. See [portrait provenance and prompts](docs/example-portraits.md).
+
+The homepage uses a lightweight animated SVG: floating elements, a drawing growth curve, progress, and conversation dots. Animation pauses offscreen or in a hidden tab and respects reduced-motion preferences. Neither examples nor animation add an AWS service or recurring compute job.
 
 ## Admin statistics
 
-Open `/admin/dashboard` while signed in with a Cognito **admin** account, or use the statistics link in `/admin`. There is no separate shared password. Both the page and API enforce admin access; the API checks current Cognito group membership.
+Open **`/admin`** while signed in with a Cognito **admin** account. Management and monitoring share this single panel; the old `/admin/dashboard` address redirects there. There is one statistics component and refresh loop, not duplicate sets of counters. There is no separate shared password. Both the page and API enforce admin access; the API checks current Cognito group membership.
 
 The dashboard reports registrations, clients, consultants, mentors, profiles at 100%, public experts, booking/payment states, chat messages, reviews, documents, invitations, email outcomes, API errors, and 30-day activity charts.
 
-Statistics use a shared, on-demand 15-minute snapshot with a refresh lock. Every dashboard request rechecks Cognito, and changed identities invalidate the snapshot. Both admin views refresh on focus. No statistics scan runs when nobody requests the dashboard. Email counters start when this version is deployed: **SES acceptance is not delivery**, and Cognito verification emails are not included. Visits mean browser sessions per day, not unique people. Historical chat totals may be incomplete before the cumulative counter was introduced. Unavailable/partial data is labelled, not fabricated.
+Statistics use a shared, on-demand 15-minute snapshot with a refresh lock. Every statistics request rechecks Cognito, and changed identities invalidate the snapshot. The panel refreshes on focus. No statistics scan runs when nobody requests the dashboard. Email counters start when this version is deployed: **SES acceptance is not delivery**, and Cognito verification emails are not included. Visits mean browser sessions per day, not unique people. Historical chat totals may be incomplete before the cumulative counter was introduced. Unavailable/partial data is labelled, not fabricated.
 
 ## Cognito, DynamoDB, and website consistency
 
@@ -51,18 +55,57 @@ Low traffic should incur small usage-based costs, but **$0 is not guaranteed**: 
 ## Architecture
 
 ```mermaid
-flowchart LR
-  B[Browser] --> SPA[React + Vite SPA]
-  SPA --> C[AWS Cognito]
-  SPA --> API[API Gateway HTTP API]
-  API --> L[One Node.js Lambda]
-  L --> D[(DynamoDB)]
-  L --> S[S3 private uploads]
-  L --> E[SES transactional email]
-  EB[EventBridge hourly job] --> L
+flowchart TB
+  subgraph Web[Static website]
+    GH[GitHub Pages - production] --> SPA[React + Vite in the browser]
+    CF[Optional CloudFront + S3 - test hosting] -.-> SPA
+    EX[Local labelled examples and portraits] --> SPA
+    SPA --> ADMIN[Unified admin panel]
+  end
+  subgraph Identity[Identity and access]
+    C[Cognito - sign-in and groups]
+    CT[CloudTrail - regional write events]
+    EV[EventBridge - Cognito lifecycle filter]
+    C -.-> CT --> EV
+  end
+  subgraph Backend[Serverless application]
+    API[API Gateway - public routes and protected JWT routes]
+    L[One Lambda - authorization and business logic]
+    D[(DynamoDB - profiles, bookings, counters)]
+    S[(Private S3 - documents and images)]
+    E[SES - transactional emails]
+    JOB[EventBridge hourly maintenance]
+    CW[CloudWatch - logs and alarms]
+    API --> L
+    L <--> D
+    L --> S
+    L --> E
+    L --> CW
+    JOB --> L
+  end
+  SPA <-->|Sign-in and tokens| C
+  SPA -->|HTTPS requests| API
+  ADMIN -->|Same API, admin checks| API
+  L -->|Current identity and role checks| C
+  EV -->|Reconcile account state| L
+  SPA -.->|Authorized short-lived signed URLs| S
+  classDef static fill:#eaf4ee,stroke:#387052,color:#173926
+  classDef secure fill:#edf2fc,stroke:#496ca8,color:#233751
+  class SPA,GH,CF,EX,ADMIN static
+  class C,API,L,D,S secure
 ```
 
-The frontend uses Cognito for email/password authentication and optional hosted-UI social identity providers. API Gateway validates Cognito JWTs before protected requests reach the Node.js 22 Lambda. The Lambda owns authorization, validation, data access, notification creation, signed S3 URLs, email sending, identity reconciliation, scheduled deletion, and reminders. Example profiles and their refresh jobs have been removed.
+The frontend uses Cognito for email/password authentication and optional hosted-UI social identity providers. API Gateway validates Cognito JWTs before protected requests reach the Node.js 22 Lambda. The Lambda owns authorization, validation, data access, notification creation, signed S3 URLs, email sending, identity reconciliation, scheduled deletion, and reminders. Production mock accounts and their refresh jobs have been removed; the labelled examples above exist only in static frontend assets.
+
+### How a session works
+
+1. Browse a real public expert: active membership and server-side visibility rules determine eligibility.
+2. Sign in, choose availability, and request a booking. Lambda validates identity, ownership, and slot state before persisting it.
+3. The expert accepts or updates the request. The application records notifications and attempts transactional email through SES.
+4. Confirmed bookings enable the relevant conversation and document-sharing permissions. The client meeting link remains locked until the supported payment/reward condition is satisfied.
+5. Participants confirm completion and the client may review the session. Aggregate counters feed the same admin panel.
+
+The DKS preview is deliberately outside this payment flow: opening it does not call a payment provider or unlock anything.
 
 Public expert pages are cacheable briefly; media URLs are signed and short-lived. Documents remain private, download through signed URLs, and may be shared only with a consultant connected to a confirmed booking.
 

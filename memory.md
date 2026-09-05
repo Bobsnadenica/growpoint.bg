@@ -6,7 +6,7 @@ Last reviewed: 2026-09-05. This is the canonical project memory. The historical 
 
 - Bulgarian career marketplace: free clients; paid expert tiers Start 9.99, Grow 29.99, Spotlight 99.99 EUR/month. Expert onboarding is admin-invite/comped until real checkout. No manual approval step: active membership plus backend visibility/completeness rules.
 - Requested DKS payment is deliberately a mock preview, not Stripe and not a functioning checkout. No card fields, requests, payment state changes, or package activation. Keep the preview labels until provider specifications and verified webhooks arrive.
-- Admin statistics at /admin/dashboard use existing Cognito admin authorization only. The earlier separate-password request was cancelled; never restore it or put credentials in documentation.
+- Management and statistics are ONE admin panel at /admin; /admin/dashboard redirects there for existing bookmarks. Existing Cognito admin authorization only. The earlier separate-password request was cancelled; never restore it or put credentials in documentation.
 - Production www.growpoint.bg is GitHub Pages from committed root artifacts. Optional S3/CloudFront is test/cutover only. User handles Terraform apply and GitHub push. No apply, commit, or push performed by this implementation session.
 - Protect DynamoDB tables and the existing Cognito pool from replacement. AWS provider 6.63 supports in-place pool friendly-name rename to growpoint-dev-users; the immutable pool ID must stay unchanged and prevent_destroy is enabled. Old provider 5.x would replace it. Secrets/state/tfvars stay ignored.
 - User wants near-zero idle cost, not weakened access control. No new always-on services; on-demand DynamoDB, shared 15-minute admin snapshot and refresh lease, daily reconciliation inside existing hourly maintenance, regional write-management audit trail with 30-day retention and narrow EventBridge lifecycle filtering.
@@ -15,7 +15,7 @@ Last reviewed: 2026-09-05. This is the canonical project memory. The historical 
 ## Implementation map
 
 - Frontend React 18, React Router 7, Vite 6; Node 22 build/runtime. Most product UI remains src/app/legacy/SiteAppLegacy.tsx; routing/nav/notifications in AppShell.tsx.
-- Admin page and monitoring are lazy chunks. MonitoringDashboardPage.tsx covers account/role/completion, booking/payment, chat, email, invitation, document and 30-day activity statistics.
+- AdminPage is a lazy chunk and embeds MonitoringDashboardPage.tsx as its only metrics component. It covers account/role/completion, booking/payment, chat, email, invitation, document and 30-day activity statistics. Do not restore the old duplicate counters or separate navigation item.
 - backend/api/index.cjs is route dispatch/business logic. New routes require matching Terraform API Gateway routes.
 - identity.cjs validates current caller existence/enabled state on every authenticated API request, plus current admin group on admin routes. Public checks use ListUsers (not bulk AdminGetUser MAU activation), cached 60 seconds.
 - account-lifecycle.cjs reconciles Cognito with DynamoDB and private S3; exact pool/sub required, authoritative absence check before deletion. CloudTrail records regional write-management events (excluding KMS/RDS Data API); EventBridge selects four Cognito operations. Trail management-event selectors cannot use eventName or eventSource Equals; the previous version failed at AWS apply. Daily fallback repairs missed events.
@@ -82,6 +82,20 @@ Build regenerates root GitHub Pages assets/routes. Preserve unrelated changes. R
 - Booking lists and data export now paginate through DynamoDB query pages; unpaid links remain locked. Consultant booking lists no longer issue shared-document links for cancelled-only relationships.
 - Added regression coverage for pagination/export privacy, cancelled-relationship document privacy, and non-bookable labelled example markup. Latest suite: 28 passing tests. Browser route checks: 12 paths at 390/1440 widths, no horizontal overflow or page errors, protected redirects and not-found page correct. Local browser public reads proxy the actual API without changing production CORS. Authenticated live mutation flows remain unverified.
 - README and root deployment artifacts rebuilt; no AWS apply, GitHub push, or real/example account creation performed in this pass.
+
+## Unified admin, complete examples and animation — latest 2026-09-05 update
+
+This section supersedes the earlier three-silhouette/no-profile-link implementation above.
+
+- User requested one admin panel, not two. /admin now contains management plus the full statistics component, with one metrics fetch loop. /admin/dashboard redirects to /admin. Admin group/endpoint authorization is unchanged; no new password or cloud resources.
+- Six frontend-only fictional profiles, exactly one per persona category: career-leadership, business-entrepreneurship, ai-technology, communication-growth, finance, creative-practical. Each has a local AI portrait, biography, topics, illustrative experience/education, language/location, price, audience, session approach and outcomes.
+- Home fills remaining showcase places up to three; /users has a separate six-category example section. Filters apply locally; recommended/top-only and API-error states do not show examples. Fixed null persona clearing so selecting all actually clears a category.
+- Cards retain conspicuous Example / Пример labels and now link to dedicated /examples/:id pages. Pages are noindex, excluded from sitemap, and explicitly fictional/unbookable. No real profile/booking/payment/message endpoint receives fixture IDs. No Cognito or DynamoDB example identities are created; statistics remain real-data-only.
+- Portrait source assets: public/assets/examples/portrait-1.jpg through portrait-6.jpg, optimized 720px JPEGs. Built-in image generation; prompt/provenance in docs/example-portraits.md. Build copies files and six detail routes to repository root for GitHub Pages.
+- HeroAnimation.tsx uses lightweight animated SVG, not a Lottie dependency: card/orb movement, drawing curve/check, progress and typing dots. Pauses offscreen/hidden tab and respects prefers-reduced-motion. No new external runtime or recurring AWS cost.
+- README now documents the single panel, display-only examples, GitHub Mermaid architecture, identity lifecycle, session workflow, cost safeguards and launch limitations without secret configuration.
+- This pass changes frontend/docs/tests only. No AWS apply, production account creation, Git commit or push. The existing owner-modified Terraform deployment archive is untouched.
+- Verification for this pass: 31 isolated tests pass; warning-free TypeScript/theme/build, backend syntax and secret scan pass. Browser verified one example per category, all-filter reset, three homepage examples, all six detailed pages at 390/1440px with loaded portraits/no overflow/noindex, reduced-motion/offscreen animation pausing, and anonymous legacy-admin redirect. Live API proxy timed out, so these UI checks used a local empty-catalogue response; do not report them as deployed authenticated end-to-end evidence.
 
 ## Historical review archive
 

@@ -179,6 +179,60 @@
       "index": false,
       "sitemap": false,
       "renderStatic": true
+    },
+    {
+      "path": "/examples/career-leadership",
+      "title": "Александра Димова — Example / Пример | GrowPoint",
+      "description": "Измислен демонстрационен профил с AI портрет. Не е реален експерт и не приема резервации.",
+      "schemaType": "WebPage",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
+    },
+    {
+      "path": "/examples/business-entrepreneurship",
+      "title": "Борис Стоянов — Example / Пример | GrowPoint",
+      "description": "Измислен демонстрационен профил с AI портрет. Не е реален експерт и не приема резервации.",
+      "schemaType": "WebPage",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
+    },
+    {
+      "path": "/examples/ai-technology",
+      "title": "Мила Георгиева — Example / Пример | GrowPoint",
+      "description": "Измислен демонстрационен профил с AI портрет. Не е реален експерт и не приема резервации.",
+      "schemaType": "WebPage",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
+    },
+    {
+      "path": "/examples/communication-growth",
+      "title": "Николай Петров — Example / Пример | GrowPoint",
+      "description": "Измислен демонстрационен профил с AI портрет. Не е реален експерт и не приема резервации.",
+      "schemaType": "WebPage",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
+    },
+    {
+      "path": "/examples/finance",
+      "title": "Елена Василева — Example / Пример | GrowPoint",
+      "description": "Измислен демонстрационен профил с AI портрет. Не е реален експерт и не приема резервации.",
+      "schemaType": "WebPage",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
+    },
+    {
+      "path": "/examples/creative-practical",
+      "title": "Виктор Тодоров — Example / Пример | GrowPoint",
+      "description": "Измислен демонстрационен профил с AI портрет. Не е реален експерт и не приема резервации.",
+      "schemaType": "WebPage",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
     }
   ]
 }

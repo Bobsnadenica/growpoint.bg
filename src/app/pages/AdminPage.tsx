@@ -1,3 +1,4 @@
+import MonitoringDashboardPage from "./MonitoringDashboardPage";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { api } from "../../lib/api";
@@ -6,7 +7,6 @@ import type {
   AdminBooking,
   AdminConsultantSummary,
   AdminInvite,
-  AdminMetrics,
   ConsultantPackageTier
 } from "../../lib/types";
 import PageScene from "../layout/PageScene";
@@ -79,7 +79,6 @@ export default function AdminPage() {
   const [adminMessageText, setAdminMessageText] = useState("");
   const [adminMessageBusy, setAdminMessageBusy] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
-  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
   const [invites, setInvites] = useState<AdminInvite[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
@@ -125,25 +124,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isAdmin || !token) return;
-    let active = true;
-    const refreshMetrics = () => { if (document.hidden) return; void api
-      .adminGetMetrics(token)
-      .then((data) => {
-        if (active) setMetrics(data);
-      })
-      .catch(() => {
-        if (active) setMetrics(null);
-      }); };
-    refreshMetrics();
-    const interval = window.setInterval(refreshMetrics, 15 * 60000);
-    window.addEventListener("focus", refreshMetrics);
     void loadInvites();
     void loadAdminBookings();
-    return () => {
-      active = false;
-      clearInterval(interval);
-      window.removeEventListener("focus", refreshMetrics);
-    };
   }, [isAdmin, token, loadInvites, loadAdminBookings]);
 
   const counts = useMemo(() => {
@@ -408,8 +390,7 @@ export default function AdminPage() {
         <div className="container">
           <div className="page-intro">
             <p className="eyebrow">Админ</p>
-            <h1>Управление на профили</h1>
-            <Link className="primary-button" to="/admin/dashboard">Статистика и мониторинг</Link>
+            <h1>Управление на GrowPoint</h1>
             <p className="hero__lede">
               Кани нови експерти, следи активните профили и ограничавай акаунти при
               нужда. Одобрение вече не е необходимо — експертните профили са платени
@@ -419,193 +400,7 @@ export default function AdminPage() {
         </div>
       </section>
 
-      {metrics
-        ? (() => {
-            const reg14 = metrics.users.registrationsPerDay.slice(-14);
-            const regMax = Math.max(1, ...reg14.map((day) => day.count));
-            const cognito = metrics.cognito;
-            const cognitoOn = cognito.available;
-            // Authoritative account count (Cognito) when available; otherwise the
-            // DynamoDB mirror. Drift = registered accounts that have not yet made
-            // an authenticated request (no app profile row created yet).
-            const accountTotal = cognitoOn ? cognito.total : metrics.users.total;
-            const drift = cognitoOn ? cognito.total - metrics.users.total : 0;
-            const newLast7 = cognitoOn ? cognito.newLast7 : metrics.users.registrationsLast7;
-            const ratingLabel = metrics.averageRating
-              ? metrics.averageRating.toFixed(1)
-              : "—";
-            return (
-              <section className="section section--tight">
-                <div className="container">
-                  <div className="dashboard-form-head">
-                    <p className="eyebrow">Мониторинг</p>
-                    <h2>Преглед на платформата</h2>
-                  </div>
-                  <div className="metric-grid">
-                    <article className="metric-card">
-                      <span>Регистрирани акаунти</span>
-                      <strong>{accountTotal}</strong>
-                      <em>
-                        {cognitoOn
-                          ? `${cognito.confirmed} потвърдени · ${cognito.unconfirmed} непотвърдени`
-                          : `${metrics.users.clients} клиенти · ${metrics.users.consultants} консултанти`}
-                      </em>
-                    </article>
-                    <article className="metric-card">
-                      <span>Активирани профили</span>
-                      <strong>{metrics.users.total}</strong>
-                      <em>
-                        {metrics.users.clients} клиенти · {metrics.users.consultants} консултанти
-                      </em>
-                    </article>
-                    <article className="metric-card">
-                      <span>Нови за 7 дни</span>
-                      <strong>{newLast7}</strong>
-                      <em>{cognitoOn ? "регистрации в Cognito" : "регистрации"}</em>
-                    </article>
-                    <article className="metric-card">
-                      <span>Публични профили</span>
-                      <strong>{metrics.consultants.public}</strong>
-                      <em>от {metrics.consultants.total} консултантски</em>
-                    </article>
-                    <article className="metric-card">
-                      <span>Резервации</span>
-                      <strong>{metrics.bookings.total}</strong>
-                      <em>{metrics.bookings.confirmed} потвърдени</em>
-                    </article>
-                    <article className="metric-card">
-                      <span>Предстоящи сесии</span>
-                      <strong>{metrics.bookings.upcomingConfirmed}</strong>
-                      <em>потвърдени в бъдеще</em>
-                    </article>
-                    <article className="metric-card">
-                      <span>Съобщения</span>
-                      <strong>{metrics.messages}</strong>
-                      <em>между потребители</em>
-                    </article>
-                    <article className="metric-card">
-                      <span>Отзиви</span>
-                      <strong>{metrics.reviews}</strong>
-                      <em>среден рейтинг {ratingLabel} · {metrics.bookings.confirmedSessions} проведени</em>
-                    </article>
-                    <article className="metric-card">
-                      <span>Посещения (7 дни)</span>
-                      <strong>{metrics.visits.last7}</strong>
-                      <em>{metrics.visits.total} зареждания общо</em>
-                    </article>
-                  </div>
-
-                  {cognitoOn && drift > 0 ? (
-                    <p className="form-note">
-                      {drift}{" "}
-                      {drift === 1 ? "акаунт е регистриран" : "акаунта са регистрирани"} в
-                      Cognito, но още нямат активиран профил в приложението (записът се създава
-                      при първото влизане).
-                    </p>
-                  ) : null}
-
-                  <div className="metric-breakdown">
-                    <article className="metric-card metric-card--wide">
-                      <span>Нови профили по дни (последни 14)</span>
-                      <div className="metric-chart" role="img" aria-label="Нови профили по дни">
-                        {reg14.map((day) => (
-                          <div
-                            key={day.date}
-                            className="metric-chart__bar"
-                            title={`${day.date}: ${day.count}`}
-                            style={{ height: `${Math.max(6, (day.count / regMax) * 100)}%` }}
-                          >
-                            <b>{day.count || ""}</b>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                    {cognitoOn ? (
-                      <article className="metric-card">
-                        <span>Акаунти по вход</span>
-                        <dl className="metric-rows">
-                          <div>
-                            <dt>Имейл / парола</dt>
-                            <dd>{cognito.byProvider.email}</dd>
-                          </div>
-                          <div>
-                            <dt>Google</dt>
-                            <dd>{cognito.byProvider.google}</dd>
-                          </div>
-                          <div>
-                            <dt>Apple</dt>
-                            <dd>{cognito.byProvider.apple}</dd>
-                          </div>
-                          <div>
-                            <dt>LinkedIn</dt>
-                            <dd>{cognito.byProvider.linkedin}</dd>
-                          </div>
-                          {cognito.byProvider.other > 0 ? (
-                            <div>
-                              <dt>Други</dt>
-                              <dd>{cognito.byProvider.other}</dd>
-                            </div>
-                          ) : null}
-                        </dl>
-                      </article>
-                    ) : null}
-                    <article className="metric-card">
-                      <span>Консултанти по статус</span>
-                      <dl className="metric-rows">
-                        <div>
-                          <dt>Чакащи</dt>
-                          <dd>{metrics.consultants.pending}</dd>
-                        </div>
-                        <div>
-                          <dt>Одобрени</dt>
-                          <dd>{metrics.consultants.approved}</dd>
-                        </div>
-                        <div>
-                          <dt>Отказани</dt>
-                          <dd>{metrics.consultants.rejected}</dd>
-                        </div>
-                      </dl>
-                    </article>
-                    <article className="metric-card">
-                      <span>Резервации по статус</span>
-                      <dl className="metric-rows">
-                        <div>
-                          <dt>Чакащи</dt>
-                          <dd>{metrics.bookings.pending}</dd>
-                        </div>
-                        <div>
-                          <dt>Потвърдени</dt>
-                          <dd>{metrics.bookings.confirmed}</dd>
-                        </div>
-                        <div>
-                          <dt>Отказани</dt>
-                          <dd>{metrics.bookings.declined}</dd>
-                        </div>
-                        <div>
-                          <dt>Отменени</dt>
-                          <dd>{metrics.bookings.cancelled}</dd>
-                        </div>
-                      </dl>
-                    </article>
-                  </div>
-                  <p className="form-note">
-                    {cognitoOn
-                      ? "Регистрираните акаунти и разбивката по вход идват в реално време от Cognito; останалите числа — от базата данни."
-                      : "Cognito не е достъпен в момента — „Регистрирани акаунти“ показва записите от базата данни (създават се при първо влизане)."}
-                    {cognitoOn && cognito.capped
-                      ? " (Показана е извадка — потребителите надхвърлят лимита за броене.)"
-                      : ""}{" "}
-                    Посещенията се броят със собствен брояч на зареждания (без бисквитки и
-                    проследяване); за демографски данни е нужен външен аналитичен инструмент.
-                  </p>
-                  <p className="form-note">
-                    Данните са към {formatAuditDate(metrics.generatedAt) || metrics.generatedAt}.
-                  </p>
-                </div>
-              </section>
-            );
-          })()
-        : null}
+      <MonitoringDashboardPage embedded />
 
       <section className="section section--tight">
         <div className="container">

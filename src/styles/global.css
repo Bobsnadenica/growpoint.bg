@@ -11330,10 +11330,34 @@ textarea {
   line-height: 1.5;
 }
 .example-profile { cursor: default; }
-.example-profile__portrait { position: relative; height: 150px; overflow: hidden; border-radius: 18px; background: var(--surface-alt); color: var(--text-soft); }
+.example-profile__portrait { position: relative; height: 240px; overflow: hidden; border-radius: 18px; background: var(--surface-alt); color: var(--text-soft); }
+.example-profile__portrait img { width: 100%; height: 100%; object-fit: cover; object-position: center 28%; }
+.example-detail-layout { display: grid; grid-template-columns: minmax(240px, 330px) minmax(0, 1fr); gap: 32px; align-items: start; }
+.example-detail-sidebar { display: grid; gap: 18px; }
+.example-detail-sidebar img { width: 100%; height: auto; border-radius: 18px; }
+.example-detail-content { display: grid; gap: 24px; min-width: 0; }
+.example-detail-content p, .example-detail-content li { line-height: 1.75; }
+.example-disclosure { margin: 24px 0; }
+@media (max-width: 700px) { .example-detail-layout { grid-template-columns: 1fr; } .example-detail-sidebar img { max-height: 320px; object-fit: cover; object-position: center 25%; } }
 .example-profile__portrait svg { width: 100%; height: 100%; }
 .example-profile__portrait > span { position: absolute; bottom: 12px; right: 16px; font-weight: 700; }
 .example-profile__badge { display: inline-flex; padding: 7px 12px; border: 1px dashed currentColor; border-radius: 99px; color: var(--text); font-size: .8rem; font-weight: 700; }
 .example-profile__details { color: var(--text-soft); font-size: .9rem; }
 .example-profile__details summary { cursor: pointer; padding: 8px 0; }
 .example-profile__details p { line-height: 1.6; }
+.hero-motion-card { animation: hero-card-float 5s ease-in-out infinite; transform-origin: center; }
+.hero-motion-orb { animation: hero-orb-drift 7s ease-in-out infinite alternate; }
+.hero-motion-orb--second { animation-delay: -3s; animation-direction: alternate-reverse; }
+.hero-motion-badge { animation: hero-orb-drift 4s ease-in-out infinite alternate; }
+.hero-motion-chat { animation: hero-card-float 4.5s ease-in-out infinite reverse; }
+.hero-motion-path, .hero-motion-check { stroke-dasharray: 1; animation: hero-line-draw 6s ease-in-out infinite; }
+.hero-motion-check { animation-delay: .6s; }
+.hero-motion-progress { transform-box: fill-box; transform-origin: left; animation: hero-progress 6s ease-in-out infinite; }
+.hero-motion-dot { animation: hero-dot-bounce 1.4s ease-in-out infinite; }
+@keyframes hero-card-float { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-16px) rotate(1deg); } }
+@keyframes hero-orb-drift { from { transform: translate(0, 0); } to { transform: translate(12px, -20px); } }
+@keyframes hero-line-draw { 0%,10% { stroke-dashoffset: 1; } 45%,90% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 1; } }
+@keyframes hero-progress { 0%,10% { transform: scaleX(.2); } 65%,100% { transform: scaleX(1); } }
+@keyframes hero-dot-bounce { 0%,70%,100% { transform: translateY(0); } 35% { transform: translateY(-7px); } }
+.home-hero__illustration[data-paused="true"] * { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) { .home-hero__illustration * { animation: none !important; stroke-dashoffset: 0 !important; } }

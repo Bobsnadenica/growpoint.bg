@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import ExampleProfilePage from "../pages/ExampleProfilePage";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -35,7 +36,6 @@ import UsersPage from "../pages/UsersPage";
 
 const AdminPage = lazy(() => import("../pages/AdminPage"));
 const AdminConsultantPreviewPage = lazy(() => import("../pages/AdminConsultantPreviewPage"));
-const MonitoringDashboardPage = lazy(() => import("../pages/MonitoringDashboardPage"));
 
 const primaryNavigation = [
   { to: "/", label: "Начало" },
@@ -911,6 +911,7 @@ export default function AppShell() {
         <Suspense fallback={<div className="container panel" role="status">Зареждане…</div>}>
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/examples/:id" element={<ExampleProfilePage />} />
           <Route path="/users" element={<UsersPage />} />
           {/* Legacy /consultants catalog merged into /users — keep the path
              as a redirect for any bookmarks or external links. */}
@@ -930,7 +931,7 @@ export default function AppShell() {
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/files" element={<FilesPage />} />
           <Route path="/admin" element={<AdminPage />} />
-          <Route path="/admin/dashboard" element={<MonitoringDashboardPage />} />
+          <Route path="/admin/dashboard" element={<Navigate to="/admin" replace />} />
           <Route
             path="/admin/preview/:consultantId"
             element={<AdminConsultantPreviewPage />}

@@ -1504,7 +1504,7 @@ export function UsersPage() {
     const nextKind = nextFilters.kind ?? kind;
     const nextTopOnly = nextFilters.topOnly ?? topOnly;
     const nextRecommended = nextFilters.recommendedOnly ?? recommendedOnly;
-    const nextPersona = nextFilters.persona ?? persona?.id ?? null;
+    const nextPersona = nextFilters.persona !== undefined ? nextFilters.persona : persona?.id ?? null;
 
     const params: Record<string, string> = {};
     if (nextQuery) params.q = nextQuery;
@@ -1714,7 +1714,7 @@ export function UsersPage() {
           {!loading && !error && visibleConsultants.length === 0 ? (
             <DirectoryFeedbackState
               tone="empty"
-              title="Няма съвпадения за избраните филтри"
+              title="Няма реални експерти за избраните филтри"
               message="Разшири търсенето или изчисти филтрите."
               actionLabel="Изчисти филтрите"
               onAction={() => applyDirectoryFilters({ query: "", city: "", kind: "all", topOnly: false, recommendedOnly: false, persona: null })}
@@ -1732,6 +1732,8 @@ export function UsersPage() {
               ))}
             </div>
           ) : null}
+
+          {!loading && !error && !recommendedOnly && !topOnly ? <section className="section section--tight" aria-label="Примерни профили по категории"><h2>Примерни профили</h2><p>По един измислен експерт за всяка област. Картите с „Example / Пример“ са демонстрация, не реални акаунти и не приемат резервации.</p><div className="consultant-grid consultant-grid--directory"><ExampleProfileCards count={6} category={persona?.id} query={query} city={city} kind={kind} /></div></section> : null}
 
         </div>
       </section>

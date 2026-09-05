@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import type { AdminMetrics } from "../../lib/types";
@@ -34,7 +34,7 @@ function Chart({ title, days }: { title: string; days: Day[] }) {
   </section>;
 }
 
-export default function MonitoringDashboardPage() {
+export default function MonitoringDashboardPage({ embedded = false }: { embedded?: boolean }) {
   const { token, isAdmin, loading, user } = useAuth();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [error, setError] = useState("");
@@ -54,17 +54,17 @@ export default function MonitoringDashboardPage() {
     return () => { clearInterval(timer); window.removeEventListener("focus", focus); };
   }, [load]);
   if (loading) return <div className="container panel" role="status">Проверяваме достъпа…</div>;
-  if (!user) return <Navigate to="/auth?redirect=/admin/dashboard" replace />;
+  if (!user) return <Navigate to="/auth?redirect=/admin" replace />;
   if (!isAdmin) return <div className="container panel panel--error" role="alert">Тази секция е достъпна само за администратори.</div>;
-  return <MonitoringDashboardView metrics={metrics} error={error} busy={busy} onRefresh={() => void load()} />;
+  return <MonitoringDashboardView embedded={embedded} metrics={metrics} error={error} busy={busy} onRefresh={() => void load()} />;
 }
 
-export function MonitoringDashboardView({ metrics, error, busy, onRefresh }: {
-  metrics: Metrics | null; error: string; busy: boolean; onRefresh: () => void;
+export function MonitoringDashboardView({ metrics, error, busy, onRefresh, embedded = false }: {
+  metrics: Metrics | null; error: string; busy: boolean; onRefresh: () => void; embedded?: boolean;
 }) {
   const [period, setPeriod] = useState<"overview" | "activity">("overview");
   return <section className="monitor-page container">
-    <header className="monitor-header"><div><p className="eyebrow">GrowPoint · вътрешен достъп</p><h1>Пулсът на платформата.</h1><p>Регистрации, активност и качество на профилите.</p></div><div className="monitor-actions"><Link className="ghost-button" to="/admin">Управление</Link><button className="primary-button" disabled={busy} onClick={onRefresh}>{busy ? "Обновяване…" : "Обнови"}</button></div></header>
+    <header className="monitor-header"><div>{embedded ? <h2>Статистика и активност</h2> : <h1>Пулсът на платформата.</h1>}<p>Регистрации, активност и качество на профилите.</p></div><div className="monitor-actions"><button className="primary-button" disabled={busy} onClick={onRefresh}>{busy ? "Обновяване…" : "Обнови"}</button></div></header>
     {error && <p className="panel panel--error" role="alert">{error}{metrics ? " Показани са последните успешно заредени данни." : ""}</p>}
     {!metrics ? <div className="panel" role="status">{busy ? "Зареждаме статистиката…" : "Обнови, за да заредиш статистиката."}</div> : <>
       <div className="monitor-meta"><span>Последно обновяване: {dateTime(metrics.generatedAt)}</span><span>Снимка на 15 минути при отворено табло · дни по UTC</span></div>
