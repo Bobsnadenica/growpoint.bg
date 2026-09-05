@@ -617,7 +617,7 @@ export default function AdminPage() {
             <p className="form-note">
               Изпрати покана по имейл. Поканеният създава безплатен експертен профил
               (без плащане), валидна 30 дни. Иначе експертните профили изискват
-              платен план (Stripe — очаквай скоро).
+              платен план (DKS — интеграцията предстои).
             </p>
             <form className="admin-invite-form" onSubmit={sendInvite}>
               <input
@@ -656,7 +656,7 @@ export default function AdminPage() {
               <h2>Чакащи плащане</h2>
             </div>
             <p className="form-note">
-              До интеграцията на Stripe можеш ръчно да маркираш платена резервация —
+              До интеграцията на DKS можеш ръчно да маркираш платена резервация —
               това отключва линка за срещата за потребителя.
             </p>
             {awaitingPayment.length ? (

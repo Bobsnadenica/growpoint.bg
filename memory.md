@@ -73,6 +73,16 @@ Build regenerates root GitHub Pages assets/routes. Preserve unrelated changes. R
 - SES live check: ProductionAccess=false, SendingEnabled=true. Sandbox is a confirmed release limitation.
 - Default production smoke must accept an empty real catalogue; never recreate mocks to satisfy a test.
 
+## Homepage examples and website review — 2026-09-05 follow-up
+
+- User now explicitly requests labelled homepage examples, superseding the earlier no-examples visual policy. Implemented three fictional display-only cards in ExampleProfileCards.tsx/example-profiles.json. Do not reintroduce Cognito/DynamoDB mock identities or fake ratings. Real experts take priority; examples fill remaining positions up to three only after a successful public-list load. Errors stay visible instead of being masked by examples.
+- Example cards use local inline vector silhouettes, Example / Пример badges, illustrative prices, and an expandable disclosure. No booking/profile links; no stats pollution or extra cloud resources. Disappear when three real experts exist.
+- Fixed active workspace copy that incorrectly required admin approval, leftover Stripe labels in admin, and inaccurate FAQ signup/document descriptions.
+- Browser interaction found the mobile menu overlay covering its header close button. Added a close button inside the portalled menu, initial focus, Tab wrapping, focus restoration, and Escape dismissal. Homepage background refresh keeps example disclosures mounted.
+- Booking lists and data export now paginate through DynamoDB query pages; unpaid links remain locked. Consultant booking lists no longer issue shared-document links for cancelled-only relationships.
+- Added regression coverage for pagination/export privacy, cancelled-relationship document privacy, and non-bookable labelled example markup. Latest suite: 28 passing tests. Browser route checks: 12 paths at 390/1440 widths, no horizontal overflow or page errors, protected redirects and not-found page correct. Local browser public reads proxy the actual API without changing production CORS. Authenticated live mutation flows remain unverified.
+- README and root deployment artifacts rebuilt; no AWS apply, GitHub push, or real/example account creation performed in this pass.
+
 ## Historical review archive
 
 The following May/June notes are retained verbatim. They contain obsolete findings (no tests, old approval model, prototype statuses, missing implemented features, old file sizes and transient deployment issues). Verify against current code before acting; use the current section above as authority.

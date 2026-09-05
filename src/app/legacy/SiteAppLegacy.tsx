@@ -19,6 +19,7 @@ import {
 } from "react-router-dom";
 import { api } from "../../lib/api";
 import { usePublicRefresh } from "../../lib/use-public-refresh";
+import ExampleProfileCards from "../components/ExampleProfileCards";
 import { NewPasswordRequiredError, useAuth } from "../../lib/auth";
 import {
   clearPendingBootstrap,
@@ -1270,7 +1271,8 @@ export function HomePage() {
   useEffect(() => {
     let mounted = true;
 
-    setHomeLoading(true);
+    // Keep the current showcase mounted during background refreshes so open
+    // example disclosures and keyboard focus are not reset every minute.
     setHomeError("");
 
     api
@@ -1361,7 +1363,7 @@ export function HomePage() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">Подбрани профили</p>
-              <h2>Силните профили, готови за бърз избор.</h2>
+              <h2>{!homeLoading && !homeError && featured.length === 0 ? "Твоят бъдещ експерт може да изглежда така." : "Силните профили, готови за бърз избор."}</h2>
             </div>
             <Link className="ghost-button" to="/users">
               Виж всички профили
@@ -1372,11 +1374,13 @@ export function HomePage() {
             {featured.map((consultant) => (
               <ConsultantCard key={consultant.consultantId} consultant={consultant} />
             ))}
+            {homeLoading && featured.length === 0 ? [0, 1, 2].map((id) => <ConsultantCardSkeleton key={id} />) : null}
+            {!homeLoading && !homeError && featured.length < 3 ? <ExampleProfileCards count={3 - featured.length} /> : null}
           </div>
-          {!homeLoading && !homeError && featured.length === 0 ? (
+          {!homeLoading && !homeError && featured.length < 3 ? (
             <div className="panel empty-state">
-              Все още няма публикувани водещи профили. След като консултантите завършат профила си,
-              тук ще се показват водещите активни страници.
+              Картите с „Example / Пример“ са измислени и показват как изглежда платформата.
+              Те не приемат резервации. Реалните активни експерти се показват с предимство и постепенно ще ги заменят.
             </div>
           ) : null}
           {homeError ? <div className="panel panel--error">{homeError}</div> : null}
@@ -7986,8 +7990,8 @@ function ConsultantStatusBanner({ consultant }: { consultant: ConsultantProfile 
     return (
       <div className="panel panel--subtle status-banner status-banner--success">
         <div>
-          <strong>Профилът е одобрен и публичен.</strong>
-          <p>Виден е в каталога и приема резервации.</p>
+          <strong>Профилът е активен.</strong>
+          <p>Показването в каталога изисква активно членство, попълнен профил и бъдещи свободни часове.</p>
         </div>
       </div>
     );
@@ -7996,10 +8000,9 @@ function ConsultantStatusBanner({ consultant }: { consultant: ConsultantProfile 
   if (status === "rejected") {
     return (
       <div className="panel panel--error status-banner status-banner--rejected">
-        <strong>Профилът не беше одобрен.</strong>
+        <strong>Профилът не е публичен.</strong>
         <p>
-          Свържи се с екипа за повече информация и редактирай профила преди да поискаш
-          повторно разглеждане.
+          Провери данните и членството си. Ако достъпът е ограничен, свържи се с екипа.
         </p>
       </div>
     );
@@ -8007,10 +8010,10 @@ function ConsultantStatusBanner({ consultant }: { consultant: ConsultantProfile 
 
   return (
     <div className="panel panel--subtle status-banner status-banner--pending">
-      <strong>Профилът чака одобрение.</strong>
+      <strong>Довърши профила си.</strong>
       <p>
-        Профилът ти не е публичен, докато администратор не го прегледа. През това време
-        можеш да го допълваш — промените се запазват.
+        Не е необходимо одобрение от администратор. За публичен профил са нужни активно
+        членство, попълнена информация и бъдещи свободни часове.
       </p>
     </div>
   );

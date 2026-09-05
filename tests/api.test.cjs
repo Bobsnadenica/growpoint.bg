@@ -2,6 +2,41 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { loadApi } = require("./helpers/api-harness.cjs");
 const json = (value) => JSON.parse(JSON.stringify(value));
+
+test("cancelled-only consultant relationship cannot issue private document links", async () => {
+  let privateProfileRead = false;
+  const api = loadApi({ send: async (command) => {
+    if (command.constructor.name === "GetCommand") {
+      if (command.input.Key.userId === "client") privateProfileRead = true;
+      return { Item: { userId: "expert", role: "consultant" } };
+    }
+    if (command.input.IndexName === "owner-index") return { Items: [{ consultantId: "expert-profile", ownerUserId: "expert", name: "Expert" }] };
+    if (command.input.IndexName === "consultant-index") return { Items: [{ bookingId: "cancelled", clientId: "client", status: "cancelled" }] };
+    return {};
+  } });
+  const result = JSON.parse((await api.test.listBookings({ requestContext: { authorizer: { jwt: { claims: { sub: "expert" } } } } })).body);
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0].clientSharedDocuments, []);
+  assert.equal(privateProfileRead, false);
+});
+
+test("booking list and personal export include subsequent DynamoDB pages and keep unpaid links locked", async () => {
+  const api = loadApi({ send: async (command) => {
+    if (command.constructor.name === "GetCommand") return { Item: { userId: "client", role: "client" } };
+    if (command.constructor.name === "QueryCommand" && command.input.IndexName === "client-index") {
+      const second = Boolean(command.input.ExclusiveStartKey);
+      return { Items: [{ bookingId: second ? "second" : "first", clientId: "client", paymentStatus: "unpaid", meetingLink: "https://example.com/private" }], ...(second ? {} : { LastEvaluatedKey: { bookingId: "first" } }) };
+    }
+    return {};
+  } });
+  const request = { requestContext: { authorizer: { jwt: { claims: { sub: "client" } } } } };
+  const listed = JSON.parse((await api.test.listBookings(request)).body);
+  assert.deepEqual(listed.map((b) => b.bookingId), ["first", "second"]);
+  assert.ok(listed.every((b) => !b.meetingLink));
+  const exported = JSON.parse((await api.test.exportMyData(request)).body);
+  assert.deepEqual(exported.bookingsAsClient.map((b) => b.bookingId), ["first", "second"]);
+  assert.ok(exported.bookingsAsClient.every((b) => !b.meetingLink));
+});
 function event(method, path, body, claims) {
   return { rawPath: path, body: body === undefined ? undefined : JSON.stringify(body), headers: {}, requestContext: { http: { method, sourceIp: "192.0.2.1" }, authorizer: claims ? { jwt: { claims } } : undefined } };
 }

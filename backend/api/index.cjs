@@ -2539,26 +2539,22 @@ async function exportMyData(event) {
   const [user, consultant, clientBookings] = await Promise.all([
     getUserBySub(claims.sub),
     getConsultantByOwner(claims.sub),
-    dynamo.send(
-      new QueryCommand({
+    queryAllItems({
         TableName: env.bookingsTable,
         IndexName: "client-index",
         KeyConditionExpression: "clientId = :id",
         ExpressionAttributeValues: { ":id": claims.sub }
-      })
-    )
+    })
   ]);
 
-  let consultantBookings = { Items: [] };
+  let consultantBookings = [];
   if (consultant) {
-    consultantBookings = await dynamo.send(
-      new QueryCommand({
+    consultantBookings = await queryAllItems({
         TableName: env.bookingsTable,
         IndexName: "consultant-index",
         KeyConditionExpression: "consultantId = :c",
         ExpressionAttributeValues: { ":c": consultant.consultantId }
-      })
-    );
+    });
   }
 
   const exportPayload = {
@@ -2567,8 +2563,8 @@ async function exportMyData(event) {
     email: claims.email || user?.email || "",
     profile: user || null,
     consultantProfile: consultant || null,
-    bookingsAsClient: (clientBookings.Items || []).map((booking) => bookingForViewer(booking, claims.sub)),
-    bookingsAsConsultant: consultantBookings.Items || [],
+    bookingsAsClient: clientBookings.map((booking) => bookingForViewer(booking, claims.sub)),
+    bookingsAsConsultant: consultantBookings,
     notes: [
       "Този файл съдържа цялата информация, която GrowPoint съхранява за теб.",
       "Документите (CV, сертификати) се пазят в S3 и се свалят чрез временни линкове, генерирани при поискване.",
@@ -4426,19 +4422,17 @@ async function listBookings(event) {
       return response(200, []);
     }
 
-    const result = await dynamo.send(
-      new QueryCommand({
+    const bookings = await queryAllItems({
         TableName: env.bookingsTable,
         IndexName: "consultant-index",
         KeyConditionExpression: "consultantId = :consultantId",
         ExpressionAttributeValues: {
           ":consultantId": consultant.consultantId
         }
-      })
-    );
-
-    const bookings = result.Items || [];
-    const clientIds = Array.from(new Set(bookings.map((item) => item.clientId).filter(Boolean)));
+    });
+    // A saved sharing preference alone is not permission after the last
+    // confirmed session with this expert has been cancelled.
+    const clientIds = Array.from(new Set(bookings.filter((item) => item.status === "confirmed").map((item) => item.clientId).filter(Boolean)));
     const sharedByClient = new Map();
 
     await Promise.all(
@@ -4469,20 +4463,18 @@ async function listBookings(event) {
     );
   }
 
-  const result = await dynamo.send(
-    new QueryCommand({
+  const bookings = await queryAllItems({
       TableName: env.bookingsTable,
       IndexName: "client-index",
       KeyConditionExpression: "clientId = :clientId",
       ExpressionAttributeValues: {
         ":clientId": user.userId
       }
-    })
-  );
+  });
 
   // Gate the meeting link: the client only sees it once the booking is paid
-  // (Stripe later), free (redeemed with points), or admin-marked paid.
-  const clientBookings = (result.Items || []).map((booking) => bookingForViewer(booking, claims.sub));
+  // via the future payment provider, free (points), or admin-marked paid.
+  const clientBookings = bookings.map((booking) => bookingForViewer(booking, claims.sub));
 
   return response(200, clientBookings);
 }

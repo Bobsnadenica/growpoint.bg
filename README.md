@@ -14,6 +14,10 @@ The project is a React single-page app with a small serverless AWS backend. Its 
 - **Bookings:** a client chooses an available slot; the consultant can accept, decline, reschedule, or cancel. Confirmed bookings support calendar downloads, session confirmation, reviews, in-app notifications, and email notifications when SES is configured.
 - **Payments:** DKS is a clearly labelled preview only: no card input, payment request, paid status, or package activation. A booking is either unpaid, marked paid by an admin, or released through the client points reward. The meeting link remains hidden from the client while payment is unpaid. Real provider integration and verified webhooks remain future work.
 
+## Homepage examples
+
+While fewer than three real experts are available, the homepage fills its showcase with fictional cards labelled **Example / Пример**. Real profiles take priority. Examples are display-only: no Cognito accounts, DynamoDB records, bookings, ratings, or statistics entries. They use local illustrations and add no AWS resources. Edit `src/app/components/example-profiles.json` to change their presentation; do not seed them into production identity data.
+
 ## Admin statistics
 
 Open `/admin/dashboard` while signed in with a Cognito **admin** account, or use the statistics link in `/admin`. There is no separate shared password. Both the page and API enforce admin access; the API checks current Cognito group membership.

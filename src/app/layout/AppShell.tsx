@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -283,6 +284,7 @@ export default function AppShell() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isRouteTransitioning, setIsRouteTransitioning] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLElement>(null);
   const [theme, setTheme] = useState<ThemePreference>(readInitialTheme);
   const [isThemeSwitching, setIsThemeSwitching] = useState(false);
   const [headerNotifications, setHeaderNotifications] = useState<NotificationItem[]>([]);
@@ -319,16 +321,30 @@ export default function AppShell() {
   useEffect(() => {
     if (!isMenuOpen) return;
     const previous = document.body.style.overflow;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.body.style.overflow = "hidden";
+    mobileMenuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
     function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsMenuOpen(false);
+      }
+      if (event.key === "Tab") {
+        const elements = Array.from(mobileMenuRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') || []);
+        const first = elements[0];
+        const last = elements[elements.length - 1];
+        if (!first || !last) return;
+        if (event.shiftKey && (document.activeElement === first || !mobileMenuRef.current?.contains(document.activeElement))) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || !mobileMenuRef.current?.contains(document.activeElement))) {
+          event.preventDefault(); first.focus();
+        }
       }
     }
     window.addEventListener("keydown", handleKey);
     return () => {
       document.body.style.overflow = previous;
       window.removeEventListener("keydown", handleKey);
+      if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [isMenuOpen]);
 
@@ -785,7 +801,7 @@ export default function AppShell() {
         </div>
       </header>
 
-      {isMenuOpen ? (
+      {isMenuOpen ? createPortal(
         <>
           <div
             className="mobile-menu__backdrop"
@@ -794,9 +810,11 @@ export default function AppShell() {
           />
           <nav
             id="mobile-menu"
+            ref={mobileMenuRef}
             className="mobile-menu"
             aria-label="Мобилно меню"
           >
+            <button type="button" className="ghost-button mobile-menu__close" onClick={() => setIsMenuOpen(false)} aria-label="Затвори мобилното меню">Затвори ×</button>
             <div className="mobile-menu__group">
               <span className="mobile-menu__label">Навигация</span>
               {primaryNavigation.map((item) => (
@@ -886,7 +904,7 @@ export default function AppShell() {
               )}
             </div>
           </nav>
-        </>
+        </>, document.body
       ) : null}
 
       <main id="main-content" className="page-main">
