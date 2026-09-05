@@ -103,10 +103,20 @@ test("statistics cache avoids repeat scans for 15 minutes and refreshes on deman
   const metrics = createMetricsCache({ table: "users", now: () => now, collect: async () => ({ total: ++collected }), dynamo: { send: async (command) => {
     if (command.constructor.name === "GetCommand") return { Item: row };
     const values = command.input.ExpressionAttributeValues;
-    if (values[":payload"]) row = { payload: values[":payload"], validUntil: values[":until"] };
+    if (values[":payload"]) row = { payload: values[":payload"], validUntil: values[":until"], identityRevision: values[":revision"] };
     return {};
   } } });
   assert.equal((await metrics()).total, 1);
   assert.equal((await metrics()).total, 1); assert.equal(collected, 1);
   now = 901000; assert.equal((await metrics()).total, 2);
+  assert.equal((await metrics({ revision: "changed-identities" })).total, 3);
+  assert.equal((await metrics({ revision: "changed-identities" })).total, 3);
+});
+
+test("changed identity inventory cannot fall back to stale counts while another refresh owns the lease", async () => {
+  const metrics = createMetricsCache({ table: "users", collect: async () => { throw new Error("must not collect"); }, dynamo: { send: async (command) => {
+    if (command.constructor.name === "GetCommand") return { Item: { payload: { total: 5 }, identityRevision: "old", validUntil: 9999999999 } };
+    throw Object.assign(new Error("busy"), { name: "ConditionalCheckFailedException" });
+  } } });
+  await assert.rejects(metrics({ revision: "three-current-accounts" }), (error) => error.statusCode === 409);
 });

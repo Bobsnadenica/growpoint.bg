@@ -1,5 +1,6 @@
-# Only four account-lifecycle operations are logged. No sign-in, read, S3 data
-# events, Insights or CloudTrail Lake: avoid per-user monitoring overhead.
+# Trails cannot filter management events by eventName or include eventSource.
+# Log regional write management events; EventBridge below filters the four
+# Cognito lifecycle operations. No read/data events, Insights or CloudTrail Lake.
 resource "aws_s3_bucket" "identity_audit" {
   bucket = "${local.name_prefix}-identity-audit-${data.aws_caller_identity.current.account_id}"
   tags   = local.common_tags
@@ -72,18 +73,18 @@ resource "aws_cloudtrail" "identity_lifecycle" {
   enable_logging                = true
   enable_log_file_validation    = false
   advanced_event_selector {
-    name = "Cognito account lifecycle only"
+    name = "Regional write management events"
     field_selector {
       field  = "eventCategory"
       equals = ["Management"]
     }
     field_selector {
-      field  = "eventSource"
-      equals = ["cognito-idp.amazonaws.com"]
+      field  = "readOnly"
+      equals = ["false"]
     }
     field_selector {
-      field  = "eventName"
-      equals = ["AdminDeleteUser", "DeleteUser", "AdminDisableUser", "AdminEnableUser"]
+      field      = "eventSource"
+      not_equals = ["kms.amazonaws.com", "rdsdata.amazonaws.com"]
     }
   }
   depends_on = [aws_s3_bucket_policy.identity_audit]

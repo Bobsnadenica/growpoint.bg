@@ -8,8 +8,8 @@ Last reviewed: 2026-09-05. This is the canonical project memory. The historical 
 - Requested DKS payment is deliberately a mock preview, not Stripe and not a functioning checkout. No card fields, requests, payment state changes, or package activation. Keep the preview labels until provider specifications and verified webhooks arrive.
 - Admin statistics at /admin/dashboard use existing Cognito admin authorization only. The earlier separate-password request was cancelled; never restore it or put credentials in documentation.
 - Production www.growpoint.bg is GitHub Pages from committed root artifacts. Optional S3/CloudFront is test/cutover only. User handles Terraform apply and GitHub push. No apply, commit, or push performed by this implementation session.
-- Protect DynamoDB tables and the existing Cognito pool from replacement. Pool name is pinned to careerdoc-dev-users; resource prefixes otherwise use growpoint-dev. Secrets/state/tfvars stay ignored.
-- User wants near-zero idle cost, not weakened access control. No new always-on services; on-demand DynamoDB, shared 15-minute admin snapshot and refresh lease, daily reconciliation inside existing hourly maintenance, narrow lifecycle audit trail with 30-day retention.
+- Protect DynamoDB tables and the existing Cognito pool from replacement. AWS provider 6.63 supports in-place pool friendly-name rename to growpoint-dev-users; the immutable pool ID must stay unchanged and prevent_destroy is enabled. Old provider 5.x would replace it. Secrets/state/tfvars stay ignored.
+- User wants near-zero idle cost, not weakened access control. No new always-on services; on-demand DynamoDB, shared 15-minute admin snapshot and refresh lease, daily reconciliation inside existing hourly maintenance, regional write-management audit trail with 30-day retention and narrow EventBridge lifecycle filtering.
 - Budget warns at about $1 actual / $5 forecast monthly account-wide; it is NOT a spending cap. Storage, PITR, alarms, domain and free-tier eligibility prevent promising $0.
 
 ## Implementation map
@@ -18,7 +18,7 @@ Last reviewed: 2026-09-05. This is the canonical project memory. The historical 
 - Admin page and monitoring are lazy chunks. MonitoringDashboardPage.tsx covers account/role/completion, booking/payment, chat, email, invitation, document and 30-day activity statistics.
 - backend/api/index.cjs is route dispatch/business logic. New routes require matching Terraform API Gateway routes.
 - identity.cjs validates current caller existence/enabled state on every authenticated API request, plus current admin group on admin routes. Public checks use ListUsers (not bulk AdminGetUser MAU activation), cached 60 seconds.
-- account-lifecycle.cjs reconciles Cognito with DynamoDB and private S3; exact pool/sub required, authoritative absence check before deletion. CloudTrail/EventBridge handles delete/disable/enable; daily fallback repairs missed events.
+- account-lifecycle.cjs reconciles Cognito with DynamoDB and private S3; exact pool/sub required, authoritative absence check before deletion. CloudTrail records regional write-management events (excluding KMS/RDS Data API); EventBridge selects four Cognito operations. Trail management-event selectors cannot use eventName or eventSource Equals; the previous version failed at AWS apply. Daily fallback repairs missed events.
 - External deletion removes private user/uploads, tombstones experts, anonymizes booking content, cancels future bookings, releases deleted-client slots with conditional list edits and retries, refunds other clients' points atomically. Self-service deletion retains seven-day grace. Direct DynamoDB edits are not a supported identity workflow.
 - ListUsers is eventually consistent; events are not instant/guaranteed. Public HTTP cache 30 seconds; visible public pages refresh every minute/focus. Private requests check Cognito independently of event delivery. Explain this honestly; never promise instant synchronization.
 - monitoring.cjs records aggregate lifetime/daily counters atomically. metrics-cache.cjs stores one shared snapshot in users table; no idle statistics scans. No personal messages/emails in aggregate payload.
@@ -32,7 +32,7 @@ Last reviewed: 2026-09-05. This is the canonical project memory. The historical 
 - Removed 10 explicitly marked production example consultant records and their 10 matching slug claims earlier in this session; real accounts were not targeted. Latest dry-run found zero examples. Demo seed/avatar/availability jobs and generated sample routes removed. Recovery depends on existing DynamoDB PITR, not a separate export.
 - Fixed filtered pagination, meeting-link privacy in client serialization, restricted/deletion guards, JSON-object validation, bootstrap field preservation, chat write conflicts and byte-size cap, email outcome reporting.
 - Replaced Lottie with lightweight SVG and updated dependencies; clean warning-free production build. Root and backend npm audits report zero vulnerabilities.
-- 23 regression tests passed at latest verification; TypeScript/theme/build passed; Terraform fmt/validate passed. Read-only production smoke: 14/14, one real public expert returned. Re-run gates after further edits.
+- 25 regression tests passed at latest verification; TypeScript/theme/build and secret scan passed; Terraform fmt/validate passed without warnings. Latest plan: 0 add, 3 in-place changes (trail, pool friendly name, Lambda), 0 destroy. Read-only production smoke: 14/14 with an empty catalogue; individual profile check is not exercised when no real profiles exist. Re-run gates after further edits.
 - Browser: anonymous admin dashboard redirects to auth; local deterministic fixtures used to verify dashboard/mobile/dark charts and DKS modal. Fixtures/screenshots are ignored output/playwright files, never production accounts. These checks do not prove deployed authenticated flows.
 - Owner auto-committed changes during this session (HEAD observed 0a310dfe); preserve their work and recheck status/log before any future commit.
 - Terraform plan is read-only; review final plan again before apply. Temporary plan is outside repo. A deployment archive under infra/terraform/.terraform-build was already tracked by an owner commit despite ignore rules; do not add future generated archives to Git.
@@ -61,6 +61,17 @@ terraform -chdir=infra/terraform plan
 npm run smoke:prod
 
 Build regenerates root GitHub Pages assets/routes. Preserve unrelated changes. Render overlays with createPortal(document.body); add dark-theme overrides. No production CORS changes were needed for local fixture tests.
+
+## Latest apply failure and count investigation (2026-09-05)
+
+- Fixed invalid CloudTrail management selectors; AWS supports regional write-only selection, not eventName or Cognito eventSource Equals for trails. Corrected documentation about the broader S3 audit volume.
+- Upgraded AWS provider to 6.63 for safe pool friendly-name rename. Added prevent_destroy, migrated deprecated GSI hash_key blocks to key_schema without changing keys. Verified plan must retain pool ID and all tables.
+- Existing failed trail was tainted; verified it exists and removed the local taint to permit in-place repair. No AWS apply performed by agent.
+- Live read-only inventory now shows 3 Cognito accounts, 0 linked DynamoDB user profiles, 0 active consultant/bookings records. This supersedes earlier one-expert smoke results; external state changed during the session. No account content dumped.
+- Dashboard previously loaded only once in /admin and cached identity counts 15 minutes. Now refreshes on focus, reads current Cognito inventory per request, invalidates snapshot on identity changes, filters application profiles from the same inventory, and rejects unavailable/partial identity reads instead of substituting a misleading account count.
+- Legacy inventory: three careerdoc-dev DynamoDB tables empty; old CV bucket 36 objects (~36.6 MB), old frontend bucket 35 objects (~1.45 MB), old Lambda log group ~1.66 MB. Live Lambda/table/CloudFront references point to growpoint resources. Files/logs have not been deleted or archived; determine retention before irreversible cleanup. Do not delete the Cognito pool.
+- SES live check: ProductionAccess=false, SendingEnabled=true. Sandbox is a confirmed release limitation.
+- Default production smoke must accept an empty real catalogue; never recreate mocks to satisfy a test.
 
 ## Historical review archive
 
@@ -708,4 +719,3 @@ Before inviting real testers, all of this should be true:
 8. Add booking lifecycle actions.
 9. Replace demo media and tighten production copy.
 10. Add observability and final release checklist.
-

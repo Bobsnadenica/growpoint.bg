@@ -126,18 +126,23 @@ export default function AdminPage() {
   useEffect(() => {
     if (!isAdmin || !token) return;
     let active = true;
-    api
+    const refreshMetrics = () => { if (document.hidden) return; void api
       .adminGetMetrics(token)
       .then((data) => {
         if (active) setMetrics(data);
       })
       .catch(() => {
-        // Metrics are non-critical; the moderation list still works without them.
-      });
+        if (active) setMetrics(null);
+      }); };
+    refreshMetrics();
+    const interval = window.setInterval(refreshMetrics, 15 * 60000);
+    window.addEventListener("focus", refreshMetrics);
     void loadInvites();
     void loadAdminBookings();
     return () => {
       active = false;
+      clearInterval(interval);
+      window.removeEventListener("focus", refreshMetrics);
     };
   }, [isAdmin, token, loadInvites, loadAdminBookings]);
 

@@ -1,4 +1,4 @@
-const { randomUUID } = require("node:crypto");
+const { randomUUID, createHash } = require("node:crypto");
 const { createMonitoring, monitoringSummary } = require("./monitoring.cjs");
 const { createIdentityChecks } = require("./identity.cjs");
 const { createMetricsCache } = require("./metrics-cache.cjs");
@@ -4560,6 +4560,7 @@ async function getCognitoUserStats() {
     byProvider: { email: 0, google: 0, apple: 0, linkedin: 0, other: 0 },
     capped: false
   };
+  const identities = [];
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const MAX_PAGES = 200; // 200 * 60 = 12k users — far beyond current scale
 
@@ -4575,6 +4576,8 @@ async function getCognitoUserStats() {
         })
       );
       for (const user of result.Users || []) {
+        const sub = user.Attributes?.find((attribute) => attribute.Name === "sub")?.Value;
+        if (sub) identities.push({ sub, enabled: user.Enabled === true });
         stats.total += 1;
         if (user.Enabled === false) stats.disabled += 1;
         const status = String(user.UserStatus || "");
@@ -4594,15 +4597,20 @@ async function getCognitoUserStats() {
     return { available: false };
   }
 
-  return stats;
+  return { ...stats, identities };
 }
 
 async function getAdminMetrics(event) {
   requireAdmin(event);
-  return response(200, await cachedAdminMetrics());
+  const inventory = await getCognitoUserStats();
+  if (!inventory.available || inventory.capped) throw Object.assign(new Error("Регистрациите не могат да бъдат проверени в Cognito. Опитай отново."), { statusCode: 503 });
+  const revision = createHash("sha256").update(JSON.stringify(inventory.identities.slice().sort((a, b) => a.sub.localeCompare(b.sub)))).digest("hex");
+  const metrics = await cachedAdminMetrics({ revision, context: inventory });
+  const { identities, ...cognitoStats } = inventory;
+  return response(200, { ...metrics, cognito: cognitoStats });
 }
 
-async function buildAdminMetrics() {
+async function buildAdminMetrics(inventory) {
 
   const [allUsers, consultantRows, bookings, visitsItem, cognitoStats] = await Promise.all([
     scanAllItems(env.usersTable),
@@ -4612,7 +4620,7 @@ async function buildAdminMetrics() {
       .send(new GetCommand({ TableName: env.usersTable, Key: { userId: VISITS_ITEM_ID } }))
       .then((r) => r.Item || {})
       .catch(() => ({})),
-    getCognitoUserStats()
+    inventory || getCognitoUserStats()
   ]);
 
   // Exclude internal rows (page-view counter, invites, referral maps) from metrics.
@@ -4626,7 +4634,9 @@ async function buildAdminMetrics() {
       u.isExample !== true
     );
   });
-  const users = env.userPoolId ? (await Promise.all(userCandidates.map(async (u) => (await identity.publicAccountState(u.userId)).exists ? u : null))).filter(Boolean) : userCandidates;
+  const identityIds = new Set((cognitoStats.identities || []).map((entry) => entry.sub));
+  const users = env.userPoolId ? userCandidates.filter((u) => identityIds.has(u.userId) && !u.identityDeleted) : userCandidates;
+  const { identities: privateIdentities, ...publicCognitoStats } = cognitoStats;
 
   // Dedupe by owner: an owner can have several draft rows, which would inflate
   // the "consultants by status" counts. Use the same canonical-pick logic as the
@@ -4711,7 +4721,7 @@ async function buildAdminMetrics() {
     // for registrations). `users` below is the DynamoDB mirror, which only fills
     // in on a user's first authenticated request — comparing the two surfaces
     // accounts that registered but never activated an app profile.
-    cognito: cognitoStats,
+    cognito: publicCognitoStats,
     users: {
       total: users.length,
       clients: clientUsers,

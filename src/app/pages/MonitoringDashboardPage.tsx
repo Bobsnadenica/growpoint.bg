@@ -49,7 +49,9 @@ export default function MonitoringDashboardPage() {
   useEffect(() => {
     void load();
     const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 15 * 60000);
-    return () => clearInterval(timer);
+    const focus = () => { if (!document.hidden) void load(); };
+    window.addEventListener("focus", focus);
+    return () => { clearInterval(timer); window.removeEventListener("focus", focus); };
   }, [load]);
   if (loading) return <div className="container panel" role="status">Проверяваме достъпа…</div>;
   if (!user) return <Navigate to="/auth?redirect=/admin/dashboard" replace />;

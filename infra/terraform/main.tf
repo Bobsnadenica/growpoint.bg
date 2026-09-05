@@ -51,13 +51,9 @@ resource "random_string" "suffix" {
 }
 
 resource "aws_cognito_user_pool" "main" {
-  # PINNED — do NOT derive from name_prefix. A Cognito user pool's name is
-  # immutable; changing it forces a full replacement, which would destroy every
-  # registered account (email + Google/Apple/LinkedIn), mint a new pool id, and
-  # break the API Gateway JWT authorizer + hosted UI. The name is an internal,
-  # user-invisible label, so it stays at the original value through the
-  # careerdoc -> growpoint project rename to protect existing users.
-  name = "careerdoc-dev-users"
+  # AWS/provider 6.63 support an in-place friendly-name update. Never replace
+  # this pool: its immutable ID owns existing logins and social identities.
+  name = "${local.name_prefix}-users"
 
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
@@ -114,6 +110,7 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   lifecycle {
+    prevent_destroy = true
     # Cognito does not allow schema mutations after pool creation.
     # Ignore provider drift here so later applies can update the rest
     # of the stack without forcing an invalid schema update attempt.
@@ -629,20 +626,29 @@ resource "aws_dynamodb_table" "consultants" {
   }
 
   global_secondary_index {
-    name            = "slug-index"
-    hash_key        = "slug"
+    name = "slug-index"
+    key_schema {
+      attribute_name = "slug"
+      key_type       = "HASH"
+    }
     projection_type = "ALL"
   }
 
   global_secondary_index {
-    name            = "owner-index"
-    hash_key        = "ownerUserId"
+    name = "owner-index"
+    key_schema {
+      attribute_name = "ownerUserId"
+      key_type       = "HASH"
+    }
     projection_type = "ALL"
   }
 
   global_secondary_index {
-    name            = "profile-status-index"
-    hash_key        = "profileStatus"
+    name = "profile-status-index"
+    key_schema {
+      attribute_name = "profileStatus"
+      key_type       = "HASH"
+    }
     projection_type = "ALL"
   }
 
@@ -674,14 +680,20 @@ resource "aws_dynamodb_table" "bookings" {
   }
 
   global_secondary_index {
-    name            = "client-index"
-    hash_key        = "clientId"
+    name = "client-index"
+    key_schema {
+      attribute_name = "clientId"
+      key_type       = "HASH"
+    }
     projection_type = "ALL"
   }
 
   global_secondary_index {
-    name            = "consultant-index"
-    hash_key        = "consultantId"
+    name = "consultant-index"
+    key_schema {
+      attribute_name = "consultantId"
+      key_type       = "HASH"
+    }
     projection_type = "ALL"
   }
 

@@ -6,11 +6,11 @@ const CACHE_SECONDS = 900;
 // A short lease prevents concurrent Lambda instances from scanning together.
 function createMetricsCache({ dynamo, table, collect, now = Date.now }) {
   const Key = { userId: "system#monitoring-snapshot" };
-  return async function metrics() {
+  return async function metrics({ revision = "", context } = {}) {
     const seconds = Math.floor(now() / 1000);
     const { Item } = await dynamo.send(new GetCommand({ TableName: table, Key, ConsistentRead: true }));
     const decorate = (payload, stale = false) => ({ ...payload, snapshot: { refreshMinutes: 15, stale } });
-    if (Item?.payload && Item.validUntil > seconds) return decorate(Item.payload);
+    if (Item?.payload && Item.validUntil > seconds && (Item.identityRevision || "") === revision) return decorate(Item.payload);
     const lease = randomUUID();
     try {
       await dynamo.send(new UpdateCommand({ TableName: table, Key,
@@ -20,15 +20,15 @@ function createMetricsCache({ dynamo, table, collect, now = Date.now }) {
       }));
     } catch (error) {
       if (error.name !== "ConditionalCheckFailedException") throw error;
-      if (Item?.payload) return decorate(Item.payload, true);
+      if (Item?.payload && (Item.identityRevision || "") === revision) return decorate(Item.payload, true);
       throw Object.assign(new Error("Статистиката се обновява. Опитай отново след малко."), { statusCode: 409 });
     }
     try {
-      const payload = await collect();
+      const payload = await collect(context);
       await dynamo.send(new UpdateCommand({ TableName: table, Key,
-        UpdateExpression: "SET payload = :payload, validUntil = :until REMOVE leaseId, leaseUntil",
+        UpdateExpression: "SET payload = :payload, validUntil = :until, identityRevision = :revision REMOVE leaseId, leaseUntil",
         ConditionExpression: "leaseId = :lease",
-        ExpressionAttributeValues: { ":payload": payload, ":until": seconds + CACHE_SECONDS, ":lease": lease }
+        ExpressionAttributeValues: { ":payload": payload, ":until": seconds + CACHE_SECONDS, ":lease": lease, ":revision": revision }
       }));
       return decorate(payload);
     } catch (error) {

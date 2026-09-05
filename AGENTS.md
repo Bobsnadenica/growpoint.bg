@@ -15,7 +15,7 @@ Guide for AI/dev sessions on this repo. Keep it short; update it when something 
 - **Production `www.growpoint.bg` is GitHub Pages** — served from the committed repo root (`index.html`, `assets/`, route-copy folders). A push to `main` deploys it.
 - **CloudFront (`d30m6jtjij7col.cloudfront.net`) is the test/cutover domain only**, served from an S3 bucket; refreshed with `npm run deploy:cloudfront`.
 - API: `https://zmajj05nm1.execute-api.eu-west-1.amazonaws.com`. Region `eu-west-1`.
-- AWS resource names are `growpoint-dev-*`. **Exception: the Cognito user pool name is pinned to `careerdoc-dev-users`** — a pool name is immutable; renaming destroys all accounts. Leave it.
+- AWS resource names are `growpoint-dev-*`. AWS provider 6.63 supports renaming the existing Cognito pool friendly name to `growpoint-dev-users` in place. Its ID must remain unchanged; `prevent_destroy` protects accounts. Never use the old provider 5.x to perform this rename (it proposes replacement).
 
 ## Run & verify
 ```
