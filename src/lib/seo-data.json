@@ -91,9 +91,18 @@
       "schemaType": "WebPage",
       "changefreq": "yearly",
       "priority": "0.3",
-      "lastmod": "2026-06-04",
+      "lastmod": "2026-09-06",
       "index": true,
       "sitemap": true,
+      "renderStatic": true
+    },
+    {
+      "path": "/legal",
+      "canonicalPath": "/terms",
+      "title": "Условия за ползване | GrowPoint",
+      "description": "Условия за ползване на GrowPoint.",
+      "index": false,
+      "sitemap": false,
       "renderStatic": true
     },
     {

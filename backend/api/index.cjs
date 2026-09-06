@@ -2445,7 +2445,9 @@ async function bootstrapUser(event) {
     userId: claims.sub,
     cognitoUsername: claims["cognito:username"] || claims.username || claims.sub,
     email: claims.email || normalizeText(body.email, "", 320),
-    name: normalizeText(body.name || claims.name, existing?.name || "", 120),
+    // Repeated bootstrap must not replace saved profile edits with stale JWT
+    // attributes. Only an explicit body field overrides an existing value.
+    name: normalizeText(body.name, existing?.name ?? normalizeText(claims.name, "", 120), 120),
     role: requestedRole,
     compedConsultant,
     restricted: existing?.restricted === true,
@@ -2459,8 +2461,8 @@ async function bootstrapUser(event) {
     referralCredited: existing?.referralCredited === true,
     plan: currentPlan,
     avatarUrl: normalizeText(
-      body.avatarUrl ?? claims.picture,
-      existing?.avatarUrl ?? "",
+      body.avatarUrl,
+      existing?.avatarUrl ?? normalizeText(claims.picture, "", 2000),
       2000
     ),
     avatarStorageKey: existing?.avatarStorageKey || "",

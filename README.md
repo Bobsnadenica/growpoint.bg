@@ -12,7 +12,8 @@ The project is a React single-page app with a small serverless AWS backend. Its 
 - **Memberships:** Start (€9.99/month), Grow (€29.99/month), and Spotlight (€99.99/month) are the current expert tiers. Client accounts are free.
 - **Onboarding:** expert self-service purchase is not implemented. The current expert path is an admin email invite, which grants a complimentary membership. A consultant becomes public only when membership is active and the profile satisfies the server-side visibility rules.
 - **Bookings:** a client chooses an available slot; the consultant can accept, decline, reschedule, or cancel. Confirmed bookings support calendar downloads, session confirmation, reviews, in-app notifications, and email notifications when SES is configured.
-- **Payments:** DKS is a clearly labelled preview only: no card input, payment request, paid status, or package activation. A booking is either unpaid, marked paid by an admin, or released through the client points reward. The meeting link remains hidden from the client while payment is unpaid. Real provider integration and verified webhooks remain future work.
+- **Payments:** The bank-neutral card checkout is a clearly labelled preview only: it shows an order summary, accepted card schemes and a working preview action. Clicking “Pay” displays a mockup notice, never a successful payment. There is no card input, payment request, paid status, or package activation. A booking is either unpaid, marked paid by an admin, or released through the client points reward. The meeting link remains hidden from the client while payment is unpaid. Real DSK provider integration and verified webhooks remain future work.
+- **Terms:** `/terms` includes the supplied V-POS clauses: Visa/Mastercard/bCard debit, credit and business cards; Identity Check/VISA Secure; a 4000 EUR maximum; no card-data storage; refunds to the same card. A notice explains that the live-payment clauses apply after activation. Confirm these conditions with the provider and legal reviewer before enabling payments; the preview does not implement a processor or refund service.
 
 ## Demonstration profile and homepage animation
 
@@ -104,7 +105,7 @@ The frontend uses Cognito for email/password authentication and optional hosted-
 4. Confirmed bookings enable the relevant conversation and document-sharing permissions. The client meeting link remains locked until the supported payment/reward condition is satisfied.
 5. Participants confirm completion and the client may review the session. Aggregate counters feed the same admin panel.
 
-The DKS preview is deliberately outside this payment flow: opening it does not call a payment provider or unlock anything.
+The card-checkout preview is deliberately outside this payment flow: opening it or clicking its payment action does not call a payment provider or unlock anything.
 
 Public expert pages are cacheable briefly; media URLs are signed and short-lived. Documents remain private, download through signed URLs, and may be shared only with a consultant connected to a confirmed booking.
 

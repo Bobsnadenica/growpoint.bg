@@ -1,3 +1,14 @@
+/* Checkout preview shares the light/dark theme tokens; no card-data inputs. */
+.modal-card.payment-preview { display: block; width: min(100%, 560px); max-height: 85dvh; overflow-y: auto; padding: 24px; }
+.payment-preview h2 { margin: 12px 0 20px; }
+.payment-preview p { margin: 8px 0; }
+.payment-preview .modal-card__actions { margin-top: 20px; }
+.payment-preview__summary, .payment-preview__method, .payment-preview__notice { padding: 20px; margin-block: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); }
+.payment-preview__summary { display: grid; gap: 10px; }
+.payment-preview__summary > span { color: var(--muted); font-size: .85rem; }
+.payment-preview__amount { font-size: 1.6rem; overflow-wrap: anywhere; }
+.payment-preview__notice { border: 2px solid var(--primary); }
+.payment-preview .modal-card__actions { flex-wrap: wrap; }
 /* Monitoring uses shared tokens, including their dark-theme overrides. */
 .monitor-page { padding-block: 56px 72px; }
 .monitor-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 36px; }

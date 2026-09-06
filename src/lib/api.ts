@@ -233,11 +233,13 @@ export const api = {
   },
 
   async updateMyProfile(token: string, input: UpdateProfileInput) {
-    return request<UserProfile>(
+    const profile = await request<UserProfile>(
       "/me/profile",
       { method: "PUT", body: JSON.stringify(input) },
       token
     );
+    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name } }));
+    return profile;
   },
 
   async getMyConsultantProfile(token: string) {
@@ -245,11 +247,13 @@ export const api = {
   },
 
   async updateMyConsultantProfile(token: string, input: UpdateConsultantInput) {
-    return request<ConsultantProfile>(
+    const profile = await request<ConsultantProfile>(
       "/consultants/me",
       { method: "PUT", body: JSON.stringify(input) },
       token
     );
+    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name } }));
+    return profile;
   },
 
   async listBookings(token: string) {

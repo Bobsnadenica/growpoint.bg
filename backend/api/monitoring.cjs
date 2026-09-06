@@ -26,7 +26,7 @@ function createMonitoring({ dynamo, table, now = Date.now }) {
 const has = (value) => Array.isArray(value) ? value.length > 0 : typeof value === "string" ? value.trim().length > 0 : Boolean(value);
 function profileCompletion(user, consultant) {
   const fields = user.role === "consultant" ? [
-    user.name, user.city, user.occupation, user.age, user.headline, user.bio,
+    consultant?.name, consultant?.city,
     consultant?.headline, consultant?.bio, consultant?.experienceSummary,
     consultant?.experienceHighlights, consultant?.educationHighlights,
     consultant?.specializations, consultant?.languages, consultant?.idealFor,

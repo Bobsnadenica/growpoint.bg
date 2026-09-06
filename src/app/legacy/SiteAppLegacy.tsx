@@ -52,6 +52,8 @@ import {
 import AvailabilityCalendar from "./AvailabilityCalendar";
 import HeroAnimation from "./HeroAnimation";
 import PaymentPlaceholder from "../components/PaymentPlaceholder";
+import { useModalFocus } from "../../lib/use-modal-focus";
+import { expertCompletion } from "../../lib/expert-completion";
 import { NOTIFICATION_ICONS, getNotificationCategory } from "../../lib/notifications";
 import { applyConsultantProfileSeo } from "../../lib/seo";
 import {
@@ -466,35 +468,7 @@ function getProfileCompletion(
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
   }
 
-  // Consultants don't earn points; their completion is a richer profile-quality
-  // measure across the public-profile fields.
-  const baseChecks = [
-    Boolean(profile.name.trim()),
-    Boolean((profile.city || "").trim()),
-    Boolean((profile.occupation || "").trim()),
-    Boolean(profile.age),
-    Boolean((profile.headline || "").trim()),
-    Boolean((profile.bio || "").trim())
-  ];
-
-  const consultantChecks = [
-    Boolean((consultantProfile?.headline || "").trim()),
-    Boolean((consultantProfile?.bio || "").trim()),
-    Boolean((consultantProfile?.experienceSummary || "").trim()),
-    Boolean((consultantProfile?.experienceHighlights || []).length),
-    Boolean((consultantProfile?.educationHighlights || []).length),
-    Boolean((consultantProfile?.specializations || []).length),
-    Boolean((consultantProfile?.languages || []).length),
-    Boolean((consultantProfile?.idealFor || []).length),
-    Boolean((consultantProfile?.consultationTopics || []).length),
-    Boolean((consultantProfile?.workApproach || "").trim()),
-    Boolean((consultantProfile?.availability || []).length)
-  ];
-
-  const checks = [...baseChecks, ...consultantChecks];
-  const completed = checks.filter(Boolean).length;
-
-  return Math.round((completed / checks.length) * 100);
+  return expertCompletion(consultantProfile);
 }
 
 function slugifyValue(value: string) {
@@ -720,42 +694,20 @@ function ImageLightbox({
   image: LightboxImage;
   onClose: () => void;
 }) {
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    window.setTimeout(() => closeButtonRef.current?.focus(), 0);
-
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", handleKey);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKey);
-      previouslyFocusedRef.current?.focus?.();
-    };
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(true, dialogRef, onClose);
 
   return (
     <OverlayPortal>
       <div
         className="image-lightbox"
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Преглед на снимка"
         onClick={onClose}
       >
         <button
-          ref={closeButtonRef}
           className="image-lightbox__close"
           type="button"
           aria-label="Затвори снимката"
@@ -2634,7 +2586,7 @@ export function AuthPage() {
     // can only be created from an admin email invite. Clients stay free + open.
     if (form.role === "consultant" && !readInviteToken()) {
       setError(
-        "Експертните профили са с покана засега. Онлайн плащането (DKS) предстои — пиши ни на contactus@growpoint.bg за достъп."
+        "Експертните профили са с покана засега. Онлайн плащането предстои — пиши ни на contactus@growpoint.bg за достъп."
       );
       return;
     }
@@ -3112,7 +3064,7 @@ export function AuthPage() {
                 {form.role === "consultant" && !readInviteToken() ? (
                   <p className="form-note auth-invite-note">
                     Експертните профили (консултанти и ментори) са платени. Онлайн
-                    плащането (DKS) предстои — засега нов експертен профил се
+                    плащането предстои — засега нов експертен профил се
                     създава само с покана от екипа на GrowPoint. Пиши ни на{" "}
                     <a href="mailto:contactus@growpoint.bg">contactus@growpoint.bg</a>.
                   </p>
@@ -5517,7 +5469,7 @@ export function DashboardPage() {
                     Специализации
                     <input
                       name="specializations"
-                      defaultValue={consultantProfile?.specializations.join(", ") || ""}
+                      defaultValue={(consultantProfile?.specializations || []).join(", ")}
                       placeholder="Executive CV, интервю подготовка, leadership"
                       required
                     />
@@ -5682,7 +5634,7 @@ export function DashboardPage() {
                       Езици
                       <input
                         name="languages"
-                        defaultValue={consultantProfile?.languages.join(", ") || ""}
+                        defaultValue={(consultantProfile?.languages || []).join(", ")}
                         placeholder="Български, English"
                         required
                       />
@@ -5691,7 +5643,7 @@ export function DashboardPage() {
                       Формати на работа
                       <input
                         name="sessionModes"
-                        defaultValue={consultantProfile?.sessionModes.join(", ") || ""}
+                        defaultValue={(consultantProfile?.sessionModes || []).join(", ")}
                         placeholder="Онлайн, В офис"
                       />
                     </label>
@@ -5701,7 +5653,7 @@ export function DashboardPage() {
                       Тагове
                       <input
                         name="tags"
-                        defaultValue={consultantProfile?.tags.join(", ") || ""}
+                        defaultValue={(consultantProfile?.tags || []).join(", ")}
                         placeholder="Leadership, Product, Promotions"
                       />
                     </label>
@@ -6673,7 +6625,7 @@ function BookingMeetingLink({
   }
   if (booking.meetingLinkLocked) {
     return (
-      <div className="payment-preview-inline"><p className="form-note">Линкът за срещата ще се отвори след реално потвърдено плащане. DKS интеграцията предстои.</p><PaymentPlaceholder description={`Резервация с ${booking.consultantName || "експерт"}`} /></div>
+      <div className="payment-preview-inline"><p className="form-note">Линкът за срещата ще се отвори след реално потвърдено плащане. Онлайн плащането все още е демонстрация.</p><PaymentPlaceholder description={`Резервация с ${booking.consultantName || "експерт"}`} /></div>
     );
   }
   return null;

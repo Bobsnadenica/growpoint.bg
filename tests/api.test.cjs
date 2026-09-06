@@ -3,6 +3,19 @@ const assert = require("node:assert/strict");
 const { loadApi } = require("./helpers/api-harness.cjs");
 const json = (value) => JSON.parse(JSON.stringify(value));
 
+test("repeat bootstrap preserves saved name and portrait instead of stale identity claims", async () => {
+  const existing = { userId: "qa", role: "client", name: "Saved name", avatarUrl: "https://example.invalid/saved.png", referralCode: "abcdefgh", points: 20, documents: [] };
+  const api = loadApi({ send: async command => command.constructor.name === "GetCommand" ? { Item: existing } : {} });
+  const event = { body: "{}", requestContext: { authorizer: { jwt: { claims: { sub: "qa", name: "Old identity name", picture: "https://example.invalid/old.png" } } } } };
+  const saved = JSON.parse((await api.test.bootstrapUser(event)).body);
+  assert.equal(saved.name, existing.name);
+  assert.equal(saved.avatarUrl, existing.avatarUrl);
+  assert.equal(saved.points, 20);
+  const edited = JSON.parse((await api.test.bootstrapUser({ ...event, body: JSON.stringify({ name: "Explicit edit", avatarUrl: "" }) })).body);
+  assert.equal(edited.name, "Explicit edit");
+  assert.equal(edited.avatarUrl, "");
+});
+
 test("cancelled-only consultant relationship cannot issue private document links", async () => {
   let privateProfileRead = false;
   const api = loadApi({ send: async (command) => {

@@ -109,7 +109,7 @@ export default function FaqPage() {
                 За условията за ползване, обработката на данни и политиката за
                 поверителност виж правната страница.
               </p>
-              <Link className="ghost-button" to="/legal">
+              <Link className="ghost-button" to="/terms">
                 Към правната страница
               </Link>
             </article>

@@ -277,6 +277,26 @@ function RouteExperience() {
 
 export default function AppShell() {
   const { user, token, loading, logout, isAdmin } = useAuth();
+  const [savedIdentity, setSavedIdentity] = useState<{ token: string; name: string } | null>(null);
+  const displayName = savedIdentity?.token === token && savedIdentity.name ? savedIdentity.name : user?.name;
+  useEffect(() => {
+    setSavedIdentity(null);
+    if (!token) return;
+    let active = true;
+    let edited = false;
+    const updated = (event: Event) => {
+      const detail = (event as CustomEvent<{ token: string; name: string }>).detail;
+      if (detail?.token !== token) return;
+      edited = true;
+      setSavedIdentity({ token, name: detail.name });
+    };
+    window.addEventListener("growpoint:profile-name", updated);
+    // One read per session, no polling; never let an older read overwrite a save.
+    void api.getMyProfile(token).then(profile => {
+      if (active && !edited) setSavedIdentity({ token, name: profile.name });
+    }).catch(() => { /* Keep the authentication fallback if no profile exists yet. */ });
+    return () => { active = false; window.removeEventListener("growpoint:profile-name", updated); };
+  }, [token]);
   const navigate = useNavigate();
   const location = useLocation();
   const currentYear = new Date().getFullYear();
@@ -683,9 +703,9 @@ export default function AppShell() {
                   <Link
                     className="ghost-button user-chip"
                     to="/dashboard"
-                    aria-label={`Отвори профила на ${user.name}`}
+                    aria-label={`Отвори профила на ${displayName}`}
                   >
-                    {user.name}
+                    {displayName}
                   </Link>
                 )}
                 {!isAdmin ? (
@@ -844,7 +864,7 @@ export default function AppShell() {
               <span className="mobile-menu__label">Профил</span>
               {user ? (
                 <>
-                  <span className="mobile-menu__user">{user.name}</span>
+                  <span className="mobile-menu__user">{displayName}</span>
                   {isAdmin ? (
                     <Link
                       to="/admin"
@@ -865,14 +885,14 @@ export default function AppShell() {
                   {!isAdmin ? (
                     <>
                       <Link
-                        to="/dashboard#notifications"
+                        to="/notifications"
                         className="mobile-menu__link"
                         onClick={() => setIsMenuOpen(false)}
                       >
                         Известия{unreadNotifications ? ` (${unreadNotifications})` : ""}
                       </Link>
                       <Link
-                        to="/dashboard#sessions"
+                        to="/messages"
                         className="mobile-menu__link"
                         onClick={() => setIsMenuOpen(false)}
                       >
