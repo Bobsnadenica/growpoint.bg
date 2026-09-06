@@ -1,5 +1,5 @@
 const { randomUUID, createHash } = require("node:crypto");
-const { createMonitoring, monitoringSummary } = require("./monitoring.cjs");
+const { createMonitoring, monitoringSummary, profileCompletion } = require("./monitoring.cjs");
 const { createIdentityChecks } = require("./identity.cjs");
 const { createMetricsCache } = require("./metrics-cache.cjs");
 const { createAccountLifecycle } = require("./account-lifecycle.cjs");
@@ -1944,6 +1944,7 @@ function consultantMembershipActive(consultant) {
 function isVisibleConsultant(consultant) {
   if (!isConsultantRecord(consultant)) return false;
   if (consultant.isExample === true || String(consultant.ownerUserId || "").startsWith("example-owner-")) return false;
+  if (consultant.visibilityMode === "hidden") return false;
   if (consultant.isPublic === false) return false;
   if (consultant.restricted === true) return false;
   if (consultant.identityDisabled || consultant.identityDeleted) return false;
@@ -1957,8 +1958,9 @@ function isVisibleConsultant(consultant) {
 
   if (name.length < 2) return false;
   if (!normalizeSlug(consultant.slug, "")) return false;
-  if (!hasValidPublicMediaUrl(consultant.avatarUrl)) return false;
-  if (!hasValidPublicMediaUrl(consultant.heroUrl)) return false;
+  // Portrait/cover are optional; the UI has an initials/cover fallback.
+  if (consultant.avatarUrl && !hasValidPublicMediaUrl(consultant.avatarUrl)) return false;
+  if (consultant.heroUrl && !hasValidPublicMediaUrl(consultant.heroUrl)) return false;
   if (!isReasonablePublicNumber(normalizeConsultantPriceEur(consultant), 0, 2500)) return false;
   if (!isReasonablePublicNumber(consultant.sessionLengthMinutes || 60, 15, 240)) return false;
 
@@ -1987,35 +1989,15 @@ function isVisibleConsultant(consultant) {
   return true;
 }
 
-// Internal completeness check — used by updateMyConsultant to silently
-// promote a pending profile to approved+public once enough fields are
-// filled. The threshold deliberately covers the same fields a client
-// would scan when choosing a consultant: identity, expertise, format,
-// availability. We do NOT surface this rule in the UI; the profile just
-// goes live when it's ready.
-function isConsultantProfileReadyForAutoApprove(consultant) {
-  const name = String(consultant.name || "").trim();
-  const headline = String(consultant.headline || "").trim();
-  const bio = String(consultant.bio || "").trim();
-  const experienceSummary = String(consultant.experienceSummary || "").trim();
-  const sessionLength = Number(consultant.sessionLengthMinutes);
-
-  return (
-    name.length >= 2 &&
-    !isPlaceholderPublicText(name) &&
-    headline.length >= 10 &&
-    !isPlaceholderPublicText(headline) &&
-    bio.length >= 80 &&
-    !isPlaceholderPublicText(bio) &&
-    experienceSummary.length >= 20 &&
-    !isPlaceholderPublicText(experienceSummary) &&
-    hasUsefulPublicList(consultant.experienceHighlights) &&
-    hasUsefulPublicList(consultant.specializations) &&
-    hasUsefulPublicList(consultant.languages) &&
-    Number.isFinite(sessionLength) &&
-    sessionLength > 0 &&
-    hasFutureAvailability(consultant.availability)
-  );
+// The same 100% meter used in the UI drives publication on save or grant.
+// Explicit admin hiding wins; account safeguards and membership remain intact.
+function applyAutomaticVisibility(consultant) {
+  if (consultant.visibilityMode !== "hidden" && consultantMembershipActive(consultant) &&
+      !consultant.identityDisabled && !consultant.identityDeleted && !consultant.deletionScheduledAt && !consultant.anonymizedAt &&
+      profileCompletion({ role: "consultant" }, consultant) === 100) {
+    return { ...consultant, isPublic: true, profileStatus: "approved", autoPublishedAt: consultant.autoPublishedAt || new Date().toISOString() };
+  }
+  return consultant;
 }
 
 const LIST_PAGE_SIZE = 24;
@@ -3006,14 +2988,7 @@ async function updateMyConsultant(event) {
   // Auto-publish: an ACTIVE (paid or admin-invited/comped) consultant whose
   // profile is complete becomes public automatically — no admin approval step.
   // Inactive accounts never go public; they must be invited or pay first.
-  if (
-    consultantMembershipActive(nextConsultant) &&
-    nextConsultant.isPublic !== true &&
-    isConsultantProfileReadyForAutoApprove(nextConsultant)
-  ) {
-    nextConsultant.isPublic = true;
-    nextConsultant.autoPublishedAt = new Date().toISOString();
-  }
+  Object.assign(nextConsultant, applyAutomaticVisibility(nextConsultant));
 
   try {
     await putConsultantWithSlugClaim({
@@ -4820,7 +4795,9 @@ async function listConsultantsForAdmin(event) {
         city: item.city || "",
         profileType: item.profileType,
         profileStatus: item.profileStatus || "approved",
-        isPublic: item.isPublic !== false,
+        isPublic: isVisibleConsultant(item),
+        visibilityMode: item.visibilityMode || "auto",
+        profileCompletion: profileCompletion({ role: "consultant" }, item),
         featured: Boolean(item.featured),
         comped: item.comped === true,
         restricted: item.restricted === true,
@@ -4902,7 +4879,9 @@ async function getConsultantForAdmin(event) {
     ownerEmail: owner?.email || "",
     ownerName: owner?.name || "",
     profileStatus: consultant.profileStatus || "approved",
-    isPublic: consultant.isPublic !== false,
+    isPublic: isVisibleConsultant(consultant),
+    visibilityMode: consultant.visibilityMode || "auto",
+    profileCompletion: profileCompletion({ role: "consultant" }, consultant),
     createdAt: consultant.createdAt || "",
     updatedAt: consultant.updatedAt || "",
     statusUpdatedAt: consultant.statusUpdatedAt || "",
@@ -4915,6 +4894,35 @@ async function getConsultantForAdmin(event) {
 // Admin-assigned visibility package (Стр. 6). Until Stripe checkout exists this
 // is the only way a profile gets Grow/Spotlight — the admin grants it (e.g. a
 // promotional arrangement), recorded as packageSource: "granted".
+async function setConsultantVisibility(event) {
+  const claims = requireAdmin(event);
+  const { visibilityMode } = parseBody(event);
+  if (!["auto", "shown", "hidden"].includes(visibilityMode)) return badRequest("Invalid visibility mode.");
+  const consultantId = event.pathParameters?.consultantId;
+  if (!consultantId) return badRequest("consultantId is required.");
+  const { Item: existing } = await dynamo.send(new GetCommand({ TableName: env.consultantsTable, Key: { consultantId }, ConsistentRead: true }));
+  if (!existing || !isConsultantRecord(existing)) return notFound("Consultant not found.");
+  const candidate = visibilityMode === "auto"
+    ? applyAutomaticVisibility({ ...existing, visibilityMode, isPublic: false })
+    : { ...existing, visibilityMode, isPublic: visibilityMode === "shown" };
+  if (visibilityMode === "shown") {
+    const owner = await getUserBySub(existing.ownerUserId);
+    if (!owner || owner.restricted || owner.deletionScheduledAt || !isVisibleConsultant(candidate)) {
+      return badRequest("Профилът трябва да има активно членство и да не е ограничен или насрочен за изтриване.");
+    }
+    const account = await identity.publicAccountState(existing.ownerUserId);
+    if (!account.exists || !account.enabled) return badRequest("Акаунтът в Cognito не е активен.");
+  }
+  const result = await dynamo.send(new UpdateCommand({
+    TableName: env.consultantsTable, Key: { consultantId },
+    UpdateExpression: "SET visibilityMode = :mode, isPublic = :public, profileStatus = :status, visibilityUpdatedBy = :admin, updatedAt = :now",
+    ConditionExpression: "attribute_exists(consultantId)" + (existing.updatedAt ? " AND updatedAt = :previous" : " AND attribute_not_exists(updatedAt)"),
+    ExpressionAttributeValues: { ":mode": visibilityMode, ":public": candidate.isPublic, ":status": candidate.isPublic ? "approved" : existing.profileStatus || "pending", ":admin": claims.sub, ":now": new Date().toISOString(), ...(existing.updatedAt ? { ":previous": existing.updatedAt } : {}) },
+    ReturnValues: "ALL_NEW"
+  }));
+  return response(200, { consultantId, visibilityMode, isPublic: isVisibleConsultant(result.Attributes || candidate) });
+}
+
 async function setConsultantPackage(event) {
   const claims = requireAdmin(event);
   const body = parseBody(event);
@@ -4942,15 +4950,15 @@ async function setConsultantPackage(event) {
   }
 
   const now = new Date().toISOString();
-  const updated = {
+  const updated = applyAutomaticVisibility({
     ...existing.Item,
     packageTier,
-    packageSource: packageTier === "start" ? "" : "granted",
+    packageSource: "granted",
     packageUpdatedAt: now,
     packageUpdatedBy: claims.sub,
     packageUpdatedByEmail: claims.email || "",
     updatedAt: now
-  };
+  });
 
   await dynamo.send(
     new PutCommand({
@@ -4963,6 +4971,7 @@ async function setConsultantPackage(event) {
     consultantId: updated.consultantId,
     packageTier: updated.packageTier,
     packageSource: updated.packageSource,
+    isPublic: isVisibleConsultant(updated),
     packageUpdatedAt: updated.packageUpdatedAt,
     packageUpdatedByEmail: updated.packageUpdatedByEmail
   });
@@ -4994,7 +5003,7 @@ async function setConsultantFeatured(event) {
 
   const isApproved =
     existing.Item.profileStatus === "approved" || existing.Item.profileStatus === "active";
-  const isPublic = existing.Item.isPublic !== false;
+  const isPublic = isVisibleConsultant(existing.Item);
 
   if (body.featured && (!isApproved || !isPublic)) {
     return badRequest("Only approved public consultant profiles can be featured.");
@@ -5530,6 +5539,12 @@ exports.handler = async (event) => {
     if (method === "PUT" && adminFeaturedMatch) {
       event.pathParameters = { ...(event.pathParameters || {}), consultantId: adminFeaturedMatch[1] };
       return await setConsultantFeatured(event);
+    }
+
+    const adminVisibilityMatch = /^\/admin\/consultants\/([^/]+)\/visibility$/.exec(path);
+    if (method === "PUT" && adminVisibilityMatch) {
+      event.pathParameters = { ...(event.pathParameters || {}), consultantId: adminVisibilityMatch[1] };
+      return await setConsultantVisibility(event);
     }
 
     const adminPackageMatch = /^\/admin\/consultants\/([^/]+)\/package$/.exec(path);

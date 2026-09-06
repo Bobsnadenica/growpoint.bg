@@ -214,6 +214,8 @@ Run `terraform -chdir=infra/terraform init -upgrade` when adopting the provider 
 
 ### QA snapshot — 6 September 2026
 
+**Expert visibility:** admins can choose **Automatic at 100%**, **Shown**, or **Hidden** on each expert card. Saving a complete profile or granting any tier (including Start) publishes an active member into the catalogue. Explicit hiding survives later edits. Showing cannot bypass inactive membership, suspension, deletion, or a disabled/missing Cognito account. Portrait/cover images are optional; provided image URLs must still be valid. Existing complete hidden profiles can be shown from admin after deployment; no bulk publication was performed. Deploy the new authenticated `/admin/consultants/{consultantId}/visibility` route and Lambda before publishing the frontend.
+
 **Release status: not yet production-certified.** The latest read-only checks confirm SES sandbox mode and an empty public expert catalogue. Automatic role reconciliation remains open, and booking/chat/shared-file workflows still require live end-to-end verification. Passing isolated tests is not a launch approval. Card payments remain intentionally mocked.
 
 Run `npm run smoke:prod -- --require-public-profile` to fail the read-only smoke check when no public expert is available. The normal command now reports that check as skipped, not passed.
@@ -222,7 +224,7 @@ Local results describe the prepared code, not a deployed release. Browser fixtur
 
 | Area tested | Result | Remaining issue / scope |
 | --- | --- | --- |
-| Automated regression checks | 34 tests passed locally | Includes ownership guards, identity cleanup, metrics and UI-policy checks; not full end-to-end certification. |
+| Automated regression checks | 40 tests passed locally | Includes ownership, identity cleanup, metrics, visibility and UI-policy checks; not full end-to-end certification. |
 | Production smoke | 13 executed checks pass; 1 skipped | Empty catalogue prevents individual expert-profile verification; strict mode fails. |
 | Sign-in, profile saves, own-file upload/download/delete | Passed with supplied QA accounts in the earlier live pass | No destructive identity deletion test on those persistent accounts. |
 | Mobile links, header names, portrait keyboard controls | Fixed and browser-tested locally | Requires frontend publication. |

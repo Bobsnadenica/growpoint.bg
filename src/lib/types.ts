@@ -26,6 +26,8 @@ export interface AdminConsultantDetail extends ConsultantProfile {
 }
 
 export interface AdminConsultantSummary {
+  visibilityMode?: "auto" | "shown" | "hidden";
+  profileCompletion?: number;
   consultantId: string;
   ownerUserId: string;
   ownerEmail: string;

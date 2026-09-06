@@ -600,6 +600,22 @@ export const api = {
     );
   },
 
+  async adminSetConsultantVisibility(
+    token: string,
+    consultantId: string,
+    visibilityMode: "auto" | "shown" | "hidden"
+  ) {
+    return request<{
+      consultantId: string;
+      visibilityMode: "auto" | "shown" | "hidden";
+      isPublic: boolean;
+    }>(
+      `/admin/consultants/${encodeURIComponent(consultantId)}/visibility`,
+      { method: "PUT", body: JSON.stringify({ visibilityMode }) },
+      token
+    );
+  },
+
   async adminSetConsultantPackage(
     token: string,
     consultantId: string,
@@ -609,6 +625,7 @@ export const api = {
       consultantId: string;
       packageTier: ConsultantPackageTier;
       packageSource?: string;
+      isPublic: boolean;
       packageUpdatedAt?: string;
       packageUpdatedByEmail?: string;
     }>(

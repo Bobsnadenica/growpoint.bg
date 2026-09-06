@@ -74,6 +74,7 @@ export default function AdminPage() {
   const [restrictActionId, setRestrictActionId] = useState<string | null>(null);
   const [featuredActionId, setFeaturedActionId] = useState<string | null>(null);
   const [packageActionId, setPackageActionId] = useState<string | null>(null);
+  const [visibilityActionId, setVisibilityActionId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [messageTargetId, setMessageTargetId] = useState<string | null>(null);
   const [adminMessageText, setAdminMessageText] = useState("");
@@ -235,6 +236,19 @@ export default function AdminPage() {
     }
   }
 
+  async function setVisibility(item: AdminConsultantSummary, visibilityMode: "auto" | "shown" | "hidden") {
+    if (!token) return;
+    setVisibilityActionId(item.consultantId);
+    setError(""); setSuccessMessage("");
+    try {
+      const updated = await api.adminSetConsultantVisibility(token, item.consultantId, visibilityMode);
+      setItems(current => current.map(entry => entry.consultantId === item.consultantId ? { ...entry, ...updated } : entry));
+      setSuccessMessage(updated.isPublic ? "Профилът е публичен." : "Видимостта е обновена. Автоматичното показване изисква активно членство и 100% попълване.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Неуспешна промяна на видимостта.");
+    } finally { setVisibilityActionId(null); }
+  }
+
   async function setFeatured(item: AdminConsultantSummary, nextFeatured: boolean) {
     if (!token) return;
 
@@ -279,14 +293,15 @@ export default function AdminPage() {
     setSuccessMessage("");
 
     try {
-      await api.adminSetConsultantPackage(token, item.consultantId, nextTier);
+      const updated = await api.adminSetConsultantPackage(token, item.consultantId, nextTier);
       setItems((currentItems) =>
         currentItems.map((current) =>
           current.consultantId === item.consultantId
             ? {
                 ...current,
                 packageTier: nextTier,
-                packageSource: nextTier === "start" ? "" : "granted"
+                packageSource: updated.packageSource,
+                isPublic: updated.isPublic
               }
             : current
         )
@@ -665,6 +680,19 @@ export default function AdminPage() {
                     ) : null}
 
                     <div className="admin-card__actions">
+                      <label className="admin-card__package-control">
+                        Видимост {typeof item.profileCompletion === "number" ? `· ${item.profileCompletion}% попълнен` : ""}
+                        <select
+                          aria-label={`Видимост на ${item.name}`}
+                          value={item.visibilityMode || "auto"}
+                          disabled={visibilityActionId === item.consultantId}
+                          onChange={event => void setVisibility(item, event.target.value as "auto" | "shown" | "hidden")}
+                        >
+                          <option value="auto">Автоматично при 100%</option>
+                          <option value="shown" disabled={!isActiveMember(item) || item.restricted}>Показан</option>
+                          <option value="hidden">Скрит</option>
+                        </select>
+                      </label>
                       <Link
                         className="primary-button"
                         to={`/admin/preview/${item.consultantId}`}
