@@ -19,7 +19,6 @@ import {
 } from "react-router-dom";
 import { api } from "../../lib/api";
 import { usePublicRefresh } from "../../lib/use-public-refresh";
-import ExampleProfileCards from "../components/ExampleProfileCards";
 import { NewPasswordRequiredError, useAuth } from "../../lib/auth";
 import {
   clearPendingBootstrap,
@@ -1363,7 +1362,7 @@ export function HomePage() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">Подбрани профили</p>
-              <h2>{!homeLoading && !homeError && featured.length === 0 ? "Твоят бъдещ експерт може да изглежда така." : "Силните профили, готови за бърз избор."}</h2>
+              <h2>Силните профили, готови за бърз избор.</h2>
             </div>
             <Link className="ghost-button" to="/users">
               Виж всички профили
@@ -1375,12 +1374,10 @@ export function HomePage() {
               <ConsultantCard key={consultant.consultantId} consultant={consultant} />
             ))}
             {homeLoading && featured.length === 0 ? [0, 1, 2].map((id) => <ConsultantCardSkeleton key={id} />) : null}
-            {!homeLoading && !homeError && featured.length < 3 ? <ExampleProfileCards count={3 - featured.length} /> : null}
           </div>
-          {!homeLoading && !homeError && featured.length < 3 ? (
+          {!homeLoading && !homeError && featured.length === 0 ? (
             <div className="panel empty-state">
-              Картите с „Example / Пример“ са измислени и показват как изглежда платформата.
-              Те не приемат резервации. Реалните активни експерти се показват с предимство и постепенно ще ги заменят.
+              Все още няма активни публични експерти. Новите профили ще се появят тук, когато са готови.
             </div>
           ) : null}
           {homeError ? <div className="panel panel--error">{homeError}</div> : null}
@@ -1714,7 +1711,7 @@ export function UsersPage() {
           {!loading && !error && visibleConsultants.length === 0 ? (
             <DirectoryFeedbackState
               tone="empty"
-              title="Няма реални експерти за избраните филтри"
+              title="Няма експерти за избраните филтри"
               message="Разшири търсенето или изчисти филтрите."
               actionLabel="Изчисти филтрите"
               onAction={() => applyDirectoryFilters({ query: "", city: "", kind: "all", topOnly: false, recommendedOnly: false, persona: null })}
@@ -1733,7 +1730,6 @@ export function UsersPage() {
             </div>
           ) : null}
 
-          {!loading && !error && !recommendedOnly && !topOnly ? <section className="section section--tight" aria-label="Примерни профили по категории"><h2>Примерни профили</h2><p>По един измислен експерт за всяка област. Картите с „Example / Пример“ са демонстрация, не реални акаунти и не приемат резервации.</p><div className="consultant-grid consultant-grid--directory"><ExampleProfileCards count={6} category={persona?.id} query={query} city={city} kind={kind} /></div></section> : null}
 
         </div>
       </section>

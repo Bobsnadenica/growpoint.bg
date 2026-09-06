@@ -14,13 +14,13 @@ The project is a React single-page app with a small serverless AWS backend. Its 
 - **Bookings:** a client chooses an available slot; the consultant can accept, decline, reschedule, or cancel. Confirmed bookings support calendar downloads, session confirmation, reviews, in-app notifications, and email notifications when SES is configured.
 - **Payments:** DKS is a clearly labelled preview only: no card input, payment request, paid status, or package activation. A booking is either unpaid, marked paid by an admin, or released through the client points reward. The meeting link remains hidden from the client while payment is unpaid. Real provider integration and verified webhooks remain future work.
 
-## Example profiles and homepage animation
+## Demonstration profile and homepage animation
 
-The homepage fills up to three showcase positions with fictional cards labelled **Example / Пример** when there are not enough real experts. Real profiles take priority. The “За хората, които търсят” catalogue also has a separate example section with **one profile for each of its six categories**, respecting category, text, city, and role filters. Examples are excluded from recommended/top-only results and never replace an API error.
+The homepage and catalogue now render **API-backed expert profiles only**. The six static fictional profiles have been retired; their old `/examples/:id` links redirect to the catalogue. Empty results and API failures remain explicit rather than being replaced with mock cards.
 
-Each example has a local AI-generated fictional portrait and a detailed `/examples/:id` page with illustrative experience, education, topics, session format, and pricing. These pages are `noindex` and excluded from the sitemap. They cannot receive bookings, messages, or payments and create **no Cognito accounts, DynamoDB records, reviews, or admin statistics**. Edit `src/app/components/example-profiles.json`; never seed these fixtures into production. See [portrait provenance and prompts](docs/example-portraits.md).
+An owner-supplied demonstration consultant has been filled through the normal profile forms, with an AI portrait, illustrative biography, and a conspicuous **Пример** label. It is a real application record, so it follows the same membership, visibility, booking, and statistics rules as other accounts; there is no hardcoded visibility bypass. It must have an active membership before it can appear publicly. Keep demonstration content labelled and never publish its login credentials. See [portrait provenance](docs/example-portraits.md) and the [latest QA report](docs/qa-2026-09-06.md).
 
-The homepage uses a lightweight animated SVG: floating elements, a drawing growth curve, progress, and conversation dots. Animation pauses offscreen or in a hidden tab and respects reduced-motion preferences. Neither examples nor animation add an AWS service or recurring compute job.
+The homepage uses a lightweight animated SVG: floating elements, a drawing growth curve, progress, and conversation dots. Animation pauses offscreen or in a hidden tab and respects reduced-motion preferences. The animation adds no AWS service or recurring compute job.
 
 ## Admin statistics
 
@@ -59,7 +59,6 @@ flowchart TB
   subgraph Web[Static website]
     GH[GitHub Pages - production] --> SPA[React + Vite in the browser]
     CF[Optional CloudFront + S3 - test hosting] -.-> SPA
-    EX[Local labelled examples and portraits] --> SPA
     SPA --> ADMIN[Unified admin panel]
   end
   subgraph Identity[Identity and access]
@@ -91,11 +90,11 @@ flowchart TB
   SPA -.->|Authorized short-lived signed URLs| S
   classDef static fill:#eaf4ee,stroke:#387052,color:#173926
   classDef secure fill:#edf2fc,stroke:#496ca8,color:#233751
-  class SPA,GH,CF,EX,ADMIN static
+  class SPA,GH,CF,ADMIN static
   class C,API,L,D,S secure
 ```
 
-The frontend uses Cognito for email/password authentication and optional hosted-UI social identity providers. API Gateway validates Cognito JWTs before protected requests reach the Node.js 22 Lambda. The Lambda owns authorization, validation, data access, notification creation, signed S3 URLs, email sending, identity reconciliation, scheduled deletion, and reminders. Production mock accounts and their refresh jobs have been removed; the labelled examples above exist only in static frontend assets.
+The frontend uses Cognito for email/password authentication and optional hosted-UI social identity providers. API Gateway validates Cognito JWTs before protected requests reach the Node.js 22 Lambda. The Lambda owns authorization, validation, data access, notification creation, signed S3 URLs, email sending, identity reconciliation, scheduled deletion, and reminders. Legacy mock seed/refresh jobs and the static example catalogue are removed; the owner-managed demonstration account uses the normal backend.
 
 ### How a session works
 

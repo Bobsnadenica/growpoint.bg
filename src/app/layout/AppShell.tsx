@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import ExampleProfilePage from "../pages/ExampleProfilePage";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -911,7 +910,7 @@ export default function AppShell() {
         <Suspense fallback={<div className="container panel" role="status">Зареждане…</div>}>
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/examples/:id" element={<ExampleProfilePage />} />
+          <Route path="/examples/:id" element={<Navigate to="/users" replace />} />
           <Route path="/users" element={<UsersPage />} />
           {/* Legacy /consultants catalog merged into /users — keep the path
              as a redirect for any bookmarks or external links. */}
