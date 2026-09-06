@@ -212,6 +212,22 @@ Run `terraform -chdir=infra/terraform init -upgrade` when adopting the provider 
 
 ## Current limitations and roadmap
 
+### QA snapshot — 6 September 2026
+
+Local results describe the prepared code, not a deployed release. Browser fixtures are isolated test data, not production accounts. See the [QA report](docs/qa-2026-09-06.md) for scope and evidence.
+
+| Area tested | Result | Remaining issue / scope |
+| --- | --- | --- |
+| Automated regression checks | 34 tests passed locally | Includes ownership guards, identity cleanup, metrics and UI-policy checks; not full end-to-end certification. |
+| Production smoke | 14/14 checks passed | Catalogue is empty, so individual expert-profile checks are skipped. |
+| Sign-in, profile saves, own-file upload/download/delete | Passed with supplied QA accounts in the earlier live pass | No destructive identity deletion test on those persistent accounts. |
+| Mobile links, header names, portrait keyboard controls | Fixed and browser-tested locally | Requires frontend publication. |
+| Expert completion and admin calculation | Local tests agree; complete editable expert form reaches 100% | Requires frontend **and backend** deployment; no membership or visibility bypass. |
+| Card checkout and terms | Mockup action, return flow, focus handling and six clauses checked | No card collection or payment requests; real processor and refunds are not implemented. |
+| Bootstrap profile preservation | Regression passed locally | Saved name/portrait preserved; automatic Cognito role reconciliation remains unresolved. |
+| Booking, two-party chat, shared-file permissions | Not verified end to end | Requires an active test expert; isolated access-denial checks passed. |
+| Email and full release readiness | Not certified | SES was sandboxed at the last live check; delivery and disposable-account lifecycle tests remain release gates. |
+
 - DKS provider integration and verified, idempotent webhooks are required before self-service paid onboarding can be enabled. The current preview never changes payment state.
 - Transactional email needs a verified SES sender and, if the AWS account is still sandboxed, recipients must be verified.
 - The large `SiteAppLegacy.tsx` and Lambda handler remain consolidation points; regression tests and lazy admin chunks are now present.
