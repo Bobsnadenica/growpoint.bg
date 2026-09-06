@@ -11356,3 +11356,98 @@ textarea {
 @keyframes hero-dot-bounce { 0%,70%,100% { transform: translateY(0); } 35% { transform: translateY(-7px); } }
 .home-hero__illustration[data-paused="true"] * { animation-play-state: paused !important; }
 @media (prefers-reduced-motion: reduce) { .home-hero__illustration * { animation: none !important; stroke-dashoffset: 0 !important; } }
+
+/* GrowPoint interaction polish: shared controls, restrained surfaces, native type. */
+:root {
+  --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif;
+  --ui-control: #f1f4f2;
+  --ui-control-hover: #e7ede9;
+  --ui-control-text: #283e34;
+  --ui-action: #355c4c;
+  --ui-action-hover: #294a3c;
+  --ui-action-text: #ffffff;
+  --ui-line: #d6dfd9;
+  --ui-glass: rgba(250, 252, 250, .92);
+  --ui-focus: #357d62;
+  --ui-elevation: 0 2px 6px rgba(20, 35, 28, .025), 0 16px 44px rgba(20, 35, 28, .045);
+  --ui-ease: cubic-bezier(.2, .7, .2, 1);
+}
+:root[data-theme="dark"] {
+  --ui-control: #23302a;
+  --ui-control-hover: #303f36;
+  --ui-control-text: #e5eee8;
+  --ui-action: #a3cbb7;
+  --ui-action-hover: #bbdccb;
+  --ui-action-text: #17291f;
+  --ui-line: #3c4c42;
+  --ui-glass: rgba(20, 28, 24, .94);
+  --ui-focus: #a3d8bd;
+  --ui-elevation: 0 2px 6px rgba(0, 0, 0, .12), 0 16px 44px rgba(0, 0, 0, .16);
+}
+body { font-family: var(--ui-font); }
+:root[data-theme] :is(.primary-button, .ghost-button) {
+  min-height: 46px;
+  padding: 12px 22px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  font-size: .9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -.015em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  box-shadow: none;
+  touch-action: manipulation;
+  transition: background-color 160ms var(--ui-ease), color 160ms var(--ui-ease), border-color 160ms var(--ui-ease), transform 160ms var(--ui-ease), box-shadow 160ms var(--ui-ease);
+}
+:root[data-theme] .primary-button { background: var(--ui-action); color: var(--ui-action-text); }
+:root[data-theme] .ghost-button { background: var(--ui-control); color: var(--ui-control-text); border-color: var(--ui-line); }
+:root[data-theme] .ghost-button--danger:not(:disabled) { color: var(--danger); border-color: var(--danger); }
+:root[data-theme] .tab-row { padding: 4px; gap: 4px; border-radius: 15px; background: var(--ui-control); }
+:root[data-theme] .tab-row button { border-radius: 11px; border-color: transparent; background: transparent; font-weight: 600; box-shadow: none; transform: none; }
+:root[data-theme] .tab-row .tab-row__active { background: var(--surface) !important; color: var(--text) !important; border-color: var(--ui-line) !important; box-shadow: 0 1px 4px rgba(0, 0, 0, .06); }
+:root[data-theme] :is(.primary-button, .ghost-button):disabled {
+  background: var(--ui-control); color: var(--muted); border-color: var(--ui-line);
+  opacity: .65; box-shadow: none; transform: none; cursor: not-allowed;
+}
+:root[data-theme] :is(.site-nav a, .user-chip) {
+  min-height: 44px; border-radius: 12px; padding: 10px 14px;
+  font-weight: 500; font-size: .875rem; background: transparent;
+  border-color: transparent; box-shadow: none; color: var(--text-soft);
+}
+:root[data-theme] .site-nav a.active { background: var(--ui-control); color: var(--text); }
+:root[data-theme] .site-header {
+  background: var(--ui-glass); border-bottom: 1px solid var(--ui-line);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .025);
+  -webkit-backdrop-filter: blur(20px) saturate(125%);
+  backdrop-filter: blur(20px) saturate(125%);
+}
+:root[data-theme] :is(.topbar-alert, .menu-toggle, .theme-toggle) {
+  min-width: 44px; min-height: 44px; border-radius: 12px;
+  background: var(--ui-control); border-color: var(--ui-line); box-shadow: none;
+}
+:root[data-theme] :is(.panel, .auth-copy, .modal-card) { border-radius: 24px; box-shadow: var(--ui-elevation); }
+:root[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea) {
+  border-radius: 12px; border: 1px solid var(--ui-line);
+  background: var(--surface); color: var(--text); box-shadow: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+:root[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select) { min-height: 46px; }
+:root[data-theme] :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--ui-focus); outline-offset: 3px;
+  box-shadow: 0 0 0 5px var(--surface);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root[data-theme] .primary-button:not(:disabled):hover { background: var(--ui-action-hover); transform: translateY(-1px); box-shadow: var(--ui-elevation); }
+  :root[data-theme] .ghost-button:not(:disabled):hover { background: var(--ui-control-hover); border-color: var(--ui-line); transform: translateY(-1px); }
+  :root[data-theme] :is(.site-nav a, .user-chip):hover { background: var(--ui-control); transform: none; box-shadow: none; }
+}
+:root[data-theme] :is(.primary-button, .ghost-button):not(:disabled):active { transform: scale(.985); box-shadow: none; }
+@media (max-width: 640px) {
+  :root[data-theme] :is(input, select, textarea) { font-size: 16px; }
+  :root[data-theme] :is(.primary-button, .ghost-button) { min-height: 48px; padding-inline: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] :is(.primary-button, .ghost-button, .site-nav a, .user-chip, input, select, textarea) { transition: none; transform: none !important; }
+}

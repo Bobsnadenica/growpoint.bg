@@ -222,6 +222,7 @@ Local results describe the prepared code, not a deployed release. Browser fixtur
 | Production smoke | 14/14 checks passed | Catalogue is empty, so individual expert-profile checks are skipped. |
 | Sign-in, profile saves, own-file upload/download/delete | Passed with supplied QA accounts in the earlier live pass | No destructive identity deletion test on those persistent accounts. |
 | Mobile links, header names, portrait keyboard controls | Fixed and browser-tested locally | Requires frontend publication. |
+| Shared visual polish | 20 local page/viewport checks without overflow or JavaScript exceptions; light/dark screenshots inspected | Reduced-motion button transitions verified off; no new dependencies or infrastructure. |
 | Expert completion and admin calculation | Local tests agree; complete editable expert form reaches 100% | Requires frontend **and backend** deployment; no membership or visibility bypass. |
 | Card checkout and terms | Mockup action, return flow, focus handling and six clauses checked | No card collection or payment requests; real processor and refunds are not implemented. |
 | Bootstrap profile preservation | Regression passed locally | Saved name/portrait preserved; automatic Cognito role reconciliation remains unresolved. |
@@ -234,6 +235,8 @@ Local results describe the prepared code, not a deployed release. Browser fixtur
 - See [`plan.txt`](plan.txt) for the maintained implementation queue and [`docs/social-login-setup.md`](docs/social-login-setup.md) for social-login configuration.
 
 ## Contributing
+
+The shared interface uses a native system-font stack, sage-accent primary actions, consistent rounded controls, segmented tabs, restrained surface shadows and a translucent header. Styling lives in the final interaction-polish section of `src/styles/global.css`. Preserve light/dark token pairs, visible keyboard focus, destructive-action colour, disabled states and reduced-motion support. No additional UI library or hosted service is required.
 
 Preserve existing uncommitted work, keep generated deployment output intentional, and do not commit secrets. For backend work, change the Lambda handler and matching Terraform route together. For visible UI work, verify both light and dark themes and test the route at desktop and mobile widths.
 
