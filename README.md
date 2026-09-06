@@ -214,12 +214,16 @@ Run `terraform -chdir=infra/terraform init -upgrade` when adopting the provider 
 
 ### QA snapshot — 6 September 2026
 
+**Release status: not yet production-certified.** The latest read-only checks confirm SES sandbox mode and an empty public expert catalogue. Automatic role reconciliation remains open, and booking/chat/shared-file workflows still require live end-to-end verification. Passing isolated tests is not a launch approval. Card payments remain intentionally mocked.
+
+Run `npm run smoke:prod -- --require-public-profile` to fail the read-only smoke check when no public expert is available. The normal command now reports that check as skipped, not passed.
+
 Local results describe the prepared code, not a deployed release. Browser fixtures are isolated test data, not production accounts. See the [QA report](docs/qa-2026-09-06.md) for scope and evidence.
 
 | Area tested | Result | Remaining issue / scope |
 | --- | --- | --- |
 | Automated regression checks | 34 tests passed locally | Includes ownership guards, identity cleanup, metrics and UI-policy checks; not full end-to-end certification. |
-| Production smoke | 14/14 checks passed | Catalogue is empty, so individual expert-profile checks are skipped. |
+| Production smoke | 13 executed checks pass; 1 skipped | Empty catalogue prevents individual expert-profile verification; strict mode fails. |
 | Sign-in, profile saves, own-file upload/download/delete | Passed with supplied QA accounts in the earlier live pass | No destructive identity deletion test on those persistent accounts. |
 | Mobile links, header names, portrait keyboard controls | Fixed and browser-tested locally | Requires frontend publication. |
 | Shared visual polish | 20 local page/viewport checks without overflow or JavaScript exceptions; light/dark screenshots inspected | Reduced-motion button transitions verified off; no new dependencies or infrastructure. |

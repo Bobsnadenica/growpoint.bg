@@ -145,6 +145,11 @@ async function check(name, fn) {
   const startedAt = Date.now();
   try {
     const detail = await fn();
+    if (detail?.skipped) {
+      state.checks.push({ name, ok: true, skipped: true, ms: Date.now() - startedAt, detail: detail.skipped });
+      console.log(`SKIP ${name} - ${detail.skipped}`);
+      return;
+    }
     state.checks.push({ name, ok: true, ms: Date.now() - startedAt, detail: detail || "" });
     console.log(`PASS ${name}${detail ? ` - ${detail}` : ""}`);
   } catch (error) {
@@ -183,7 +188,10 @@ async function publicChecks(config) {
   });
 
   await check("Live consultant profile", async () => {
-    if (!firstConsultantSlug) return "empty catalogue; no mock profile required";
+    if (!firstConsultantSlug) {
+      if (args.has("--require-public-profile")) throw new Error("No public expert is available for live profile verification.");
+      return { skipped: "empty catalogue; individual public profile not verified" };
+    }
     const payload = await api(config, `/consultants/${encodeURIComponent(firstConsultantSlug)}`);
     if (!payload?.consultantId) throw new Error("Profile payload missing consultantId.");
     return "active profile returned";
@@ -1030,9 +1038,12 @@ async function liveMutationChecks(config) {
 
 function printSummary() {
   const failed = state.checks.filter((item) => !item.ok);
+  const skipped = state.checks.filter((item) => item.skipped);
   console.log("\nProduction smoke summary");
   console.log(`Run id: ${state.runId}`);
-  console.log(`Checks: ${state.checks.length - failed.length}/${state.checks.length} passed`);
+  const executed = state.checks.length - skipped.length;
+  console.log(`Checks: ${executed - failed.length}/${executed} passed; ${skipped.length} skipped`);
+  console.log("Smoke checks alone do not certify authenticated workflows, email delivery, or production readiness.");
   if (failed.length) {
     console.log("Failures:");
     for (const item of failed) {

@@ -4,6 +4,8 @@ Last reviewed: 2026-09-06. This is the canonical project memory. The historical 
 
 ## Latest authenticated QA and demonstration policy — 2026-09-06
 
+- Production-readiness recheck: SES still ProductionAccessEnabled=false, SendingEnabled=true; public API catalogue empty. 34 regression tests pass, Terraform validates, frontend/backend production-dependency audits report zero vulnerabilities, secret scan passes. These do not certify launch. Smoke reporting corrected: empty-catalogue profile check is SKIP, not PASS (13 executed + 1 skipped); --require-public-profile fails explicitly. Automatic role reconciliation, live booking/chat/sharing, SES general delivery and disposable identity lifecycle remain release gates. No AWS mutation or deployment in this check.
+
 - Owner requested a slick Apple-like overall feel. Shared CSS now uses native system typography, sage-accent rounded buttons, subtle pressed/hover feedback, segmented auth tabs, quieter navigation, translucent header and restrained card/modal shadows. Maintain light/dark --ui-* tokens, focus rings, red destructive actions, disabled styling, 44–48px control targets and reduced-motion overrides. No dependencies, backend changes or infrastructure added for this visual pass. Build output still needs normal publication.
 
 - Second QA/fix pass: expert completion now counts 13 editable public fields, not hidden private occupation/age/bio or duplicated headline. Frontend helper and backend monitoring have parity tests for every missing field. A synthetic expert with no private fields reaches 100% in the actual dashboard. Requires both frontend and Lambda deployment; does not activate membership.
