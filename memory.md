@@ -1,6 +1,20 @@
 # GrowPoint working memory
 
-Last reviewed: 2026-09-06. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+Last reviewed: 2026-09-08. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+
+## Latest scoped live QA — 2026-09-08
+
+- See `docs/qa-2026-09-08.md`. This QA-only pass changed documentation and explicitly authorized test data, not application code, memberships, payment state or deployment. Owner handles publication/AWS apply.
+- Current regression result is **39/40**, not the older 40-pass claim: `getCanonicalConsultantScore` still calls removed `isConsultantProfileReadyForAutoApprove`. Production smoke **13/14**: one public expert API works, but direct detail-page document returns 404. TypeScript, backend syntax and secret scan pass.
+- Second supplied client was filled in the preceding portion of this run with a labelled fictional profile and AI portrait; 100% completion and 20 points persisted. Never record credentials, emails, identity IDs, tokens or private storage keys in durable docs.
+- One newly labelled QA booking was created, accepted by the authorized expert, rescheduled to another published slot, then cancelled by its client. Final state cancelled/unpaid, points unchanged. Pre-existing unrelated booking remains pending at original time. Cancelled QA booking/messages remain as audit data; do not delete unrelated records or falsify metrics.
+- Two UI chat sends returned 201 and persisted. Expert open thread, including hide/reopen, stayed stale until full page reload. Fresh reload displays both messages. This is a remaining UX issue, not full real-time chat proof.
+- Synthetic document shared through UI, downloaded by expert with correct content, then unshared. Fresh expert booking data contains zero shared files. Previously issued S3 document links have a 900-second TTL; immediate revocation of those URLs was not demonstrated. Synthetic document remains private. Unrelated client receives 403 for QA chat and admin metrics.
+- Public calendar/reschedule list still offers occupied pending-booking slot; backend correctly rejects overlap. Correct availability presentation without changing the unrelated booking.
+- Payment preview has no card fields; clicking its action shows explicit mockup notice and no write requests were observed. No payment, grant, completion or review was fabricated.
+- Admin metrics API 200: six Cognito identities, four linked application profiles. Different count populations; missing relationships not individually investigated. SES productionAccess=false, sendingEnabled=true; general email delivery remains unverified.
+- 390px client/expert/admin checks found no horizontal overflow; dark mobile menu inspected and mobile messages route verified. Notification API contains lifecycle/message events; read-state and full accessibility matrix remain untested. See report for remaining release gates. No production-ready claim.
+- All four QA sessions signed out successfully; stored identity tokens disappeared and protected dashboard navigation redirected to sign-in.
 
 ## Latest authenticated QA and demonstration policy — 2026-09-06
 
