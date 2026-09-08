@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { useLiveBookingMessages } from "../../lib/use-live-booking-messages";
+import { mergeMessages } from "../../lib/live-messages";
 import { formatDateTimeBg, formatRelativeBg } from "../../lib/datetime";
 import type { Booking, BookingMessage, UserProfile } from "../../lib/types";
 import PageScene from "../layout/PageScene";
@@ -81,28 +83,21 @@ export default function MessagesPage() {
     (item) => item.booking.bookingId === activeId
   );
 
-  const loadThread = useCallback(
-    async (bookingId: string) => {
-      if (!token) return;
-      setThreadLoading(true);
-      setError("");
-      try {
-        const result = await api.listBookingMessages(token, bookingId);
-        setThread(result.items || []);
-      } catch {
-        setThread([]);
-      } finally {
-        setThreadLoading(false);
-      }
-    },
-    [token]
-  );
+  useLiveBookingMessages(token, activeId, items => {
+    setThread(current => mergeMessages(current, items));
+    setThreadLoading(false);
+    setError("");
+    setBookings(current => current.map(booking => booking.bookingId === activeId
+      ? { ...booking, messages: mergeMessages(booking.messages || [], items) } : booking));
+  }, message => { setThreadLoading(false); setError(message); });
 
   function openConversation(bookingId: string) {
+    if (bookingId === activeId) return;
     setActiveId(bookingId);
+    setThread([]);
+    setThreadLoading(true);
     setDraft("");
     setError("");
-    void loadThread(bookingId);
   }
 
   async function sendMessage() {
@@ -113,7 +108,7 @@ export default function MessagesPage() {
     setError("");
     try {
       const result = await api.sendBookingMessage(token, activeId, body);
-      setThread((current) => [...current, result.message]);
+      setThread((current) => mergeMessages(current, [result.message]));
       setDraft("");
       // Keep the conversation list in sync so the preview/order updates.
       setBookings((current) =>

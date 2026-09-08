@@ -27,10 +27,10 @@ import type {
 } from "./types";
 
 type BootstrapInput = {
-  email: string;
-  name: string;
-  role: UserRole;
-  plan: PlanTier;
+  email?: string;
+  name?: string;
+  role?: UserRole;
+  plan?: PlanTier;
   avatarUrl?: string;
   city?: string;
   occupation?: string;
@@ -180,6 +180,8 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   return (await response.json()) as T;
 }
 
+const profileRepairs = new Map<string, Promise<UserProfile>>();
+
 export const api = {
   async listConsultants(filters: { query?: string; city?: string } = {}): Promise<ConsultantProfile[]> {
     requireBackend();
@@ -229,7 +231,20 @@ export const api = {
   },
 
   async getMyProfile(token: string) {
-    return request<UserProfile>("/me/profile", undefined, token);
+    try {
+      return await request<UserProfile>("/me/profile", undefined, token);
+    } catch (error) {
+      // A console-created Cognito account has no app profile until first use.
+      // Repair only the explicit missing-profile response, never auth/network
+      // errors. Share the in-flight repair across header/page reads.
+      if (!(error instanceof Error) || !error.message.includes("Profile not found")) throw error;
+      let repair = profileRepairs.get(token);
+      if (!repair) {
+        repair = api.bootstrapUser(token, {}).finally(() => profileRepairs.delete(token));
+        profileRepairs.set(token, repair);
+      }
+      return repair;
+    }
   },
 
   async updateMyProfile(token: string, input: UpdateProfileInput) {

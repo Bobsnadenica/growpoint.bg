@@ -19,6 +19,8 @@ import {
 } from "react-router-dom";
 import { api } from "../../lib/api";
 import { usePublicRefresh } from "../../lib/use-public-refresh";
+import { useLiveBookingMessages } from "../../lib/use-live-booking-messages";
+import { mergeMessages } from "../../lib/live-messages";
 import { NewPasswordRequiredError, useAuth } from "../../lib/auth";
 import {
   clearPendingBootstrap,
@@ -3523,7 +3525,7 @@ async function fetchProfileWithRetry(token: string) {
       throw error;
     }
     try {
-      await api.bootstrapUser(token, { name: "", email: "", role: "client", plan: "free" });
+      await api.bootstrapUser(token, {});
     } catch {
       // A concurrent bootstrap (or a transient error) is fine; the retry read
       // below still resolves the profile if it now exists.
@@ -3566,6 +3568,10 @@ export function DashboardPage() {
   const [messageSendingId, setMessageSendingId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  useLiveBookingMessages(token, sessionsOpen ? openMessageBookingId : null, items => {
+    setBookings(current => current.map(booking => booking.bookingId === openMessageBookingId
+      ? { ...booking, messages: mergeMessages(booking.messages || [], items) } : booking));
+  }, setError);
   const dashboardAdAsset = useMemo(
     () => DASHBOARD_AD_ASSETS[Math.floor(Math.random() * DASHBOARD_AD_ASSETS.length)],
     []
@@ -7156,9 +7162,15 @@ function RescheduleModal({
         )?.consultant || null;
 
   const availableSlots = resolvedConsultant
-    ? getUpcomingAvailabilitySlots(resolvedConsultant.availability, 24).filter(
-        (slot) => slot !== booking.scheduledAt
-      )
+    ? getUpcomingAvailabilitySlots(resolvedConsultant.availability, 24).filter(slot => {
+        if (slot === booking.scheduledAt) return false;
+        const duration = (resolvedConsultant.sessionLengthMinutes || 60) * 60000;
+        return !(resolvedConsultant.bookedSlots || []).some(occupied => {
+          if (occupied === booking.scheduledAt) return false;
+          return Date.parse(slot) < Date.parse(occupied) + duration &&
+            Date.parse(occupied) < Date.parse(slot) + duration;
+        });
+      })
     : [];
 
   const [selected, setSelected] = useState("");

@@ -173,6 +173,8 @@ export interface ConsultantProfile {
   heroStorageKey?: string;
   tags: string[];
   availability: string[];
+  /** Owner/admin only; never returned in the public catalogue. */
+  bookedSlots?: string[];
   idealFor?: string[];
   consultationTopics?: string[];
   workApproach?: string;

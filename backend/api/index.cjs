@@ -672,7 +672,9 @@ async function putConsultantWithSlugClaim({ consultant, previousSlug = null }) {
   transactItems.push({
     Put: {
       TableName: env.consultantsTable,
-      Item: consultant
+      Item: consultant,
+      ConditionExpression: bookedSlotsSnapshot(consultant).condition,
+      ...(Array.isArray(consultant.bookedSlots) ? { ExpressionAttributeValues: bookedSlotsSnapshot(consultant).values } : {})
     }
   });
 
@@ -688,7 +690,8 @@ async function putConsultantWithSlugClaim({ consultant, previousSlug = null }) {
   try {
     await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems }));
   } catch (error) {
-    if (error.name === "TransactionCanceledException") {
+    if (error.name === "TransactionCanceledException" && consultant.slug !== previousSlug &&
+        error.CancellationReasons?.[0]?.Code === "ConditionalCheckFailed") {
       throw new SlugConflictError(consultant.slug);
     }
     throw error;
@@ -759,7 +762,7 @@ function getCanonicalConsultantScore(consultant) {
   if (Number(consultant.experienceYears) > 0) score += 4;
   if (consultant.profileStatus === "approved") score += 90;
   if (consultant.isPublic === true) score += 30;
-  if (isConsultantProfileReadyForAutoApprove(consultant)) score += 140;
+  if (profileCompletion({ role: "consultant" }, consultant) === 100) score += 140;
   if (isVisibleConsultant(consultant)) score += 220;
 
   return score;
@@ -1732,12 +1735,38 @@ function getConsultantPackageRank(item) {
 
 function stripSensitiveConsultantFields(consultant) {
   if (!consultant) return consultant;
-  const cleaned = { ...consultant };
+  const availability = getBookableAvailability(consultant);
+  const cleaned = { ...consultant, availability, nextAvailable: availability[0] || "" };
   for (const key of PUBLIC_CONSULTANT_HIDDEN_FIELDS) {
     delete cleaned[key];
   }
   cleaned.packageTier = normalizeConsultantPackageTier(cleaned.packageTier);
   return cleaned;
+}
+
+// Uses the reservation list already stored with the expert: no per-card scans.
+// Keep the owner's editable schedule intact; only public booking choices shrink.
+function getBookableAvailability(consultant) {
+  const duration = (Number(consultant.sessionLengthMinutes) || 60) * 60000;
+  const occupied = normalizeAvailabilitySlots(consultant.bookedSlots || [], []);
+  return normalizeAvailabilitySlots(consultant.availability || [], []).filter((slot) => {
+    const start = Date.parse(slot);
+    return start > Date.now() && !occupied.some((booked) => {
+      const other = Date.parse(booked);
+      return start < other + duration && other < start + duration;
+    });
+  });
+}
+
+// A slot-list replacement must not erase a concurrent reservation. All booking
+// mutations compare the list they read, including legacy items without a list.
+function bookedSlotsSnapshot(consultant) {
+  return {
+    condition: Array.isArray(consultant.bookedSlots)
+      ? "bookedSlots = :previousSlots" : "attribute_not_exists(bookedSlots)",
+    values: Array.isArray(consultant.bookedSlots)
+      ? { ":previousSlots": consultant.bookedSlots } : {}
+  };
 }
 
 function computeAggregateRating(consultant) {
@@ -2495,6 +2524,8 @@ async function bootstrapUser(event) {
       await dynamo.send(
         new PutCommand({
           TableName: env.consultantsTable,
+          ConditionExpression: bookedSlotsSnapshot(existingConsultant).condition,
+          ...(Array.isArray(existingConsultant.bookedSlots) ? { ExpressionAttributeValues: bookedSlotsSnapshot(existingConsultant).values } : {}),
           Item: {
             ...existingConsultant,
             comped: existingConsultant.comped === true || compedConsultant,
@@ -2676,6 +2707,23 @@ async function getMeProfile(event) {
 
   if (!user) {
     return notFound("Profile not found. Call /auth/bootstrap first.");
+  }
+
+  // Reconcile role on ordinary authenticated profile reads, not only signup.
+  // Update just the role: never rewrite the saved biography, files or points.
+  assertNotRestricted(user);
+  const groups = getClaimGroups(claims);
+  const groupRole = groups.includes(CONSULTANT_GROUP) ? "consultant"
+    : groups.includes(CLIENT_GROUP) ? "client" : null;
+  if (groupRole && groupRole !== user.role) {
+    await dynamo.send(new UpdateCommand({
+      TableName: env.usersTable, Key: { userId: claims.sub },
+      UpdateExpression: "SET #role = :role",
+      ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted)",
+      ExpressionAttributeNames: { "#role": "role" },
+      ExpressionAttributeValues: { ":role": groupRole }
+    }));
+    user.role = groupRole;
   }
 
   // Backfill/repair referral codes for accounts created before the points
@@ -3193,6 +3241,10 @@ async function createBooking(event) {
     );
   }
 
+  if (!getBookableAvailability(consultant).includes(normalizedScheduledAt)) {
+    return badRequest("The selected slot already has an active booking request.");
+  }
+
   // Per-(client, consultant) rate limit: at most 5 active bookings against the
   // same consultant in any rolling 24h window. Defends against accidental
   // duplicate submits and intentional spam without locking out legit re-bookings.
@@ -3248,8 +3300,9 @@ async function createBooking(event) {
         UpdateExpression:
           "SET bookedSlots = list_append(if_not_exists(bookedSlots, :emptySlots), :slotList)",
         ConditionExpression:
-          "contains(availability, :scheduledAt) AND (attribute_not_exists(bookedSlots) OR NOT contains(bookedSlots, :scheduledAt))",
+          "contains(availability, :scheduledAt) AND " + bookedSlotsSnapshot(consultant).condition,
         ExpressionAttributeValues: {
+          ...bookedSlotsSnapshot(consultant).values,
           ":scheduledAt": normalizedScheduledAt,
           ":emptySlots": [],
           ":slotList": [normalizedScheduledAt]
@@ -3720,7 +3773,8 @@ async function declineBooking({ claims, bookingId, reason }) {
             TableName: env.consultantsTable,
             Key: { consultantId: consultant.consultantId },
             UpdateExpression: "SET bookedSlots = :slots",
-            ExpressionAttributeValues: { ":slots": nextBookedSlots }
+            ConditionExpression: bookedSlotsSnapshot(consultant).condition,
+            ExpressionAttributeValues: { ":slots": nextBookedSlots, ...bookedSlotsSnapshot(consultant).values }
           }
         }
       ]
@@ -3833,6 +3887,9 @@ async function rescheduleBooking(event) {
     ? consultant.bookedSlots
     : [];
   const nextBookedSlots = currentBookedSlots.filter((s) => s !== oldScheduledAt);
+  if (!getBookableAvailability({ ...consultant, bookedSlots: nextBookedSlots }).includes(normalizedNew)) {
+    return badRequest("The new slot already has an active booking request.");
+  }
   if (!nextBookedSlots.includes(normalizedNew)) {
     nextBookedSlots.push(normalizedNew);
   }
@@ -3872,7 +3929,8 @@ async function rescheduleBooking(event) {
               TableName: env.consultantsTable,
               Key: { consultantId: consultant.consultantId },
               UpdateExpression: "SET bookedSlots = :slots",
-              ExpressionAttributeValues: { ":slots": nextBookedSlots }
+              ConditionExpression: "contains(availability, :newSlot) AND " + bookedSlotsSnapshot(consultant).condition,
+              ExpressionAttributeValues: { ":slots": nextBookedSlots, ":newSlot": normalizedNew, ...bookedSlotsSnapshot(consultant).values }
             }
           }
         ]
@@ -3995,8 +4053,11 @@ async function updateBookingStatus(event) {
         Key: { bookingId },
         UpdateExpression:
           "SET #s = :cancelled, cancelledAt = :now, cancelledBy = :actor",
+        ConditionExpression: "#s = :previousStatus AND scheduledAt = :previousAt",
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
+          ":previousStatus": booking.status,
+          ":previousAt": booking.scheduledAt,
           ":cancelled": "cancelled",
           ":now": new Date().toISOString(),
           ":actor": cancelledBy
@@ -4011,7 +4072,8 @@ async function updateBookingStatus(event) {
         TableName: env.consultantsTable,
         Key: { consultantId: booking.consultantId },
         UpdateExpression: "SET bookedSlots = :slots",
-        ExpressionAttributeValues: { ":slots": nextBookedSlots }
+        ConditionExpression: bookedSlotsSnapshot(consultant).condition,
+        ExpressionAttributeValues: { ":slots": nextBookedSlots, ...bookedSlotsSnapshot(consultant).values }
       }
     });
   }
@@ -5563,7 +5625,9 @@ exports.handler = async (event) => {
   } catch (error) {
     // EventBridge/Lambda must see a failure to retry asynchronous cleanup.
     if (event.source === "aws.cognito-idp" || event.source === "aws.events") throw error;
-    const statusCode = error.statusCode || (error.name === "ConditionalCheckFailedException" ? 409 : 500);
+    const conflict = error.name === "ConditionalCheckFailedException" ||
+      (error.name === "TransactionCanceledException" && error.CancellationReasons?.some(reason => reason.Code === "ConditionalCheckFailed" || reason.Code === "TransactionConflict"));
+    const statusCode = error.statusCode || (conflict ? 409 : 500);
     if (statusCode >= 500) {
       await monitoring.record("apiErrors");
       console.error("[api] request failed", { requestId: event.requestContext?.requestId, error: error.name });
