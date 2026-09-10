@@ -4,7 +4,16 @@ Last reviewed: 2026-09-10. This is the canonical project memory. The historical 
 
 ## Latest functionality corrections — 2026-09-10
 
-- User explicitly requested fixes and push. Frontend rebuild/push is in scope; no AWS apply or production data mutation in this pass. Preserve the owner's modified generated Lambda ZIP and exclude it from this commit.
+### Authorized deployment follow-up
+
+- Owner explicitly authorized Terraform apply and push after the correction pass. Reviewed a saved plan and applied it: Lambda code updated in place, existing alert topic gained an email subscription, zero destroyed resources. Cognito pool and DynamoDB tables unchanged.
+- Verified Lambda Active/Successful and deployed code hash equal to the reviewed package; ZIP handler matches source. Post-apply Terraform plan has no changes; post-apply live smoke 14/14. Backend rollout is no longer pending; full authenticated lifecycle retesting remains pending.
+- Alert email subscription PendingConfirmation=true; owner must confirm the subscription email. SES rechecked on 10 September: sending enabled, production access disabled. No SES production-access request was submitted.
+- Terraform regenerated the already tracked Lambda ZIP. Commit that deployment artifact and safe documentation only; never commit the plan, state, tfvars or credentials. Earlier notes about excluding the pre-existing ZIP describe the earlier frontend-only pass, not this explicitly authorized backend deployment.
+
+### Earlier correction pass (before deployment)
+
+- User explicitly requested fixes and push. That pass rebuilt/pushed the frontend without AWS apply or production data mutation, and excluded the pre-existing generated Lambda ZIP.
 - Local tests 48/48, build, TypeScript, Lambda syntax, Terraform validate and secret scan pass. Frontend/backend production dependency audits report zero vulnerabilities. Live smoke now 14/14, including the expert detail document; old 404 is resolved in the live site. See `docs/qa-2026-09-10.md`.
 - Prior fixes are present: current expert-completeness scoring, public occupied-slot filtering, conditional reservation-list writes and profile-write guards, shared first-use profile repair, group-role reconciliation on profile reads. These do not imply all backend behavior has been deployed or live-certified.
 - Additional fixes: archived chat GET allowed for participants with existing history; POST still confirmed-only. GET now returns optional status. Both chat UIs update without reload, pause hidden/closed conversations, back off errors and avoid polling archives. Late reads/sends cannot contaminate a newly selected thread. Loading failures show retry instead of a false empty inbox.
