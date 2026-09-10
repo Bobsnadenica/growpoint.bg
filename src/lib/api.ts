@@ -366,7 +366,7 @@ export const api = {
   },
 
   async listBookingMessages(token: string, bookingId: string) {
-    return request<{ items: BookingMessage[] }>(
+    return request<{ items: BookingMessage[]; status?: Booking["status"] }>(
       `/bookings/${encodeURIComponent(bookingId)}/messages`,
       undefined,
       token

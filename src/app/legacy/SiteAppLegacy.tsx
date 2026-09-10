@@ -3568,10 +3568,10 @@ export function DashboardPage() {
   const [messageSendingId, setMessageSendingId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
-  useLiveBookingMessages(token, sessionsOpen ? openMessageBookingId : null, items => {
+  useLiveBookingMessages(token, sessionsOpen ? openMessageBookingId : null, (items, status) => {
     setBookings(current => current.map(booking => booking.bookingId === openMessageBookingId
-      ? { ...booking, messages: mergeMessages(booking.messages || [], items) } : booking));
-  }, setError);
+      ? { ...booking, status: status || booking.status, messages: mergeMessages(booking.messages || [], items) } : booking));
+  }, setError, bookings.some(booking => booking.bookingId === openMessageBookingId && booking.status === "confirmed"));
   const dashboardAdAsset = useMemo(
     () => DASHBOARD_AD_ASSETS[Math.floor(Math.random() * DASHBOARD_AD_ASSETS.length)],
     []
@@ -3623,20 +3623,16 @@ export function DashboardPage() {
     setDashboardLoading(true);
     setError("");
 
-    Promise.all([
-      fetchProfileWithRetry(token),
-      // Runs concurrently with the profile bootstrap above; for a brand-new
-      // (e.g. manually-created) user this can momentarily 404 with "Profile not
-      // found" before the bootstrap lands, so tolerate it and start with no
-      // bookings rather than failing the whole dashboard load.
-      api.listBookings(token).catch(() => []),
+    fetchProfileWithRetry(token).then(nextProfile => Promise.all([
+      Promise.resolve(nextProfile),
+      api.listBookings(token),
       api
         .getMyConsultantProfile(token)
         .then((value) => value)
         .catch(() => null),
       api.listConsultants().catch(() => []),
       api.listMyNotifications(token).catch(() => ({ items: [], unreadCount: 0 }))
-    ])
+    ]))
       .then(
         ([
           nextProfile,

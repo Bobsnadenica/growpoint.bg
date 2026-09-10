@@ -2497,12 +2497,22 @@ async function bootstrapUser(event) {
   };
   const planFields = getConsultantPlanFields(nextUser.plan);
 
-  await dynamo.send(
-    new PutCommand({
+  try {
+    await dynamo.send(new PutCommand({
       TableName: env.usersTable,
-      Item: nextUser
-    })
-  );
+      Item: nextUser,
+      ...(!existing ? { ConditionExpression: "attribute_not_exists(userId)" } : {})
+    }));
+  } catch (error) {
+    if (!existing && error.name === "ConditionalCheckFailedException") {
+      const created = await getUserBySub(claims.sub);
+      if (created) {
+        assertNotRestricted(created);
+        return response(200, await decorateUserMedia(created));
+      }
+    }
+    throw error;
+  }
 
   if (nextUser.role === "consultant") {
     const existingConsultant = await getConsultantByOwner(claims.sub);
@@ -2891,10 +2901,19 @@ async function updateMeProfile(event) {
 
 async function getMyConsultant(event) {
   const claims = requireAuth(event);
-  const consultant = await getConsultantByOwner(claims.sub);
+  let consultant = await getConsultantByOwner(claims.sub);
 
   if (!consultant) {
-    return notFound("Consultant profile not found.");
+    const user = await getUserBySub(claims.sub);
+    if (!user || user.role !== "consultant") return notFound("Consultant profile not found.");
+    assertNotRestricted(user);
+    // Console-created experts need an editable draft after role reconciliation.
+    // A draft is private and grants no membership or payment entitlement.
+    consultant = await putConsultantDraftWithUniqueSlug(createConsultantDraft({
+      userId: claims.sub, name: user.name, email: user.email, plan: user.plan,
+      city: user.city, headline: user.headline, avatarUrl: user.avatarUrl,
+      comped: user.compedConsultant === true
+    }));
   }
 
   return response(200, await decorateConsultantMedia(consultant));
@@ -3556,13 +3575,13 @@ async function confirmBookingSession(event) {
   return response(200, bookingForViewer(updated, claims.sub));
 }
 
-function assertConfirmedBookingThread({ booking, participantRole }) {
+function assertConfirmedBookingThread({ booking, participantRole }, readOnly = false) {
   if (!participantRole) {
     throw Object.assign(new Error("Not allowed to access this booking thread."), {
       statusCode: 403
     });
   }
-  if (booking.status !== "confirmed") {
+  if (booking.status !== "confirmed" && !(readOnly && normalizeBookingMessages(booking.messages).length)) {
     throw Object.assign(
       new Error("Съобщенията са достъпни само за потвърдени сесии."),
       { statusCode: 400 }
@@ -3581,9 +3600,9 @@ async function listBookingMessages(event) {
   if (!consultant) return notFound("Consultant not found.");
 
   const participantRole = getBookingParticipantRole({ claims, booking, consultant });
-  assertConfirmedBookingThread({ booking, participantRole });
+  assertConfirmedBookingThread({ booking, participantRole }, true);
 
-  return response(200, { items: normalizeBookingMessages(booking.messages) });
+  return response(200, { items: normalizeBookingMessages(booking.messages), status: booking.status });
 }
 
 async function sendBookingMessage(event) {

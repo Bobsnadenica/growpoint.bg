@@ -1,6 +1,16 @@
 # GrowPoint working memory
 
-Last reviewed: 2026-09-08. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+Last reviewed: 2026-09-10. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+
+## Latest functionality corrections — 2026-09-10
+
+- User explicitly requested fixes and push. Frontend rebuild/push is in scope; no AWS apply or production data mutation in this pass. Preserve the owner's modified generated Lambda ZIP and exclude it from this commit.
+- Local tests 48/48, build, TypeScript, Lambda syntax, Terraform validate and secret scan pass. Frontend/backend production dependency audits report zero vulnerabilities. Live smoke now 14/14, including the expert detail document; old 404 is resolved in the live site. See `docs/qa-2026-09-10.md`.
+- Prior fixes are present: current expert-completeness scoring, public occupied-slot filtering, conditional reservation-list writes and profile-write guards, shared first-use profile repair, group-role reconciliation on profile reads. These do not imply all backend behavior has been deployed or live-certified.
+- Additional fixes: archived chat GET allowed for participants with existing history; POST still confirmed-only. GET now returns optional status. Both chat UIs update without reload, pause hidden/closed conversations, back off errors and avoid polling archives. Late reads/sends cannot contaminate a newly selected thread. Loading failures show retry instead of a false empty inbox.
+- Dashboard awaits profile repair before role-dependent reads. Concurrent first bootstrap conditionally creates rather than overwrites. Missing expert draft initializes privately with no paid entitlement or membership bypass.
+- Browser fixtures verified Messages/dashboard live refresh, archive read-only UI, delayed-send conversation isolation, visible failed-load retry and 390px no-overflow layout. No uncaught page exceptions. Local fixtures do not count as new live authenticated backend proof.
+- Remaining owner rollout: backend plan/apply, deployed lifecycle and chat regression, SES production approval/general-recipient email delivery (sandbox last verified 8 September), social-provider callback checks. Payments intentionally stay mocked. Do not certify entire production readiness from build/smoke alone.
 
 ## Latest scoped live QA — 2026-09-08
 

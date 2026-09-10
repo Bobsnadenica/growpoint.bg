@@ -212,28 +212,28 @@ Run `terraform -chdir=infra/terraform init -upgrade` when adopting the provider 
 
 ## Current limitations and roadmap
 
-### QA snapshot — 8 September 2026
+### QA snapshot — 10 September 2026
 
 **Expert visibility:** admins can choose **Automatic at 100%**, **Shown**, or **Hidden** on each expert card. Saving a complete profile or granting any tier (including Start) publishes an active member into the catalogue. Explicit hiding survives later edits. Showing cannot bypass inactive membership, suspension, deletion, or a disabled/missing Cognito account. Portrait/cover images are optional; provided image URLs must still be valid. Existing complete hidden profiles can be shown from admin after deployment; no bulk publication was performed. Deploy the new authenticated `/admin/consultants/{consultantId}/visibility` route and Lambda before publishing the frontend.
 
-**Release status: not yet production-certified.** The latest checks find one public expert, but its direct website page returns HTTP 404. The regression suite is 39/40; duplicate-expert scoring references a deleted helper. A live QA booking was accepted, rescheduled and cancelled; chat persistence and file sharing worked, but open chats showed stale messages. SES remains sandboxed. Card payments remain intentionally mocked.
+**Release status: code fixes verified locally; backend rollout still required.** The regression suite passes 48/48 and live read-only smoke passes 14/14, including the public expert's direct page. Chat refresh, archived-chat reads, conversation-switch races and first-login profile repair are covered by new checks. SES was still sandboxed at the last authenticated check (8 September); general email delivery and deployed identity-lifecycle tests remain launch gates. Card payments remain intentionally mocked.
 
 Run `npm run smoke:prod -- --require-public-profile` to fail the read-only smoke check when no public expert is available. The normal command now reports that check as skipped, not passed.
 
-Local results describe the prepared code, not a deployed release. The latest authenticated QA used owner-supplied production test accounts; earlier browser fixtures were isolated. See the [latest QA report](docs/qa-2026-09-08.md) for evidence, retained test data and remaining gates.
+Local results describe the prepared code, not a deployed release. The earlier authenticated QA used owner-supplied production test accounts; this correction pass used isolated browser fixtures and read-only production smoke. See the [latest QA report](docs/qa-2026-09-10.md) for evidence and rollout requirements.
 
 | Area tested | Result | Remaining issue / scope |
 | --- | --- | --- |
-| Automated regression checks | **39/40 passed locally** | Duplicate-expert metrics test fails on a removed helper; correction pending. |
-| Production smoke | **13/14 passed** | Public expert API works; direct website detail page returns 404. |
+| Automated regression checks | **48/48 passed locally** | Includes duplicate-expert scoring, occupied availability, identity/profile repair, chat archives and refresh policy. |
+| Production smoke | **14/14 passed** | Public expert API and direct website page both respond successfully. |
 | Sign-in, profile saves, own-file upload/download/delete | Passed with supplied QA accounts in the earlier live pass | No destructive identity deletion test on those persistent accounts. |
 | Mobile links, header names, portrait keyboard controls | Fixed and browser-tested locally | Requires frontend publication. |
 | Shared visual polish | 20 local page/viewport checks without overflow or JavaScript exceptions; light/dark screenshots inspected | Reduced-motion button transitions verified off; no new dependencies or infrastructure. |
 | Expert completion and admin calculation | Local tests agree; complete editable expert form reaches 100% | Requires frontend **and backend** deployment; no membership or visibility bypass. |
 | Card checkout and terms | Mockup action, return flow, focus handling and six clauses checked | No card collection or payment requests; real processor and refunds are not implemented. |
-| Bootstrap profile preservation | Regression passed locally | Saved name/portrait preserved; automatic Cognito role reconciliation remains unresolved. |
-| Booking lifecycle | Passed for one labelled live QA booking | Created, accepted, rescheduled and cancelled; no real payment or existing-booking changes. Occupied slots are still advertised. |
-| Two-party chat and file sharing | Persistence/sharing passed; chat refresh failed | Replies need a page reload. Revoked files disappear from fresh responses; previously issued signed links retain their bounded lifetime. Unrelated-client chat access denied 403. |
+| Bootstrap and role repair | Regression passed locally | Missing profiles initialize on first use; group role reconciles on profile read; missing expert drafts remain private. Requires backend rollout. |
+| Booking lifecycle | Passed for one labelled live QA booking on 8 September | Public availability now filters occupied slots; reservation-list writes compare snapshots to avoid overwriting concurrent bookings. Deploy/retest those changes. |
+| Chat and file sharing | Live persistence/sharing previously passed; refresh fixes now browser-tested locally | Open conversations refresh without reload; archives are read-only; delayed sends stay in their original thread. File-link revocation remains bounded by signed-link expiry. |
 | Admin metrics and mobile navigation | Partial pass | Metrics return 200; six identities versus four app profiles need reconciliation review. 390px views have no horizontal overflow; message route works. |
 | Email and full release readiness | Not certified | SES was sandboxed at the last live check; delivery and disposable-account lifecycle tests remain release gates. |
 

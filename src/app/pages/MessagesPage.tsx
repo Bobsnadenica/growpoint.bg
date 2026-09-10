@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -26,8 +26,12 @@ export default function MessagesPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const loadRevision = useRef(0);
 
   const load = useCallback(async () => {
+    const revision = ++loadRevision.current;
     if (!token) {
       setBookings([]);
       setProfile(null);
@@ -35,20 +39,23 @@ export default function MessagesPage() {
       return;
     }
     setLoading(true);
+    setError("");
     try {
-      const [profileResult, bookingsResult] = await Promise.all([
-        api.getMyProfile(token).catch(() => null),
-        api.listBookings(token).catch(() => [])
-      ]);
+      const profileResult = await api.getMyProfile(token);
+      const bookingsResult = await api.listBookings(token);
+      if (revision !== loadRevision.current) return;
       setProfile(profileResult);
       setBookings(Array.isArray(bookingsResult) ? bookingsResult : []);
+    } catch {
+      if (revision === loadRevision.current) setError("Разговорите не могат да бъдат заредени. Опитай отново.");
     } finally {
-      setLoading(false);
+      if (revision === loadRevision.current) setLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
     void load();
+    return () => { loadRevision.current++; };
   }, [load]);
 
   const consultantView = profile?.role === "consultant";
@@ -83,13 +90,13 @@ export default function MessagesPage() {
     (item) => item.booking.bookingId === activeId
   );
 
-  useLiveBookingMessages(token, activeId, items => {
+  useLiveBookingMessages(token, activeId, (items, status) => {
     setThread(current => mergeMessages(current, items));
     setThreadLoading(false);
     setError("");
     setBookings(current => current.map(booking => booking.bookingId === activeId
-      ? { ...booking, messages: mergeMessages(booking.messages || [], items) } : booking));
-  }, message => { setThreadLoading(false); setError(message); });
+      ? { ...booking, status: status || booking.status, messages: mergeMessages(booking.messages || [], items) } : booking));
+  }, message => { setThreadLoading(false); setError(message); }, activeConversation?.booking.status === "confirmed");
 
   function openConversation(bookingId: string) {
     if (bookingId === activeId) return;
@@ -108,8 +115,10 @@ export default function MessagesPage() {
     setError("");
     try {
       const result = await api.sendBookingMessage(token, activeId, body);
-      setThread((current) => mergeMessages(current, [result.message]));
-      setDraft("");
+      if (activeIdRef.current === activeId) {
+        setThread((current) => mergeMessages(current, [result.message]));
+        setDraft("");
+      }
       // Keep the conversation list in sync so the preview/order updates.
       setBookings((current) =>
         current.map((booking) =>
@@ -117,6 +126,7 @@ export default function MessagesPage() {
         )
       );
     } catch (sendError) {
+      if (activeIdRef.current !== activeId) return;
       setError(
         sendError instanceof Error
           ? sendError.message
@@ -144,6 +154,7 @@ export default function MessagesPage() {
 
       <section className="section">
         <div className="container">
+          {error ? <div role="alert" className="form-note form-note--error">{error} <button type="button" className="ghost-button" onClick={() => { setActiveId(null); setThread([]); void load(); }}>Опитай отново</button></div> : null}
           {!user ? (
             <div className="panel">
               <h2>Влез в профила си</h2>
@@ -158,7 +169,7 @@ export default function MessagesPage() {
             <div className="panel">
               <p className="form-note">Зареждаме разговорите...</p>
             </div>
-          ) : conversations.length === 0 ? (
+          ) : error && conversations.length === 0 ? null : conversations.length === 0 ? (
             <div className="panel">
               <h2>Все още няма разговори</h2>
               <p className="form-note">
@@ -282,9 +293,6 @@ export default function MessagesPage() {
                             disabled={sending}
                           />
                         </label>
-                        {error ? (
-                          <p className="form-note form-note--error">{error}</p>
-                        ) : null}
                         <button
                           className="primary-button"
                           type="submit"

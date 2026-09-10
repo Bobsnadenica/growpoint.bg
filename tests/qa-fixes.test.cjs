@@ -54,6 +54,68 @@ function messagesModule() {
   return context.exports;
 }
 
+const request = (method, path, sub, body) => ({ rawPath: path, body: body ? JSON.stringify(body) : undefined,
+  requestContext: { http: { method }, authorizer: { jwt: { claims: { sub } } } } });
+
+test("archived chat is readable only by participants and still rejects new messages", async () => {
+  const message = { id: "m", body: "Archived", createdAt: "2026-01-01T00:00:00Z" };
+  let writes = 0;
+  const api = loadApi({ environment: { USER_POOL_ID: "unit-pool" }, send: async command => {
+    if (command.constructor.name === "AdminGetUserCommand") return { Enabled: true, UserAttributes: [{ Name: "sub", Value: command.input.Username }] };
+    if (command.constructor.name === "UpdateCommand") writes++;
+    if (command.input.TableName === "unit-bookings") return { Item: { bookingId: "b", consultantId: "e", clientId: "client", status: "cancelled", messages: [message] } };
+    if (command.input.TableName === "unit-consultants") return { Item: { consultantId: "e", ownerUserId: "expert" } };
+    return { Item: { userId: "client", role: "client" } };
+  } });
+  for (const sub of ["client", "expert"]) {
+    const result = await api.handler(request("GET", "/bookings/b/messages", sub));
+    assert.equal(result.statusCode, 200);
+    assert.equal(JSON.parse(result.body).status, "cancelled");
+    assert.equal(JSON.parse(result.body).items[0].body, "Archived");
+    assert.equal((await api.handler(request("POST", "/bookings/b/messages", sub, { body: "Not allowed" }))).statusCode, 400);
+  }
+  assert.equal((await api.handler(request("GET", "/bookings/b/messages", "outsider"))).statusCode, 403);
+  assert.equal(writes, 0);
+});
+
+test("concurrent first bootstrap cannot overwrite a profile created by another request", async () => {
+  let profileReads = 0;
+  const created = { userId: "client", name: "Already saved", role: "client", points: 20, documents: [] };
+  const api = loadApi({ send: async command => {
+    if (command.constructor.name === "GetCommand") {
+      if (command.input.Key.userId === "client") return { Item: ++profileReads > 1 ? created : undefined };
+      return {};
+    }
+    if (command.constructor.name === "PutCommand" && command.input.Item.userId === "client") {
+      assert.equal(command.input.ConditionExpression, "attribute_not_exists(userId)");
+      throw Object.assign(new Error("raced"), { name: "ConditionalCheckFailedException" });
+    }
+    return {};
+  } });
+  const result = await api.test.bootstrapUser(request("POST", "/auth/bootstrap", "client", {}));
+  assert.equal(result.statusCode, 200);
+  assert.equal(JSON.parse(result.body).name, "Already saved");
+  assert.equal(JSON.parse(result.body).points, 20);
+});
+
+test("console-created expert receives a private draft without any membership grant", async () => {
+  const writes = [];
+  const api = loadApi({ environment: { USER_POOL_ID: "unit-pool" }, send: async command => {
+    if (command.constructor.name === "AdminGetUserCommand") return { Enabled: true, UserAttributes: [{ Name: "sub", Value: command.input.Username }] };
+    if (command.constructor.name === "QueryCommand") return { Items: [] };
+    if (command.constructor.name === "GetCommand") return { Item: { userId: "expert", name: "Expert", role: "consultant" } };
+    if (command.constructor.name === "TransactWriteCommand") writes.push(command.input);
+    return {};
+  } });
+  const result = await api.handler(request("GET", "/consultants/me", "expert"));
+  assert.equal(result.statusCode, 200);
+  const draft = JSON.parse(result.body);
+  assert.equal(draft.isPublic, false);
+  assert.equal(draft.comped, false);
+  assert.notEqual(draft.packageSource, "granted");
+  assert.equal(writes.length, 1);
+});
+
 test("chat merges late snapshots without losing or duplicating a sent message", () => {
   const { mergeMessages } = messagesModule();
   const a = { id: "a", createdAt: "2026-01-01", body: "first" };
