@@ -12,6 +12,24 @@ export type ConsultantMediaKind = "avatar" | "hero";
 export type UserMediaKind = "user-avatar";
 export type ConsultantProfileStatus = "pending" | "approved" | "rejected";
 
+export type DskUatStatus = "created" | "pending" | "authorized" | "succeeded" | "failed" | "cancelled" | "refunded" | "unknown";
+
+export interface DskUatConfig {
+  enabled: boolean;
+  currency: "EUR";
+  amountMinor: 100;
+}
+
+export interface DskUatOrder {
+  checkoutId: string;
+  status: DskUatStatus;
+  amountMinor: 100;
+  currency: "EUR";
+  checkoutUrl?: string;
+  verifiedAt?: string;
+  actionCode?: string;
+}
+
 export interface AdminConsultantDetail extends ConsultantProfile {
   ownerEmail: string;
   ownerName: string;

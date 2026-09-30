@@ -21,6 +21,8 @@ import type {
   ConsultantPackageTier,
   ConsultantProfile,
   ConsultantProfileType,
+  DskUatConfig,
+  DskUatOrder,
   NotificationItem,
   PlanTier,
   PublicUserProfile,
@@ -548,6 +550,20 @@ export const api = {
 
   async adminGetMetrics(token: string) {
     return request<AdminMetrics>("/admin/metrics", undefined, token);
+  },
+
+  async adminGetDskUatConfig(token: string) {
+    return request<DskUatConfig>("/admin/payments/uat/config", { cache: "no-store" }, token);
+  },
+
+  async adminCreateDskUatOrder(token: string, checkoutId: string) {
+    return request<DskUatOrder>("/admin/payments/uat/orders", {
+      method: "POST", body: JSON.stringify({ checkoutId })
+    }, token);
+  },
+
+  async adminGetDskUatOrder(token: string, checkoutId: string) {
+    return request<DskUatOrder>(`/admin/payments/uat/orders/${encodeURIComponent(checkoutId)}`, { cache: "no-store" }, token);
   },
 
   // Fire-and-forget page-view beacon (public, no token). Never throws.

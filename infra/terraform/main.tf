@@ -964,6 +964,16 @@ resource "aws_lambda_function" "api" {
       ALLOWED_ORIGINS   = join(",", var.frontend_origins)
       SES_FROM_EMAIL    = var.ses_from_email
       APP_URL           = var.app_url
+      DSK_UAT_ENABLED   = tostring(var.dsk_uat_enabled)
+      DSK_UAT_USERNAME  = var.dsk_uat_enabled ? var.dsk_uat_username : ""
+      DSK_UAT_PASSWORD  = var.dsk_uat_enabled ? var.dsk_uat_password : ""
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.dsk_uat_enabled || (trimspace(var.dsk_uat_username) != "" && trimspace(var.dsk_uat_password) != "")
+      error_message = "DSK UAT requires nonempty sandbox username and password when enabled."
     }
   }
 
@@ -1229,6 +1239,30 @@ resource "aws_apigatewayv2_route" "admin_booking_paid" {
 resource "aws_apigatewayv2_route" "admin_metrics" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "GET /admin/metrics"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "admin_payments_uat_config" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /admin/payments/uat/config"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "admin_payments_uat_orders_create" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /admin/payments/uat/orders"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "admin_payments_uat_orders_status" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /admin/payments/uat/orders/{checkoutId}"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
   authorization_type = "JWT"

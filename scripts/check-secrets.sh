@@ -4,7 +4,7 @@
 # Runs in CI (.github/workflows/ci.yml) and can be run locally before pushing:
 #   bash scripts/check-secrets.sh
 #
-# Real secrets belong ONLY in gitignored infra/terraform/terraform.tfvars.
+# Real secrets belong ONLY in ignored, owner-only backend settings files.
 # .env.production is intentionally tracked but must hold ONLY public client
 # config (API URL + Cognito pool/app-client IDs that already ship in the bundle).
 
@@ -25,7 +25,7 @@ EXCLUDES=(
 # 1) Secret-bearing files must never be tracked (guards against `git add -f`).
 tracked_bad=$(
   git ls-files \
-    | grep -iE '(^|/)(terraform\.tfvars(\.json)?|\.env|\.env\.[^/]*|id_rsa[^/]*)$|\.(p8|pem|key|p12|pfx)$' \
+    | grep -iE '(^|/)(\.env|\.env\.[^/]*|id_rsa[^/]*)$|\.tfvars(\.json)?$|\.tfstate(\.[^/]+)?$|\.(tfplan|p8|pem|key|p12|pfx)$' \
     | grep -vE '(\.example$)|(^\.env\.production$)' \
     || true
 )

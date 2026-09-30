@@ -66,6 +66,32 @@ test("Lambda SES sending is identity- and sender-scoped, while account readiness
   assert.doesNotMatch(policy, /ses:SendRawEmail|ses:\*/);
 });
 
+test("DSK UAT defaults off, hides credentials when disabled, and protects all sandbox routes", () => {
+  const source = readFileSync(join(__dirname, "../infra/terraform/main.tf"), "utf8");
+  const variables = readFileSync(join(__dirname, "../infra/terraform/variables.tf"), "utf8");
+  const enabled = variables.split('variable "dsk_uat_enabled"')[1].split('\nvariable ')[0];
+  assert.match(enabled, /type\s*=\s*bool/);
+  assert.match(enabled, /default\s*=\s*false/);
+  for (const name of ["dsk_uat_username", "dsk_uat_password"]) {
+    const variable = variables.split(`variable "${name}"`)[1].split('\nvariable ')[0];
+    assert.match(variable, /default\s*=\s*""/);
+    assert.match(variable, /sensitive\s*=\s*true/);
+  }
+  const lambda = source.split('resource "aws_lambda_function" "api"')[1].split('\nresource ')[0];
+  assert.match(lambda, /DSK_UAT_ENABLED\s*=\s*tostring\(var\.dsk_uat_enabled\)/);
+  assert.match(lambda, /DSK_UAT_USERNAME\s*=\s*var\.dsk_uat_enabled \? var\.dsk_uat_username : ""/);
+  assert.match(lambda, /DSK_UAT_PASSWORD\s*=\s*var\.dsk_uat_enabled \? var\.dsk_uat_password : ""/);
+  assert.match(lambda, /APP_URL\s*=\s*var\.app_url/);
+  assert.match(lambda, /precondition\s*\{\s*condition\s*=\s*!var\.dsk_uat_enabled \|\| \(trimspace\(var\.dsk_uat_username\) != "" && trimspace\(var\.dsk_uat_password\) != ""\)/);
+  assert.doesNotMatch(lambda, /DSK_UAT_(?:GATEWAY|BASE_URL|RETURN_URL)/);
+  for (const [name, route] of [["admin_payments_uat_config", "GET /admin/payments/uat/config"], ["admin_payments_uat_orders_create", "POST /admin/payments/uat/orders"], ["admin_payments_uat_orders_status", "GET /admin/payments/uat/orders/{checkoutId}"]]) {
+    const resource = source.split(`resource "aws_apigatewayv2_route" "${name}"`)[1].split('\nresource ')[0];
+    assert.ok(resource.includes(`route_key          = "${route}"`));
+    assert.match(resource, /authorizer_id\s*=\s*aws_apigatewayv2_authorizer\.cognito\.id/);
+    assert.match(resource, /authorization_type\s*=\s*"JWT"/);
+  }
+});
+
 test("CloudFront custom domains wait for managed certificate validation without blocking its initial request", () => {
   const source = readFileSync(join(__dirname, "../infra/terraform/main.tf"), "utf8");
   assert.match(source, /frontend_use_managed_certificate\s*=.*length\(var.frontend_domain_aliases\) > 0/);

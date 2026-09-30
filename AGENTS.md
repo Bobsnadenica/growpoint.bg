@@ -12,8 +12,8 @@ Guide for AI/dev sessions on this repo. Keep it short; update it when something 
 - **Helper scripts:** `scripts/` (build, smoke test, data migrations, seed).
 
 ## Hosting (important)
-- **Production `www.growpoint.bg` uses CloudFront + private S3.** Its DNS route and issued certificate are verified. **A Git push does not publish CloudFront**; use `npm run deploy:cloudfront`.
-- GitHub stores source/CI and legacy Pages root artifacts. The raw CloudFront domain (`d30m6jtjij7col.cloudfront.net`) remains a preview address. Apex still has old Pages A/AAAA records pending explicit routing confirmation; do not claim a full cutover or 4/4 domain pass yet.
+- **Production apex and `www.growpoint.bg` use CloudFront + private S3.** DNS routes and the issued certificate are verified; apex redirects to canonical HTTPS www. **A Git push does not publish CloudFront**; use `npm run deploy:cloudfront`.
+- GitHub stores source/CI and legacy Pages root artifacts. The raw CloudFront domain (`d30m6jtjij7col.cloudfront.net`) remains a preview address. The authorized apex cutover passes the 4/4 domain gate; existing mail and ACM validation records are preserved.
 - API: `https://zmajj05nm1.execute-api.eu-west-1.amazonaws.com`. Region `eu-west-1`.
 - AWS resource names are `growpoint-dev-*`. AWS provider 6.63 supports renaming the existing Cognito pool friendly name to `growpoint-dev-users` in place. Its ID must remain unchanged; `prevent_destroy` protects accounts. Never use the old provider 5.x to perform this rename (it proposes replacement).
 
@@ -22,7 +22,7 @@ Guide for AI/dev sessions on this repo. Keep it short; update it when something 
 npm run dev              # local dev server (vite)
 npm run build            # GATE: check-theme + tsc + vite + route copies (run before commit)
 npm run build:cloudfront # production build in ignored dist/; no upload
-npm test                # latest suite: 129/129; recheck release total
+npm test                # latest suite: 171/171; recheck release total
 npm run smoke:prod       # read-only: 19/19 www; 20/20 with CloudFront SPA check
 npm run check:launch-domains   # both hosts: valid TLS + HTTP-to-HTTPS (require 4/4)
 npm run qa:identity      # safe default: zero requests; live flags need explicit disposable-test approval
@@ -46,16 +46,16 @@ node --check backend/api/index.cjs   # backend syntax
 - **CORS for local API testing:** temporarily add `http://localhost:5173` to `frontend_origins` in tfvars + apply; **always revert + re-verify** afterward.
 
 ## Business model (current)
-- All expert tiers are **paid** (Start 9.99 / Grow 29.99 / Spotlight 99.99 €/mo). **Clients are free.** DKS payment is a labelled preview only: no charging, card entry, or paid/package state changes.
+- All expert tiers are **paid** (Start 9.99 / Grow 29.99 / Spotlight 99.99 €/mo). **Clients are free.** Public DSK checkout remains a labelled preview: no charging, card entry or paid/package changes. An isolated admin UAT adapter/panel is deployed but disabled; no real bank transactions are certified. Resolve merchant notification settings before enabling tests. Never send the bank results; the owner submits them.
 - **No approval step.** A consultant is public when their account is *active* (`comped` via admin invite, or a `granted`/`purchased` package) and the profile passes a completeness bar. Gate logic: `consultantMembershipActive()` in the backend.
 - **Mentor onboarding is invite-only** until real payment integration: admin sends an email invite (`/admin`) → recipient signs up free (`comped`). Self-serve consultant signup is blocked with a notice.
 - **Admin** can invite, restrict/suspend (hides profile + disables Cognito login), message users, grant packages, feature profiles.
 
 ## Security rules
-- Secrets only in gitignored `terraform.tfvars`. `README.md` and `test.txt` are **public** — no secrets.
+- Secrets only in ignored owner-only backend settings (`*.tfvars`); state/plans are private too. Disabled UAT credentials are not deployed. `README.md`, `memory.md` and test reports are **public** — no secrets, tokens or private account/provider references.
 - Auth comes from the API Gateway Cognito JWT authorizer; handlers call `requireAuth`/`requireAdmin`. No XSS sinks (no `innerHTML`/`dangerouslySetInnerHTML`).
 - Don't dump production Cognito user data into logs/output.
 - `--live-mutate` is retired: never fabricate paid packages/attendance or manually clean DynamoDB to claim lifecycle QA. Use the gated client-only identity script; report its S3/expert/email limitations.
 
 ## Known follow-ups
-Read `memory.md` and `docs/qa-2026-09-30.md` for current release gates; historical plans may be stale. www production routing is now CloudFront; both validation records are published, the certificate covers both names, and the distribution is deployed. Apex routing remains pending confirmation. Other gates: SES production delivery, approved operator/legal details, disposable-account lifecycle tests, real social callbacks and DKS integration. SES domain/DKIM verify, but production review is denied; sandbox/simulator acceptance is not delivery. `/admin/dashboard` uses existing Cognito admin access only. Never certify readiness from www-only smoke when the domain gate fails. Keep updates brief and interact directly with the authorized Mac UI; never bypass a locked screen or unrelated app boundaries.
+Read `memory.md` and `docs/qa-2026-09-30.md` for current release gates; historical plans may be stale. Both production hosts route to CloudFront; validation records are published, the issued certificate covers both names, and the full domain gate passes 4/4. Other gates: SES production delivery, approved operator/legal details, disposable-account lifecycle tests, real social callbacks and DKS integration. SES domain/DKIM verify, but production review is denied; sandbox/simulator acceptance is not delivery. `/admin/dashboard` uses existing Cognito admin access only. Recheck the full domain gate after releases. Keep updates brief and interact directly with the authorized Mac UI; never bypass a locked screen or unrelated app boundaries.

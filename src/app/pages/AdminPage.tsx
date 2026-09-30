@@ -1,6 +1,6 @@
 import MonitoringDashboardPage from "./MonitoringDashboardPage";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import type {
@@ -10,6 +10,7 @@ import type {
   ConsultantPackageTier
 } from "../../lib/types";
 import PageScene from "../layout/PageScene";
+import DskSandboxPanel from "../components/DskSandboxPanel";
 
 type Filter = "all" | "public" | "featured" | "restricted";
 
@@ -67,6 +68,7 @@ function getInitials(name: string) {
 
 export default function AdminPage() {
   const { token, isAdmin, loading, user } = useAuth();
+  const location = useLocation();
   const [items, setItems] = useState<AdminConsultantSummary[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [error, setError] = useState("");
@@ -160,7 +162,7 @@ export default function AdminPage() {
   }
 
   if (!user) {
-    return <Navigate to="/auth?redirect=/admin" replace />;
+    return <Navigate to={`/auth?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }
 
   if (!isAdmin) {
@@ -416,6 +418,8 @@ export default function AdminPage() {
       </section>
 
       <MonitoringDashboardPage embedded />
+
+      <DskSandboxPanel key={user.id} token={token} />
 
       <section className="section section--tight">
         <div className="container">

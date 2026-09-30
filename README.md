@@ -12,7 +12,7 @@ The project is a React single-page app with a small serverless AWS backend. Its 
 - **Memberships:** Start (€9.99/month), Grow (€29.99/month), and Spotlight (€99.99/month) are the current expert tiers. Client accounts are free.
 - **Onboarding:** expert self-service purchase is not implemented. The current expert path is an admin email invite, which grants a complimentary membership. A consultant becomes public only when membership is active and the profile satisfies the server-side visibility rules.
 - **Bookings:** a client chooses an available slot; the consultant can accept, decline, reschedule, or cancel. Confirmed bookings support calendar downloads, session confirmation, reviews, in-app notifications, and email notifications when SES is configured.
-- **Payments:** The bank-neutral card checkout is a clearly labelled preview only: it shows an order summary, accepted card schemes and a working preview action. Clicking “Pay” displays a mockup notice, never a successful payment. There is no card input, payment request, paid status, or package activation. A booking is either unpaid, marked paid by an admin, or released through the client points reward. The meeting link remains hidden from the client while payment is unpaid. Real DSK provider integration and verified webhooks remain future work.
+- **Payments:** Public checkout remains a clearly labelled, bank-neutral preview: no card input, charging request or package activation. A booking is unpaid, admin-marked paid, or released through the client points reward; unpaid meeting links stay hidden. An isolated, disabled-by-default DSK sandbox adapter and admin test panel are now implemented. Synthetic €1 tests cannot change memberships, bookings, meeting access or notifications. Bank-executed transactions and production integration are not certified; see the [DSK preflight report](docs/dsk-sandbox-preflight-2026-10-01.md).
 - **Terms:** `/terms` includes the supplied V-POS clauses: Visa/Mastercard/bCard debit, credit and business cards; Identity Check/VISA Secure; a 4000 EUR maximum; no card-data storage; refunds to the same card. A notice explains that the live-payment clauses apply after activation. Confirm these conditions with the provider and legal reviewer before enabling payments; the preview does not implement a processor or refund service.
 
 ## Demonstration profile and homepage animation
@@ -58,7 +58,7 @@ Low traffic should incur small usage-based costs, but **$0 is not guaranteed**: 
 ```mermaid
 flowchart TB
   subgraph Web[Static website]
-    GH[GitHub - source and CI] -.->|Reviewed manual deployment| CF[CloudFront + private S3 - www production]
+    GH[GitHub - source and CI] -.->|Reviewed manual deployment| CF[CloudFront + private S3 - production]
     CF --> SPA[React + Vite in the browser]
     LEGACY[GitHub Pages - legacy fallback] -.-> SPA
     SPA --> ADMIN[Unified admin panel]
@@ -90,6 +90,7 @@ flowchart TB
   L -->|Current identity and role checks| C
   EV -->|Reconcile account state| L
   SPA -.->|Authorized short-lived signed URLs| S
+  L -.->|Disabled admin-only UAT; no entitlements| BANK[DSK sandbox - hosted card entry]
   classDef static fill:#eaf4ee,stroke:#387052,color:#173926
   classDef secure fill:#edf2fc,stroke:#496ca8,color:#233751
   class SPA,GH,CF,LEGACY,ADMIN static
@@ -188,9 +189,9 @@ Tests cover authorization, identity deletion/disablement, cleanup, pagination, p
 
 ## Deployment and infrastructure
 
-- **`www.growpoint.bg` now uses CloudFront with a private S3 origin.** GitHub stores source, runs CI, and retains the legacy Pages build. **A Git push does not publish CloudFront.**
+- **`growpoint.bg` and `www.growpoint.bg` use CloudFront with a private S3 origin.** Apex redirects to canonical HTTPS www. GitHub stores source, runs CI, and retains the legacy Pages build. **A Git push does not publish CloudFront.**
 - `npm run deploy:cloudfront` builds `dist/`, publishes assets before HTML, keeps previous hashed chunks for open tabs, and invalidates all routes with one wildcard. Only hashed JavaScript/CSS receive one-year immutable caching; stable assets revalidate after 300 seconds. Existing owner creatives are copied into the CloudFront build without changing their source files.
-- Both DNS validation records are published, the managed certificate is issued for apex and www, and the distribution is deployed. The www DNS route is verified. **Apex still points to the old Pages records; its routing change remains pending explicit confirmation.** Do not claim a complete domain cutover until both hosts pass TLS and secure-redirect checks. The CloudFront canonical redirect preserves encoded invite/referral/OAuth parameters once traffic reaches it.
+- Both DNS routes and validation records are published, the managed certificate is issued for apex and www, and the distribution is deployed. **The complete domain gate passes 4/4:** both hosts have valid TLS and secure HTTP redirects. The authorized apex cutover preserved existing mail and certificate-validation records. The canonical redirect preserves encoded invite/referral/OAuth parameters.
 - Backend and infrastructure changes are applied from `infra/terraform/`. Every new Lambda route must also have a matching `aws_apigatewayv2_route` resource.
 - Terraform enables DynamoDB point-in-time recovery, private/encrypted storage, API throttling, Lambda error/throttle and HTTP 5xx alarms, hourly maintenance, Cognito lifecycle events, and cost alerts.
 
@@ -213,6 +214,7 @@ After any authorized backend apply, commit and push the intended release, then r
 ## Security and privacy rules
 
 - The repository is public. `infra/terraform/terraform.tfvars`, local environment files, state files, credentials, and private-key formats are ignored by Git.
+- Sandbox settings also stay in ignored owner-only files. The secret gate rejects force-added `.tfvars`, state/backups and saved plans; sandbox credentials are absent from the deployed Lambda while testing is disabled.
 - Keep public documentation, fixtures, generated frontend assets, and commit history free of credentials and personal data.
 - API Gateway JWT authorization is necessary but not sufficient: Lambda handlers also enforce ownership, role, admin-group, visibility, and upload-path rules.
 - `restricted` accounts are blocked from mutations even while a previously issued JWT remains valid.
@@ -233,10 +235,10 @@ Live checks use only owner-supplied QA accounts and clearly labelled synthetic d
 
 | Area tested | Result | Remaining issue / scope |
 | --- | --- | --- |
-| Regression, build, syntax, secrets, dependencies | 129/129 tests; build/theme/syntax/secrets pass; both production dependency audits clean | Plans must preserve Cognito and every application table. |
+| Regression, build, syntax, secrets, dependencies | 171/171 tests, no skips; build/theme/syntax/secrets and Terraform format/validation pass; both production dependency audits clean | Reviewed apply: three protected routes added, existing Lambda updated, zero destroyed. Post-apply plan is unchanged. |
 | Existing public profile and read-only smoke | 19/19 passed on www | Referenced JavaScript/CSS and all four ad media paths are checked; media checks use HEAD with positive byte lengths and correct MIME types. |
-| CloudFront deployment | 20/20 passed, including a fresh dynamic SPA path; deployed HTML/JS/CSS and ad bytes match the build | www is routed to CloudFront; apex cutover is not complete. Recheck after every release. |
-| Domain TLS and HTTP redirects | **Partial cutover: 2/4** | www routing is verified; the issued certificate covers both hosts. Apex still uses old Pages records pending confirmation. Require the full 4/4 domain gate before launch. |
+| CloudFront deployment | 20/20 passed, including a fresh dynamic SPA path; deployed HTML/JS/CSS and ad bytes match the build | Both hosts route to CloudFront; apex redirects to canonical HTTPS www. Recheck after every release. |
+| Domain TLS and HTTP redirects | **Passed: 4/4** | Both hosts have valid TLS and secure redirects. Existing mail and ACM validation records were preserved during the authorized DNS cutover. |
 | Desktop/mobile pages and redirects | 38 earlier live checks plus canonical homepage/profile light/dark and private views at 1440px/390px; no overflow or uncaught JavaScript errors | Calendar time buttons are fully visible after the deployed fix. Missing paths render the not-found UI with noindex; CloudFront SPA fallback returns HTTP 200, not a server 404. |
 | Supplied-account booking/chat/files | Live acceptance, two-way automatic chat, rescheduling, cancellation, sharing/download and revocation passed | New QA booking cancelled/unpaid; new QA files removed. Archived chat reads work; sends return 400. Issued document links expire within 15 minutes. |
 | Permissions and notifications | Unrelated client receives 403; single-notification read persists | Destructive lifecycle/admin mutations on persistent accounts are not used as tests. |
@@ -244,14 +246,15 @@ Live checks use only owner-supplied QA accounts and clearly labelled synthetic d
 | Signup, social repair, export and dialog errors | Fixed; regressions and isolated browser checks | Real signup email/social callbacks still need recipient/provider accounts. |
 | Explicit agreement and legacy logins | Desktop/mobile fixtures pass; canonical client login/private views/logout pass live | No protected reads before first-use agreement; acceptance is unchecked by default. Legacy accounts are unchanged; logout clears tokens and protects private routes. |
 | Payment preview | No card fields, no write requests, explicit mockup result | Real DSK charging, callbacks, refunds and paid entitlements are pending. |
+| DSK sandbox | Disabled adapter/panel deployed; authorization, fixed amount, idempotency/recovery, status/URL checks and private export/cleanup regression-tested; 1440px/390px light/dark fixtures pass | Four supplied accounts pass read-only login/profile/bookings/notifications; only admin gets disabled configuration/export, other users get 403 and anonymous requests get 401. Bank transactions remain **blocked** by required notification email/hidden controls. No bank order or message was created. |
 | Email verification | Domain and DKIM verified; a synthetic SES mailbox-simulator message was accepted | SES production review remains denied/sandboxed. Simulator acceptance is not real inbox delivery. |
 | Legal, social callbacks and identity lifecycle | **Blocked / unverified live** | Owner/controller details, approved policies, provider handoffs and explicit disposable-test approval remain necessary. |
 
-- DKS provider integration and verified, idempotent webhooks are required before self-service paid onboarding can be enabled. The current preview never changes payment state.
+- DSK production integration requires verified, idempotent payment reconciliation, immutable server-owned booking/package prices, approved monthly entitlement expiry/renewal behavior and refund/cancellation handling. Existing `purchased` membership logic is not a monthly billing implementation. Public previews and current admin-granted/comped memberships are unchanged.
 - Transactional email needs a verified SES sender and, if the AWS account is still sandboxed, recipients must be verified.
 - On 30 September, the domain verification TXT was repaired and SES domain/DKIM verification now succeeds. The existing advertised support address is the configured Lambda sender. SES remains sandboxed with production review **denied**: approval and real recipient delivery are still required before general-recipient email is advertised. The contact form prepares a visitor-owned email, not an automatic server submission.
 - CloudFront serves arbitrary new `/consultants/:slug` and `/u/:id` paths as native HTTP 200 SPA documents. The API still determines whether a profile exists and is public. Missing routes show a noindex not-found page; this is a client-rendered soft 404, not a server 404. Known public routes also have generated metadata without embedded personal profile data.
-- Complete the apex DNS routing change and require valid TLS plus secure HTTP redirects on both apex and www. Certificate validation and www routing are complete; old apex Pages records are not removed without confirmation. Do not weaken TLS or report the www-only check as a full domain pass.
+- Apex and www DNS routing and certificate validation are complete. Recheck valid TLS and secure redirects on both hosts after deployment; require the full 4/4 domain gate. Never weaken TLS or report www-only smoke as a complete domain check.
 - Paid production uses the existing usage-based S3/CloudFront stack, not a new always-on service. GitHub Pages remains a legacy fallback, not the canonical www host; its commercial-transaction restrictions still apply to any use of that fallback. See [GitHub's hosting policy](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits).
 - Static expert HTML now contains generic metadata only. Personal profile data is fetched from the live API. Previously committed metadata and third-party cached copies cannot be erased by Cognito cleanup; removal from those copies is a separate process.
 - Legal review must establish the operator/controller identity, applicable retention/legal bases and actual cancellation/refund terms; do not invent company details or treat the current policy as legal approval.

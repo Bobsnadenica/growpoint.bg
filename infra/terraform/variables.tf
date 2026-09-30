@@ -116,6 +116,26 @@ variable "ses_domain_identity" {
   description = "Optional domain to verify in SES for platform transactional email sending, for example growpoint.bg."
 }
 
+variable "dsk_uat_enabled" {
+  type        = bool
+  default     = false
+  description = "Enable admin-only DSK sandbox checks. Never enables customer charging or paid entitlements."
+}
+
+variable "dsk_uat_username" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "DSK sandbox API username. Keep only in ignored local configuration; required when UAT is enabled."
+}
+
+variable "dsk_uat_password" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "DSK sandbox API password. Keep only in ignored local configuration; required when UAT is enabled."
+}
+
 variable "app_url" {
   type        = string
   default     = "https://www.growpoint.bg/"

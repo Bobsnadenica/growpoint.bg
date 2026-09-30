@@ -34,21 +34,27 @@ test("cancelled-only consultant relationship cannot issue private document links
 });
 
 test("booking list and personal export include subsequent DynamoDB pages and keep unpaid links locked", async () => {
+  const clientId = "83d0ecfb-a510-430b-b976-491470cf4f8e";
   const api = loadApi({ send: async (command) => {
-    if (command.constructor.name === "GetCommand") return { Item: { userId: "client", role: "client" } };
+    if (command.constructor.name === "GetCommand") return { Item: { userId: clientId, role: "client" } };
     if (command.constructor.name === "QueryCommand" && command.input.IndexName === "client-index") {
       const second = Boolean(command.input.ExclusiveStartKey);
-      return { Items: [{ bookingId: second ? "second" : "first", clientId: "client", paymentStatus: "unpaid", meetingLink: "https://example.com/private" }], ...(second ? {} : { LastEvaluatedKey: { bookingId: "first" } }) };
+      return { Items: [{ bookingId: second ? "second" : "first", clientId, paymentStatus: "unpaid", meetingLink: "https://example.com/private" }], ...(second ? {} : { LastEvaluatedKey: { bookingId: "first" } }) };
     }
+    if (command.constructor.name === "ScanCommand") return { Items: [{ userId: `system#dsk-uat#${clientId}#ed30e455-53b3-4d9b-9d6c-98528d681d65`, kind: "dsk-uat", ownerId: clientId, checkoutId: "ed30e455-53b3-4d9b-9d6c-98528d681d65", status: "created", amountMinor: 100, currency: "EUR", gatewayOrderId: "private-bank-reference", checkoutUrl: "https://example.invalid/private" }] };
     return {};
   } });
-  const request = { requestContext: { authorizer: { jwt: { claims: { sub: "client" } } } } };
+  const request = { requestContext: { authorizer: { jwt: { claims: { sub: clientId } } } } };
   const listed = JSON.parse((await api.test.listBookings(request)).body);
   assert.deepEqual(listed.map((b) => b.bookingId), ["first", "second"]);
   assert.ok(listed.every((b) => !b.meetingLink));
   const exported = JSON.parse((await api.test.exportMyData(request)).body);
   assert.deepEqual(exported.bookingsAsClient.map((b) => b.bookingId), ["first", "second"]);
   assert.ok(exported.bookingsAsClient.every((b) => !b.meetingLink));
+  assert.equal(exported.bankSandboxTests.length, 1);
+  assert.equal(exported.bankSandboxTests[0].amountMinor, 100);
+  assert.ok(!JSON.stringify(exported).includes("private-bank-reference"));
+  assert.ok(!JSON.stringify(exported).includes("https://example.invalid/private"));
 });
 function event(method, path, body, claims) {
   return { rawPath: path, body: body === undefined ? undefined : JSON.stringify(body), headers: {}, requestContext: { http: { method, sourceIp: "192.0.2.1" }, authorizer: claims ? { jwt: { claims } } : undefined } };

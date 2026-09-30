@@ -1,11 +1,13 @@
 const { GetCommand, PutCommand, UpdateCommand, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
 const { AdminGetUserCommand, AdminDeleteUserCommand, ListUsersCommand } = require("@aws-sdk/client-cognito-identity-provider");
 const { ListObjectsV2Command, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { createDskUatRecords } = require("./dsk-uat-records.cjs");
 const uuid = (value) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(String(value || ""));
 
 function createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listConsultantsByOwner, queryAllItems, scanAllItems, refundFreePointsIfNeeded }) {
   const cacheKey = { userId: "system#monitoring-snapshot" };
   const invalidateMetrics = () => dynamo.send(new DeleteCommand({ TableName: env.usersTable, Key: cacheKey }));
+  const sandboxRecords = createDskUatRecords({ dynamo, table: env.usersTable });
 
   async function releaseSlot(booking) {
     if (!booking.consultantId || !booking.scheduledAt) return;
@@ -95,6 +97,8 @@ function createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listCo
     if (user?.referralCode) await dynamo.send(new DeleteCommand({ TableName: env.usersTable, Key: { userId: `referral#${user.referralCode}` },
       ConditionExpression: "refUserId = :owner", ExpressionAttributeValues: { ":owner": userId }
     })).catch((error) => { if (error.name !== "ConditionalCheckFailedException") throw error; });
+    // Remove owner-linked sandbox rows before discarding the retryable identity.
+    await sandboxRecords.purge(userId);
     await dynamo.send(new DeleteCommand({ TableName: env.usersTable, Key: { userId } }));
     await invalidateMetrics();
     return { deleted: true, anonymizedBookings: uniqueBookings.size, cognitoSubRetained: false };

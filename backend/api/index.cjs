@@ -3,6 +3,9 @@ const { createMonitoring, monitoringSummary, profileCompletion } = require("./mo
 const { createIdentityChecks } = require("./identity.cjs");
 const { createMetricsCache } = require("./metrics-cache.cjs");
 const { createAccountLifecycle } = require("./account-lifecycle.cjs");
+const { createDskUatAdapter } = require("./dsk-uat.cjs");
+const { createDskUatService } = require("./dsk-uat-service.cjs");
+const { createDskUatRecords } = require("./dsk-uat-records.cjs");
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DeleteCommand,
@@ -59,6 +62,7 @@ const env = {
 
 let activeRequestOrigin = "";
 const monitoring = createMonitoring({ dynamo, table: env.usersTable });
+const dskUatRecords = createDskUatRecords({ dynamo, table: env.usersTable });
 const identity = createIdentityChecks({ cognito, userPoolId: env.userPoolId });
 const cachedAdminMetrics = createMetricsCache({ dynamo, table: env.usersTable, collect: buildAdminMetrics });
 const lifecycle = createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listConsultantsByOwner, queryAllItems, scanAllItems, refundFreePointsIfNeeded });
@@ -2591,7 +2595,7 @@ async function bootstrapUser(event) {
 async function exportMyData(event) {
   const claims = requireAuth(event);
 
-  const [user, consultant, clientBookings] = await Promise.all([
+  const [user, consultant, clientBookings, bankSandboxTests] = await Promise.all([
     getUserBySub(claims.sub),
     getConsultantByOwner(claims.sub),
     queryAllItems({
@@ -2599,7 +2603,8 @@ async function exportMyData(event) {
         IndexName: "client-index",
         KeyConditionExpression: "clientId = :id",
         ExpressionAttributeValues: { ":id": claims.sub }
-    })
+    }),
+    dskUatRecords.listForExport(claims.sub)
   ]);
 
   let consultantBookings = [];
@@ -2620,6 +2625,7 @@ async function exportMyData(event) {
     consultantProfile: consultant || null,
     bookingsAsClient: clientBookings.map((booking) => bookingForViewer(booking, claims.sub)),
     bookingsAsConsultant: consultantBookings,
+    bankSandboxTests,
     notes: [
       "Този файл съдържа цялата информация, която GrowPoint съхранява за теб.",
       "Документите (CV, сертификати) се пазят в S3 и се свалят чрез временни линкове, генерирани при поискване.",
@@ -5554,6 +5560,38 @@ function health() {
   });
 }
 
+let dskUatService;
+function dskUatEnabled() {
+  return process.env.DSK_UAT_ENABLED === "true" && Boolean(process.env.DSK_UAT_USERNAME && process.env.DSK_UAT_PASSWORD);
+}
+
+function sandboxPayments() {
+  if (!dskUatEnabled()) throw Object.assign(new Error("Банковите тестове са изключени."), { statusCode: 403 });
+  if (!dskUatService) {
+    try {
+      dskUatService = createDskUatService({ dynamo, table: env.usersTable, adapter: createDskUatAdapter({
+        userName: process.env.DSK_UAT_USERNAME, password: process.env.DSK_UAT_PASSWORD
+      }) });
+    } catch { throw Object.assign(new Error("Невалидна тестова конфигурация."), { statusCode: 503 }); }
+  }
+  return dskUatService;
+}
+
+function adminDskUatConfig(event) {
+  requireAdmin(event);
+  return response(200, { enabled: dskUatEnabled(), amountMinor: 100, currency: "EUR" }, { "Cache-Control": "no-store" });
+}
+
+async function adminDskUatCreate(event) {
+  const claims = requireAdmin(event);
+  return response(200, await sandboxPayments().create(claims.sub, parseBody(event)), { "Cache-Control": "no-store" });
+}
+
+async function adminDskUatGet(event, checkoutId) {
+  const claims = requireAdmin(event);
+  return response(200, await sandboxPayments().get(claims.sub, checkoutId), { "Cache-Control": "no-store" });
+}
+
 exports.handler = async (event) => {
   activeRequestOrigin = headerValue(event?.headers, "origin");
   try {
@@ -5660,6 +5698,10 @@ exports.handler = async (event) => {
     }
 
     if (method === "GET" && path === "/admin/metrics") return await getAdminMetrics(event);
+    if (method === "GET" && path === "/admin/payments/uat/config") return adminDskUatConfig(event);
+    if (method === "POST" && path === "/admin/payments/uat/orders") return await adminDskUatCreate(event);
+    const dskUatOrderMatch = /^\/admin\/payments\/uat\/orders\/([^/]+)$/.exec(path);
+    if (method === "GET" && dskUatOrderMatch) return await adminDskUatGet(event, dskUatOrderMatch[1]);
     if (method === "GET" && path === "/admin/consultants") return await listConsultantsForAdmin(event);
     if (method === "GET" && path === "/admin/bookings") return await adminListBookings(event);
 

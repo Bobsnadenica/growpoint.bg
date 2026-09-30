@@ -21,6 +21,7 @@ function loadApi({ send = async () => ({}), environment = {}, presign } = {}) {
     }
   };
   vm.runInNewContext(readFileSync(filename, "utf8") + "\nexports.test = { getMeProfile, getBookableAvailability, bookedSlotsSnapshot, stripSensitiveConsultantFields, createBooking, rescheduleBooking, confirmBookingSession, updateMeProfile, updateMyConsultant, createUploadUrl, validateStoredDocuments, getMyNotifications, markMyNotificationsRead, redeemInvite, awardProfileCompletionIfEligible, setConsultantFeatured, setUserRestricted, applyAutomaticVisibility, setConsultantVisibility, setConsultantPackage, bootstrapUser, scanWithFilter, queryConsultantsByStatus, scanAllItems, buildAdminMetrics, bookingForViewer, parseBody, isVisibleConsultant, sendEmail, sendBookingReminderEmails, sendDueReminders, termsAcceptance, refundFreePointsIfNeeded, listBookings, exportMyData };", context, { filename });
+  vm.runInNewContext("exports.test.adminDskUatConfig = adminDskUatConfig; exports.test.adminDskUatCreate = adminDskUatCreate; exports.test.adminDskUatGet = adminDskUatGet;", context);
   return context.exports;
 }
 module.exports = { loadApi };
