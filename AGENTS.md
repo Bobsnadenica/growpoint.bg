@@ -22,6 +22,7 @@ Guide for AI/dev sessions on this repo. Keep it short; update it when something 
 npm run dev              # local dev server (vite)
 npm run build            # GATE: check-theme + tsc + vite + route copies (run before commit)
 npm run smoke:prod       # 14 read-only prod checks (expect 14/14)
+npm run check:launch-domains   # both hosts: valid TLS + HTTP-to-HTTPS (require 4/4)
 bash scripts/check-secrets.sh   # secret scan
 node --check backend/api/index.cjs   # backend syntax
 ```
@@ -51,4 +52,4 @@ node --check backend/api/index.cjs   # backend syntax
 - Don't dump production Cognito user data into logs/output.
 
 ## Known follow-ups
-Read `memory.md` for current context and release gates; historical plans may be stale. Biggest gates: actual DKS integration, SES production delivery, and deployed disposable-account lifecycle tests. `/admin/dashboard` uses existing Cognito admin access only. Cognito lifecycle reconciliation, live account checks, and on-demand cached metrics are implemented; review/apply Terraform before expecting new behavior in AWS.
+Read `memory.md` and `docs/qa-2026-09-30.md` for current release gates; historical plans may be stale. Biggest gates: apex TLS/HTTPS redirects, suitable commercial/SPA hosting, SES production delivery, deployed disposable-account lifecycle tests, and DKS integration. Backend fixes are deployed; future AWS changes still require a reviewed plan. Existing CloudFront is the intended cutover target, but fresh certificate DNS validation and owner Cloudflare access are required first. `/admin/dashboard` uses existing Cognito admin access only. Never certify readiness from the www-only smoke suite when the separate domain gate fails.

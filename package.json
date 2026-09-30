@@ -7,6 +7,7 @@
     "dev": "vite",
     "test": "node --test tests/*.test.cjs",
     "check:secrets": "bash scripts/check-secrets.sh",
+    "check:launch-domains": "node scripts/check-launch-domains.mjs",
     "theme:check": "node scripts/check-theme.mjs",
     "build": "node scripts/check-theme.mjs && tsc --noEmit && node scripts/site-build.mjs build",
     "build:cloudfront": "node scripts/check-theme.mjs && tsc --noEmit && node scripts/site-build.mjs cloudfront",

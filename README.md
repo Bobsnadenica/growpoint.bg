@@ -226,6 +226,7 @@ Live checks use only owner-supplied QA accounts and clearly labelled synthetic d
 | --- | --- | --- |
 | Regression, build, syntax, secrets, dependencies | 89/89 tests; build/syntax/secrets pass; both dependency audits clean | Backend deployed; reviewed Terraform apply destroyed nothing and follow-up plan has no changes. |
 | Existing public profile and read-only smoke | 14/14 passed live | Newly created dynamic profile URLs need a new Pages build or SPA-aware hosting. |
+| Domain TLS and HTTP redirects | **Blocked: 1/4 passed** | www HTTPS works; apex certificate expired and HTTP does not force HTTPS. Run `npm run check:launch-domains` separately from the www smoke suite. |
 | Desktop/mobile pages and redirects | 38 live checks; no overflow or uncaught JavaScript errors | Fixed mobile chip clipping; pricing bookmark now gets a static route. Unknown/retired paths intentionally return 404. |
 | Supplied-account booking/chat/files | Live acceptance, two-way automatic chat, rescheduling, cancellation, sharing/download and revocation passed | New QA booking cancelled/unpaid; new QA files removed. Archived chat reads work; sends return 400. Issued document links expire within 15 minutes. |
 | Permissions and notifications | Unrelated client receives 403; single-notification read persists | Destructive lifecycle/admin mutations on persistent accounts are not used as tests. |
@@ -238,6 +239,8 @@ Live checks use only owner-supplied QA accounts and clearly labelled synthetic d
 - Transactional email needs a verified SES sender and, if the AWS account is still sandboxed, recipients must be verified.
 - On 30 September, SES remains sandboxed with production review **denied**; the domain and configured sender are not verified. The owner must repair DNS/verification and obtain approval before general-recipient email is advertised. The contact form prepares a visitor-owned email, not an automatic server submission.
 - GitHub Pages cannot return native HTTP 200 for arbitrary new `/consultants/:slug` or `/u/:id` paths until they have a static copy. In-app routing works through its 404 fallback, but this is not a satisfactory permanent direct-link/SEO solution. The existing optional CloudFront hosting supplies SPA fallback; a production DNS cutover needs the owner's Cloudflare access and a verified deployment.
+- Before launch, repair apex TLS and enforce HTTPS at the edge. The existing Pages certificate expired on 6 September and its provisioning is in a failed authorization state; www remains reachable through Cloudflare's valid edge certificate. Do not reset the custom domain until DNS is ready, or change DNS without a verified target. The existing AWS custom-domain certificates timed out because their validation records are missing; issue fresh certificates and validate them in Cloudflare before CloudFront cutover.
+- GitHub Pages excludes primarily commercial-transaction sites and cautions against sensitive transactions. Given GrowPoint's paid-marketplace model, paid production should use suitable hosting rather than Pages; the existing S3/CloudFront infrastructure is the intended low-idle-cost option, not a new always-on service. See [GitHub's hosting policy](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits).
 - Static expert HTML now contains generic metadata only. Personal profile data is fetched from the live API. Previously committed metadata and third-party cached copies cannot be erased by Cognito cleanup; removal from those copies is a separate process.
 - Legal review must establish the operator/controller identity, applicable retention/legal bases and actual cancellation/refund terms; do not invent company details or treat the current policy as legal approval.
 - The large `SiteAppLegacy.tsx` and Lambda handler remain consolidation points; regression tests and lazy admin chunks are now present.
@@ -254,6 +257,7 @@ Preserve existing uncommitted work, keep generated deployment output intentional
 Apply reviewed backend infrastructure before publishing the rebuilt frontend. Local tests and read-only smoke checks do not replace deployed, authenticated end-to-end checks:
 
 - Verify SES production access, sender verification, sending status, and delivery to an unverified recipient. Sandbox acceptance does not prove general email readiness.
+- Run `npm run check:launch-domains`; require valid certificates and secure HTTP redirects on both apex and www. Verify SPA-aware, permitted production hosting before paid launch.
 - Verify dashboard counts as an admin and confirm a non-admin cannot access its API.
 - With an explicitly disposable account, test Cognito disable/enable/deletion, event delivery, DynamoDB cleanup, public disappearance, and old-session rejection. Confirm the daily fallback and alarms operate.
 - Exercise bookings, chat, uploads, invitations, cancellation, and points after deployment.
