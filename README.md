@@ -215,7 +215,7 @@ Run `terraform -chdir=infra/terraform init -upgrade` when adopting the provider 
 
 ## Current limitations and roadmap
 
-### QA snapshot — 30 September 2026
+### QA snapshot — 30 September–1 October 2026
 
 **Expert visibility:** admins can choose **Automatic at 100%**, **Shown**, or **Hidden** on each expert card. Saving a complete profile or granting any tier (including Start) publishes an active member into the catalogue. Explicit hiding survives later edits. Showing cannot bypass inactive membership, suspension, deletion, or a disabled/missing Cognito account. Portrait/cover images are optional; provided image URLs must still be valid. The authenticated visibility route is deployed; no bulk publication was performed.
 
