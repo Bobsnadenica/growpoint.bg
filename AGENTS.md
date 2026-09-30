@@ -12,8 +12,8 @@ Guide for AI/dev sessions on this repo. Keep it short; update it when something 
 - **Helper scripts:** `scripts/` (build, smoke test, data migrations, seed).
 
 ## Hosting (important)
-- **Production `www.growpoint.bg` is GitHub Pages** — served from the committed repo root (`index.html`, `assets/`, route-copy folders). A push to `main` deploys it.
-- **CloudFront (`d30m6jtjij7col.cloudfront.net`) is the test/cutover domain only**, served from an S3 bucket; refreshed with `npm run deploy:cloudfront`.
+- **Production `www.growpoint.bg` uses CloudFront + private S3.** Its DNS route and issued certificate are verified. **A Git push does not publish CloudFront**; use `npm run deploy:cloudfront`.
+- GitHub stores source/CI and legacy Pages root artifacts. The raw CloudFront domain (`d30m6jtjij7col.cloudfront.net`) remains a preview address. Apex still has old Pages A/AAAA records pending explicit routing confirmation; do not claim a full cutover or 4/4 domain pass yet.
 - API: `https://zmajj05nm1.execute-api.eu-west-1.amazonaws.com`. Region `eu-west-1`.
 - AWS resource names are `growpoint-dev-*`. AWS provider 6.63 supports renaming the existing Cognito pool friendly name to `growpoint-dev-users` in place. Its ID must remain unchanged; `prevent_destroy` protects accounts. Never use the old provider 5.x to perform this rename (it proposes replacement).
 
@@ -21,24 +21,28 @@ Guide for AI/dev sessions on this repo. Keep it short; update it when something 
 ```
 npm run dev              # local dev server (vite)
 npm run build            # GATE: check-theme + tsc + vite + route copies (run before commit)
-npm run smoke:prod       # 14 read-only prod checks (expect 14/14)
+npm run build:cloudfront # production build in ignored dist/; no upload
+npm test                # latest suite: 129/129; recheck release total
+npm run smoke:prod       # read-only: 19/19 www; 20/20 with CloudFront SPA check
 npm run check:launch-domains   # both hosts: valid TLS + HTTP-to-HTTPS (require 4/4)
 npm run qa:identity      # safe default: zero requests; live flags need explicit disposable-test approval
 bash scripts/check-secrets.sh   # secret scan
 node --check backend/api/index.cjs   # backend syntax
 ```
-`npm run build` writes the built site into the repo root (that's what GitHub Pages serves).
+`npm run build` writes legacy Pages artifacts into the repo root. Production deployment builds `dist/` separately and uploads it to private S3.
 
 ## Deploy
 1. `npm run build` + `bash scripts/check-secrets.sh` (must pass).
 2. Backend/infra change → review `terraform plan` first, then `terraform -chdir=infra/terraform apply`. **Never apply a plan that destroys a DynamoDB table or replaces the Cognito user pool.**
-3. Commit + push to `main` → GitHub Pages deploys `www`. Optionally `npm run deploy:cloudfront` for the test domain.
-4. The owner sometimes auto-commits to `main` as `ko` mid-session — re-check `git log` before committing.
+3. Commit + push to `main`, then `npm run deploy:cloudfront`. GitHub CI/Pages success is not a production CloudFront deployment.
+4. Wait for invalidation completion; verify live www HTML/JS/CSS bytes, media MIME/bytes, direct routes, authentication and the full domain gate. Hashed JS/CSS are immutable; stable assets revalidate after 300 seconds. Old hashed chunks remain for open tabs.
+5. The owner sometimes auto-commits to `main` as `ko` mid-session — re-check `git log` before committing.
 
 ## Conventions & gotchas
 - **Overlays:** all modals/lightboxes render via `createPortal(..., document.body)` — page CSS otherwise breaks `position:fixed` and the sticky header covers them.
 - **Dark theme:** every color needs a `:root[data-theme="dark"]` override; enforced by `scripts/check-theme.mjs` (part of `npm run build`).
-- **Assets:** static files referenced as `/assets/...` live in `public/assets/` (dev + build) and end up at the deployed root. The logo header uses `/assets/logo.svg` (light) + `/assets/logo-dark.svg` (dark theme swap).
+- **Assets:** static `/assets/...` files live in `public/assets/`; existing owner creatives are tracked in `assets/advertisement/` and copied into both deployment builds. Preserve those originals. Header logos use `/assets/logo/logo_dark.png` + `/assets/logo/logo_white.png`. Require real media MIME/bytes: CloudFront can return SPA HTML with status 200 for a missing asset.
+- **Routes:** dynamic SPA documents return HTTP 200 on CloudFront. Missing profiles/routes show client not-found/noindex state, not a native server 404. Consultant visibility still comes from the live API.
 - **CORS for local API testing:** temporarily add `http://localhost:5173` to `frontend_origins` in tfvars + apply; **always revert + re-verify** afterward.
 
 ## Business model (current)
@@ -54,4 +58,4 @@ node --check backend/api/index.cjs   # backend syntax
 - `--live-mutate` is retired: never fabricate paid packages/attendance or manually clean DynamoDB to claim lifecycle QA. Use the gated client-only identity script; report its S3/expert/email limitations.
 
 ## Known follow-ups
-Read `memory.md` and `docs/qa-2026-09-30.md` for current release gates; historical plans may be stale. Biggest gates: apex TLS/hosting cutover, SES production delivery, approved operator/legal details, deployed disposable-account lifecycle tests, and DKS integration. SES domain/DKIM now verify, but production review is denied; sandbox/simulator acceptance is not delivery. Existing CloudFront is verified as a preview; its fresh managed certificate still needs two DNS validation records before alias activation/cutover. Cloudflare is signed in, but the locked Mac prevents remaining DNS edits. `/admin/dashboard` uses existing Cognito admin access only. Never certify readiness from www-only smoke when the domain gate fails.
+Read `memory.md` and `docs/qa-2026-09-30.md` for current release gates; historical plans may be stale. www production routing is now CloudFront; both validation records are published, the certificate covers both names, and the distribution is deployed. Apex routing remains pending confirmation. Other gates: SES production delivery, approved operator/legal details, disposable-account lifecycle tests, real social callbacks and DKS integration. SES domain/DKIM verify, but production review is denied; sandbox/simulator acceptance is not delivery. `/admin/dashboard` uses existing Cognito admin access only. Never certify readiness from www-only smoke when the domain gate fails. Keep updates brief and interact directly with the authorized Mac UI; never bypass a locked screen or unrelated app boundaries.

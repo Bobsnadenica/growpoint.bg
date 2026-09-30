@@ -117,12 +117,12 @@ const ADMIN_GROUP = "admin";
 const CONSULTANT_GROUP = "consultants";
 const CLIENT_GROUP = "clients";
 const VISITS_ITEM_ID = "system#visits";
-const TERMS_VERSION = "terms-2026-09-30+privacy-2026-09-30";
+const TERMS_VERSION = "terms-2026-09-30+privacy-2026-10-01";
 
 function termsAcceptance(body, now) {
   if (body.acceptTerms !== true) return {};
   if (body.acceptedTermsVersion !== TERMS_VERSION) {
-    throw Object.assign(new Error("Прегледай актуалните условия и политиката за поверителност."), { statusCode: 400 });
+    throw Object.assign(new Error("Обнови страницата и прегледай актуалните условия и политиката за поверителност."), { statusCode: 400 });
   }
   return { acceptedTermsVersion: TERMS_VERSION, acceptedTermsAt: now, termsAcceptanceRequired: false };
 }
@@ -2525,7 +2525,7 @@ async function bootstrapUser(event) {
     documents: Array.isArray(existing?.documents) ? existing.documents : [],
     createdAt: existing?.createdAt || now,
     updatedAt: now,
-    ...(!existing && (body.socialOnboarding === true || claims.identities || /^(Google|Facebook|SignInWithApple)_/i.test(String(claims["cognito:username"] || claims.username || ""))) ? { termsAcceptanceRequired: true } : {}),
+    ...(!existing ? { termsAcceptanceRequired: true } : {}),
     ...acceptance
   };
   try {

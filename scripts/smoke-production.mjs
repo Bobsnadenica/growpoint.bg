@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
 const execFileAsync = promisify(execFile);
 const projectDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -17,6 +18,55 @@ const state = {
   checks: [],
   runId: Math.random().toString(36).slice(2, 14)
 };
+
+export const homepageAdMedia = [
+  { path: "/assets/advertisement/1.mp4", mime: "video/mp4" },
+  { path: "/assets/advertisement/2.mp4", mime: "video/mp4" },
+  { path: "/assets/advertisement/3.jpg", mime: "image/jpeg" },
+  { path: "/assets/advertisement/4.jpg", mime: "image/jpeg" }
+];
+const javascriptMimes = ["text/javascript", "application/javascript", "text/ecmascript", "application/ecmascript"];
+
+export function referencedEntrypointAssets(html, siteUrl) {
+  const origin = new URL(siteUrl).origin;
+  const assets = new Map();
+  for (const tag of String(html).match(/<(?:script|link)\b[^>]*>/gi) || []) {
+    const reference = tag.match(/\b(?:src|href)\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (!reference) continue;
+    const url = new URL(reference, `${siteUrl.replace(/\/+$/, "")}/`);
+    if (url.origin !== origin) continue; // External font CSS is not a root bundle.
+    const kind = url.pathname.endsWith(".js") ? "js" : url.pathname.endsWith(".css") ? "css" : "";
+    if (kind) assets.set(url.href, { url: url.href, kind });
+  }
+  const result = [...assets.values()];
+  if (!result.some(asset => asset.kind === "js") || !result.some(asset => asset.kind === "css")) throw new Error("Homepage did not reference both local JS and CSS assets.");
+  return result;
+}
+
+export async function verifyAssetHeaders(url, expectedMimes, { fetchImpl = fetch, requireLength = false } = {}) {
+  // HEAD only: video bodies are never requested or downloaded.
+  const response = await fetchImpl(url, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(15000) });
+  const pathname = new URL(url).pathname;
+  if (response.status !== 200) throw new Error(`${pathname}: expected HEAD 200, got ${response.status}.`);
+  const mime = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  if (!expectedMimes.includes(mime)) throw new Error(`${pathname}: expected ${expectedMimes.join("/")}, got ${mime || "missing MIME"}; a 200 SPA fallback is not an asset.`);
+  if (requireLength) {
+    const length = String(response.headers.get("content-length") || "");
+    if (!/^[1-9]\d*$/.test(length) || !Number.isSafeInteger(Number(length))) throw new Error(`${pathname}: missing or invalid positive Content-Length.`);
+  }
+  return mime;
+}
+
+export async function verifyEntrypointAssets(siteUrl, { fetchImpl = fetch } = {}) {
+  const response = await fetchImpl(`${siteUrl.replace(/\/+$/, "")}/`, { signal: AbortSignal.timeout(15000) });
+  if (response.status !== 200 || !String(response.headers.get("content-type") || "").toLowerCase().startsWith("text/html")) {
+    await response.body?.cancel();
+    throw new Error("Homepage must return HTML 200 before checking its bundle assets.");
+  }
+  const assets = referencedEntrypointAssets(await response.text(), siteUrl);
+  await Promise.all(assets.map(asset => verifyAssetHeaders(asset.url, asset.kind === "js" ? javascriptMimes : ["text/css"], { fetchImpl })));
+  return `${assets.filter(asset => asset.kind === "js").length} JS / ${assets.filter(asset => asset.kind === "css").length} CSS headers verified`;
+}
 
 function stripEnvQuotes(value) {
   const trimmed = String(value || "").trim();
@@ -189,6 +239,14 @@ async function publicChecks(config) {
     });
   }
 
+  await check("Homepage referenced JS/CSS asset MIME", () => verifyEntrypointAssets(config.siteUrl));
+  for (const media of homepageAdMedia) {
+    await check(`Homepage media ${media.path}`, async () => {
+      await verifyAssetHeaders(`${config.siteUrl}${media.path}`, [media.mime], { requireLength: true });
+      return `${media.mime}; positive Content-Length; HEAD only`;
+    });
+  }
+
   if (cloudfront) {
     await check("CloudFront SPA fallback for new profile paths", async () => {
       const response = await fetch(`${config.siteUrl}/consultants/smoke-new-profile-${state.runId}/`);
@@ -252,7 +310,7 @@ async function main() {
   if (failures > 0) process.exitCode = 1;
 }
 
-main().catch((error) => {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });

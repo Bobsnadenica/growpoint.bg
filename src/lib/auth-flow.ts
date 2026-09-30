@@ -6,7 +6,7 @@ const SOCIAL_ONBOARDING_KEY = "growpoint.social-onboarding-pending";
 const INVITE_TOKEN_KEY = "growpoint.invite-token";
 const REFERRAL_CODE_KEY = "growpoint.referral-code";
 
-export const CURRENT_TERMS_VERSION = "terms-2026-09-30+privacy-2026-09-30";
+export const CURRENT_TERMS_VERSION = "terms-2026-09-30+privacy-2026-10-01";
 
 export type SocialAuthProviderKey = "google" | "apple" | "linkedin";
 export type SocialAuthMode = "login" | "register";
@@ -87,7 +87,13 @@ function removeStorageItem(key: string) {
 }
 
 export function readPendingBootstrap() {
-  return readStorageItem<PendingBootstrap>(PENDING_BOOTSTRAP_KEY);
+  const pending = readStorageItem<PendingBootstrap>(PENDING_BOOTSTRAP_KEY);
+  if (!pending || pending.acceptedTermsVersion === CURRENT_TERMS_VERSION || (pending.acceptTerms === undefined && pending.acceptedTermsVersion === undefined)) return pending;
+  // Keep pending profile fields, but stale consent cannot authorize a different
+  // policy. First-use onboarding will ask for an explicit new acceptance.
+  const { acceptTerms, acceptedTermsVersion, ...profile } = pending;
+  writeStorageItem(PENDING_BOOTSTRAP_KEY, profile);
+  return profile;
 }
 
 export function writePendingBootstrap(value: PendingBootstrap) {

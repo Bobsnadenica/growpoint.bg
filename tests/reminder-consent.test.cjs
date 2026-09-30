@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const { loadApi } = require("./helpers/api-harness.cjs");
 const copy = value => JSON.parse(JSON.stringify(value));
 const event = body => ({ body: JSON.stringify(body), requestContext: { authorizer: { jwt: { claims: { sub: "client", email: "client@example.invalid" } } } } });
-const version = "terms-2026-09-30+privacy-2026-09-30";
+const version = "terms-2026-09-30+privacy-2026-10-01";
 
 test("terms acceptance is explicit, current-version and server-timestamped", async () => {
   let fields;

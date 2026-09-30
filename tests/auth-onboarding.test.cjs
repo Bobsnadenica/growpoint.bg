@@ -4,7 +4,7 @@ const { readFileSync } = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
 const source = path => readFileSync(require.resolve(`../${path}`), "utf8");
-const CURRENT_TERMS_VERSION = "terms-2026-09-30+privacy-2026-09-30";
+const CURRENT_TERMS_VERSION = "terms-2026-09-30+privacy-2026-10-01";
 
 function handler(name, context, path = "src/app/legacy/SiteAppLegacy.tsx") {
   const file = ts.createSourceFile(path, source(path), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

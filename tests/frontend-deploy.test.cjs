@@ -17,7 +17,9 @@ async function deploy(failAssets = false) {
     })[name],
     run: async (command, args) => {
       commands.push({ command, args: [...args] });
-      if (failAssets && args[2] === "dist/assets") throw new Error("asset upload failed");
+      if (failAssets && args[2] === "dist/assets" && (failAssets === true || args[1] === failAssets)) {
+        throw new Error("asset upload failed");
+      }
       return "";
     }
   });
@@ -46,4 +48,51 @@ test("Failed asset publication prevents HTML publication", async () => {
   const { commands, completion } = await deploy(true);
   await assert.rejects(completion, /asset upload failed/);
   assert.equal(commands.some(({ args }) => args[1] === "sync" && args[2] === "dist"), false);
+});
+
+test("Only Vite-hashed JS/CSS are immutable; stable assets receive revalidating metadata", async () => {
+  const { commands, completion } = await deploy();
+  await completion;
+  const assets = commands.filter(({ args }) => args[0] === "s3" && args[2] === "dist/assets");
+  assert.equal(assets.length, 2);
+  assert.deepEqual(assets[0].args.slice(4), [
+    "--exclude", "*", "--include", "*-????????.js", "--include", "*-????????.css",
+    "--cache-control", "public, max-age=31536000, immutable"
+  ]);
+  assert.deepEqual(assets[1].args.slice(1), [
+    "cp", "dist/assets", "s3://qa-public-bucket/assets", "--recursive",
+    "--exclude", "*-????????.js", "--exclude", "*-????????.css",
+    "--cache-control", "public, max-age=300, must-revalidate"
+  ]);
+  assert.equal(assets[1].args.includes("--delete"), false);
+  assert.ok(commands.indexOf(assets[1]) < commands.findIndex(({ args }) => args[1] === "sync" && args[2] === "dist"));
+});
+
+test("Failed stable-asset publication also prevents HTML publication", async () => {
+  const { commands, completion } = await deploy("cp");
+  await assert.rejects(completion, /asset upload failed/);
+  assert.equal(commands.some(({ args }) => args[1] === "sync" && args[2] === "dist"), false);
+});
+
+test("CloudFront build copies existing owner creatives without changing the root source", async () => {
+  const buildSource = readFileSync("scripts/site-build.mjs", "utf8");
+  const start = buildSource.indexOf("async function runCloudfrontBuild()");
+  const end = buildSource.indexOf("\nconst mode =", start);
+  for (const hasCreatives of [true, false]) {
+    const copied = [];
+    const calls = [];
+    const build = vm.runInNewContext(`${buildSource.slice(start, end)}\nrunCloudfrontBuild`, {
+      process: { chdir() {} }, projectDir: "/qa", distDir: "/qa/dist", distAssetsDir: "/qa/dist/assets",
+      rootAdvertisementDir: "/qa/assets/advertisement", path: require("node:path"),
+      viteBuild: async () => calls.push("build"), existsSync: () => hasCreatives,
+      cp: async (from, to, options) => { copied.push({ from, to, recursive: options.recursive }); calls.push("copy"); },
+      loadEffectiveSeoData: async () => { calls.push("seo"); return {}; },
+      readFile: async () => "<html></html>", writeSeoFiles: async () => {}
+    });
+    await build();
+    assert.deepEqual(copied, hasCreatives ? [{
+      from: "/qa/assets/advertisement", to: "/qa/dist/assets/advertisement", recursive: true
+    }] : []);
+    assert.deepEqual(calls, hasCreatives ? ["build", "copy", "seo"] : ["build", "seo"]);
+  }
 });

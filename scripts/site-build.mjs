@@ -433,6 +433,9 @@ async function runBuild({ keepDist = false } = {}) {
 async function runCloudfrontBuild() {
   process.chdir(projectDir);
   await viteBuild();
+  if (existsSync(rootAdvertisementDir)) {
+    await cp(rootAdvertisementDir, path.join(distAssetsDir, "advertisement"), { recursive: true });
+  }
   const effectiveSeoData = await loadEffectiveSeoData();
   // Render the per-route static HTML into dist/ so CloudFront serves
   // route-specific metadata (title/description/OG/JSON-LD) for known public

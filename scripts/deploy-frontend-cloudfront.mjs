@@ -48,8 +48,31 @@ async function main() {
     "sync",
     "dist/assets",
     `s3://${bucketName}/assets`,
+    "--exclude",
+    "*",
+    "--include",
+    "*-????????.js",
+    "--include",
+    "*-????????.css",
     "--cache-control",
     "public, max-age=31536000, immutable"
+  ]);
+
+  // Re-copy stable names so existing objects also receive the shorter cache
+  // policy. s3 sync does not change metadata on otherwise unchanged objects.
+  console.log(`[cloudfront] Publishing revalidating public assets to s3://${bucketName}/assets...`);
+  await run("aws", [
+    "s3",
+    "cp",
+    "dist/assets",
+    `s3://${bucketName}/assets`,
+    "--recursive",
+    "--exclude",
+    "*-????????.js",
+    "--exclude",
+    "*-????????.css",
+    "--cache-control",
+    "public, max-age=300, must-revalidate"
   ]);
 
   console.log(`[cloudfront] Syncing HTML and public files to s3://${bucketName}...`);
