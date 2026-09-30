@@ -279,7 +279,7 @@ function RouteExperience() {
 
 export default function AppShell() {
   const { user, token, loading, logout, isAdmin } = useAuth();
-  const [savedIdentity, setSavedIdentity] = useState<{ token: string; name: string } | null>(null);
+  const [savedIdentity, setSavedIdentity] = useState<{ token: string; name: string; termsAcceptanceRequired?: boolean } | null>(null);
   const displayName = savedIdentity?.token === token && savedIdentity.name ? savedIdentity.name : user?.name;
   useEffect(() => {
     setSavedIdentity(null);
@@ -287,20 +287,26 @@ export default function AppShell() {
     let active = true;
     let edited = false;
     const updated = (event: Event) => {
-      const detail = (event as CustomEvent<{ token: string; name: string }>).detail;
+      const detail = (event as CustomEvent<{ token: string; name: string; termsAcceptanceRequired?: boolean }>).detail;
       if (detail?.token !== token) return;
       edited = true;
-      setSavedIdentity({ token, name: detail.name });
+      setSavedIdentity({ token, name: detail.name, termsAcceptanceRequired: detail.termsAcceptanceRequired });
     };
     window.addEventListener("growpoint:profile-name", updated);
     // One read per session, no polling; never let an older read overwrite a save.
     void api.getMyProfile(token).then(profile => {
-      if (active && !edited) setSavedIdentity({ token, name: profile.name });
-    }).catch(() => { /* Keep the authentication fallback if no profile exists yet. */ });
+      if (active && !edited) setSavedIdentity({ token, name: profile.name, termsAcceptanceRequired: profile.termsAcceptanceRequired });
+    }).catch(() => {
+      // Preserve the auth-name fallback while route-level error/retry UI loads.
+      if (active && !edited) setSavedIdentity({ token, name: "" });
+    });
     return () => { active = false; window.removeEventListener("growpoint:profile-name", updated); };
   }, [token]);
   const navigate = useNavigate();
   const location = useLocation();
+  const awaitingTerms = savedIdentity?.token === token && savedIdentity?.termsAcceptanceRequired === true;
+  const privateRouteWithoutOnboarding = ["/account", "/files", "/messages", "/notifications", "/admin"]
+    .some(path => location.pathname === path || location.pathname.startsWith(`${path}/`));
   const currentYear = new Date().getFullYear();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isRouteTransitioning, setIsRouteTransitioning] = useState(false);
@@ -415,13 +421,13 @@ export default function AppShell() {
       try {
         // The shared read repairs a missing profile once and flags onboarding;
         // header/dashboard reads can run concurrently without consuming it.
-        await api.getMyProfile(token);
+        const profile = await api.getMyProfile(token);
 
         clearPendingBootstrap();
 
         if (!cancelled) {
           completed = true;
-          navigate(intent.redirect || "/dashboard", { replace: true });
+          navigate(profile.termsAcceptanceRequired ? "/dashboard" : intent.redirect || "/dashboard", { replace: true });
         }
       } catch {
         if (!cancelled) {
@@ -448,7 +454,7 @@ export default function AppShell() {
   }, [loading, location.key, navigate, token, user]);
 
   useEffect(() => {
-    if (loading || !user || !token) {
+    if (loading || !user || !token || savedIdentity?.token !== token || awaitingTerms) {
       setHeaderNotifications([]);
       setHeaderNotificationsError("");
       setSelectedNotification(null);
@@ -482,7 +488,7 @@ export default function AppShell() {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", loadHeaderNotifications);
     };
-  }, [isAdmin, loading, location.pathname, token, user]);
+  }, [awaitingTerms, isAdmin, loading, location.pathname, savedIdentity?.token, token, user]);
 
   useEffect(() => {
     function handleNotificationsMarkedRead(event: Event) {
@@ -904,6 +910,9 @@ export default function AppShell() {
 
       <main id="main-content" className="page-main">
         <Suspense fallback={<div className="container panel" role="status">Зареждане…</div>}>
+        {token && privateRouteWithoutOnboarding && savedIdentity?.token !== token
+          ? <div className="container panel" role="status">Зареждане…</div>
+          : awaitingTerms && privateRouteWithoutOnboarding ? <Navigate to="/dashboard" replace /> : (
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/examples/:id" element={<Navigate to="/users" replace />} />
@@ -934,6 +943,7 @@ export default function AppShell() {
           <Route path="/pricing" element={<Navigate to="/users" replace />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        )}
         </Suspense>
       </main>
 

@@ -40,6 +40,18 @@ async function main() {
   console.log("[cloudfront] Building frontend dist...");
   await run("npm", ["run", "build:cloudfront"]);
 
+  // Publish dependencies before HTML references them. Keep prior hashed chunks
+  // available for visitors with an older page open during a deployment.
+  console.log(`[cloudfront] Syncing immutable assets to s3://${bucketName}/assets...`);
+  await run("aws", [
+    "s3",
+    "sync",
+    "dist/assets",
+    `s3://${bucketName}/assets`,
+    "--cache-control",
+    "public, max-age=31536000, immutable"
+  ]);
+
   console.log(`[cloudfront] Syncing HTML and public files to s3://${bucketName}...`);
   await run("aws", [
     "s3",
@@ -53,17 +65,6 @@ async function main() {
     "no-cache, no-store, must-revalidate"
   ]);
 
-  console.log(`[cloudfront] Syncing immutable assets to s3://${bucketName}/assets...`);
-  await run("aws", [
-    "s3",
-    "sync",
-    "dist/assets",
-    `s3://${bucketName}/assets`,
-    "--delete",
-    "--cache-control",
-    "public, max-age=31536000, immutable"
-  ]);
-
   console.log(`[cloudfront] Invalidating ${distributionId}...`);
   await run("aws", [
     "cloudfront",
@@ -71,22 +72,7 @@ async function main() {
     "--distribution-id",
     distributionId,
     "--paths",
-    "/index.html",
-    "/404.html",
-    "/robots.txt",
-    "/sitemap.xml",
-    "/manifest.json",
-    "/favicon.svg",
-    "/consultants*",
-    "/users*",
-    "/auth*",
-    "/dashboard*",
-    "/admin*",
-    "/account*",
-    "/about*",
-    "/faq*",
-    "/contact*",
-    "/legal*"
+    "/*"
   ]);
 
   console.log(`[cloudfront] Deployed: https://${distributionDomain}/`);

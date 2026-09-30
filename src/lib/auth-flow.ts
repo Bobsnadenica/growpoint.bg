@@ -6,6 +6,8 @@ const SOCIAL_ONBOARDING_KEY = "growpoint.social-onboarding-pending";
 const INVITE_TOKEN_KEY = "growpoint.invite-token";
 const REFERRAL_CODE_KEY = "growpoint.referral-code";
 
+export const CURRENT_TERMS_VERSION = "terms-2026-09-30+privacy-2026-09-30";
+
 export type SocialAuthProviderKey = "google" | "apple" | "linkedin";
 export type SocialAuthMode = "login" | "register";
 
@@ -19,6 +21,8 @@ export type PendingBootstrap = {
   headline?: string;
   consultantProfileType?: ConsultantProfileType;
   avatarUrl?: string;
+  acceptTerms?: boolean;
+  acceptedTermsVersion?: string;
 };
 
 export type SocialAuthIntent = {
@@ -108,12 +112,12 @@ export function clearSocialAuthIntent() {
 
 // Set right after a brand-new social account is created so the dashboard can
 // show a one-time onboarding modal (confirm name, photo, city/occupation).
-export function markSocialOnboardingPending() {
-  writeStorageItem(SOCIAL_ONBOARDING_KEY, true);
+export function markSocialOnboardingPending(userId: string) {
+  writeStorageItem(SOCIAL_ONBOARDING_KEY, userId);
 }
 
-export function readSocialOnboardingPending() {
-  return readStorageItem<boolean>(SOCIAL_ONBOARDING_KEY) === true;
+export function readSocialOnboardingPending(userId: string) {
+  return readStorageItem<string>(SOCIAL_ONBOARDING_KEY) === userId;
 }
 
 export function clearSocialOnboardingPending() {

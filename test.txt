@@ -1,6 +1,9 @@
 GrowPoint — QA & change log
 ===========================
 Last updated: 2026-06-23. Public file — no secrets here.
+Current evidence: docs/qa-2026-09-30.md. Everything below is historical, not current launch proof.
+The old smoke:prod:live/--live-mutate workflow is retired: it fabricated paid states
+and manually cleaned data, so its historical totals are not valid launch evidence.
 Deep docs: README.md · agent/dev notes: CLAUDE.md · upcoming work: plan.txt
 
 Targets

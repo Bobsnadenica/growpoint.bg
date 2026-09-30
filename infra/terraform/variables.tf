@@ -137,19 +137,19 @@ variable "frontend_bucket_name" {
 variable "frontend_domain_aliases" {
   type        = list(string)
   default     = []
-  description = "Custom domain aliases to attach to the CloudFront frontend distribution after an ACM certificate is issued."
+  description = "Custom domains to attach to CloudFront. With frontend_certificate_domains, setting aliases waits for the managed certificate to validate."
 }
 
 variable "frontend_acm_certificate_arn" {
   type        = string
   default     = ""
-  description = "ACM certificate ARN in us-east-1 for CloudFront custom aliases."
+  description = "Optional externally managed ACM certificate ARN in us-east-1. Leave empty to use the validated Terraform-managed certificate."
 }
 
 variable "frontend_certificate_domains" {
   type        = list(string)
   default     = []
-  description = "Optional domains for an ACM DNS-validated certificate request in us-east-1. Terraform outputs DNS records; jethost.bg must create them."
+  description = "Domains for an ACM DNS-validated certificate request in us-east-1. First request with no aliases, publish the output DNS CNAMEs, then set aliases for cutover."
 }
 
 variable "frontend_cloudfront_price_class" {

@@ -117,6 +117,15 @@ const ADMIN_GROUP = "admin";
 const CONSULTANT_GROUP = "consultants";
 const CLIENT_GROUP = "clients";
 const VISITS_ITEM_ID = "system#visits";
+const TERMS_VERSION = "terms-2026-09-30+privacy-2026-09-30";
+
+function termsAcceptance(body, now) {
+  if (body.acceptTerms !== true) return {};
+  if (body.acceptedTermsVersion !== TERMS_VERSION) {
+    throw Object.assign(new Error("Прегледай актуалните условия и политиката за поверителност."), { statusCode: 400 });
+  }
+  return { acceptedTermsVersion: TERMS_VERSION, acceptedTermsAt: now, termsAcceptanceRequired: false };
+}
 
 function response(statusCode, body, extraHeaders = {}) {
   return {
@@ -1163,9 +1172,10 @@ async function sendBookingDeclinedEmail({ recipient, consultant, booking, reason
 
 async function sendBookingReminderEmails({ consultantOwner, consultant, client, booking }) {
   const when = formatBookingDateTimeBg(booking.scheduledAt);
+  const outcomes = { client: booking.clientReminderEmailAcceptedAt ? "accepted" : "skipped", consultant: booking.consultantReminderEmailAcceptedAt ? "accepted" : "skipped" };
   const tasks = [];
 
-  if (client?.email) {
+  if (client?.email && !booking.clientReminderEmailAcceptedAt) {
     tasks.push(
       sendEmail({
         to: client.email,
@@ -1180,11 +1190,11 @@ async function sendBookingReminderEmails({ consultantOwner, consultant, client, 
             : "") +
           `\nАко не можеш да присъстваш, моля откажи резервацията от таблото:\n` +
           `${APP_DASHBOARD_URL}`
-      })
+      }).then(result => { outcomes.client = result.status; })
     );
   }
 
-  if (consultantOwner?.email) {
+  if (consultantOwner?.email && !booking.consultantReminderEmailAcceptedAt) {
     tasks.push(
       sendEmail({
         to: consultantOwner.email,
@@ -1196,23 +1206,51 @@ async function sendBookingReminderEmails({ consultantOwner, consultant, client, 
           `Потребител: ${booking.clientName || ""} (${booking.clientEmail || ""})\n` +
           (booking.note ? `\nБележка: ${booking.note}\n` : "") +
           `\nТабло: ${APP_DASHBOARD_URL}`
-      })
+      }).then(result => { outcomes.consultant = result.status; })
     );
   }
 
   await Promise.allSettled(tasks);
+  return outcomes;
 }
+
+async function appendReminderNotification(booking, userId, flag, notification) {
+  if (!userId || booking[flag]) return;
+  const payload = { id: `n-${randomUUID()}`, type: "booking_reminder", ...notification, href: "/dashboard", createdAt: new Date().toISOString() };
+  try {
+    // The dedup flag and notification commit together, independently of SES.
+    await dynamo.send(new TransactWriteCommand({ TransactItems: [
+      { Update: fieldUpdate(env.bookingsTable, { bookingId: booking.bookingId }, { [flag]: payload.createdAt }, {
+        condition: "#s = :confirmed AND scheduledAt = :scheduled AND attribute_not_exists(#notified)",
+        names: { "#s": "status", "#notified": flag }, values: { ":confirmed": "confirmed", ":scheduled": booking.scheduledAt }
+      }) },
+      { Update: { TableName: env.usersTable, Key: { userId }, UpdateExpression: "SET notifications = list_append(if_not_exists(notifications, :empty), :item)", ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted)", ExpressionAttributeValues: { ":empty": [], ":item": [payload] } } }
+    ] }));
+  } catch (error) {
+    if (error.name !== "TransactionCanceledException") throw error;
+  }
+}
+
+// Historical reminderSentAt covered both email and in-app work without outcome
+// flags. Preserve that once-only behavior; its old delivery outcome is unknown.
+const REMINDER_PENDING_CONDITION = "(attribute_not_exists(reminderSentAt) OR attribute_not_exists(clientReminderNotifiedAt) OR attribute_not_exists(consultantReminderNotifiedAt)) AND (attribute_not_exists(reminderSentAt) OR attribute_exists(reminderAttempts) OR attribute_exists(clientReminderEmailAcceptedAt) OR attribute_exists(consultantReminderEmailAcceptedAt))";
 
 async function sendDueReminders() {
   const now = Date.now();
   const windowStart = now + 22 * 60 * 60 * 1000;
   const windowEnd = now + 26 * 60 * 60 * 1000;
 
-  const result = await dynamo.send(
+  const due = [];
+  let cursor;
+  let pages = 0;
+  do {
+    const result = await dynamo.send(
     new ScanCommand({
       TableName: env.bookingsTable,
+      ExclusiveStartKey: cursor,
+      ConsistentRead: true,
       FilterExpression:
-        "#s = :confirmed AND attribute_not_exists(reminderSentAt) AND scheduledAt BETWEEN :start AND :end",
+        "#s = :confirmed AND " + REMINDER_PENDING_CONDITION + " AND scheduledAt BETWEEN :start AND :end",
       ExpressionAttributeNames: { "#s": "status" },
       ExpressionAttributeValues: {
         ":confirmed": "confirmed",
@@ -1220,9 +1258,12 @@ async function sendDueReminders() {
         ":end": new Date(windowEnd).toISOString()
       }
     })
-  );
-
-  const due = result.Items || [];
+    );
+    due.push(...(result.Items || []));
+    cursor = result.LastEvaluatedKey;
+    pages++;
+  } while (cursor && pages < 100);
+  if (cursor) throw new Error("Reminder scan limit reached; refusing incomplete results.");
   if (!due.length) {
     console.log("[reminders] no bookings due");
     return { processed: 0 };
@@ -1230,7 +1271,17 @@ async function sendDueReminders() {
 
   let processed = 0;
   for (const booking of due) {
+    if (booking.reminderSentAt && !Object.prototype.hasOwnProperty.call(booking, "reminderAttempts") && !booking.clientReminderEmailAcceptedAt && !booking.consultantReminderEmailAcceptedAt) continue;
     try {
+      // Hourly maintenance retries at most four times in the existing window.
+      // Claim before side effects so overlapping invocations do not double-send.
+      await dynamo.send(new UpdateCommand({
+        TableName: env.bookingsTable, Key: { bookingId: booking.bookingId },
+        UpdateExpression: "SET reminderAttempts = if_not_exists(reminderAttempts, :zero) + :one, reminderRetryAfter = :retry",
+        ConditionExpression: "#s = :confirmed AND scheduledAt = :scheduled AND " + REMINDER_PENDING_CONDITION + " AND (attribute_not_exists(reminderAttempts) OR reminderAttempts < :maximum) AND (attribute_not_exists(reminderRetryAfter) OR reminderRetryAfter <= :now)",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: { ":confirmed": "confirmed", ":scheduled": booking.scheduledAt, ":zero": 0, ":one": 1, ":maximum": 4, ":now": new Date(now).toISOString(), ":retry": new Date(now + 60 * 60 * 1000).toISOString() }
+      }));
       const consultantResult = await dynamo.send(
         new GetCommand({
           TableName: env.consultantsTable,
@@ -1243,41 +1294,41 @@ async function sendDueReminders() {
         : null;
       const client = await getUserBySub(booking.clientId);
 
-      await sendBookingReminderEmails({
+      const outcomes = await sendBookingReminderEmails({
         consultantOwner,
         consultant,
         client: client || { email: booking.clientEmail, name: booking.clientName },
         booking
       });
 
+      const acceptedAt = new Date().toISOString();
+      const fields = {};
+      if (outcomes.client === "accepted") fields.clientReminderEmailAcceptedAt = booking.clientReminderEmailAcceptedAt || acceptedAt;
+      if (outcomes.consultant === "accepted") fields.consultantReminderEmailAcceptedAt = booking.consultantReminderEmailAcceptedAt || acceptedAt;
+      if (outcomes.client === "accepted" && outcomes.consultant === "accepted") fields.reminderSentAt = booking.reminderSentAt || acceptedAt;
+      // Persist successful recipients before notification work so its transient
+      // failure cannot cause an already-accepted email to be sent again.
+      if (Object.keys(fields).length) await dynamo.send(new UpdateCommand(fieldUpdate(env.bookingsTable, { bookingId: booking.bookingId }, fields, {
+        condition: "#s = :confirmed AND scheduledAt = :scheduled", names: { "#s": "status" }, values: { ":confirmed": "confirmed", ":scheduled": booking.scheduledAt }
+      })));
+
       const reminderWhen = formatBookingDateTimeBg(booking.scheduledAt);
-      await appendUserNotification(booking.clientId, {
-        type: "booking_reminder",
+      await appendReminderNotification(booking, booking.clientId, "clientReminderNotifiedAt", {
         title: `Утре имаш консултация с ${booking.consultantName || consultant?.name || ""}`,
         body: `Час: ${reminderWhen}.`
       });
       if (consultant?.ownerUserId) {
-        await appendUserNotification(consultant.ownerUserId, {
-          type: "booking_reminder",
+        await appendReminderNotification(booking, consultant.ownerUserId, "consultantReminderNotifiedAt", {
           title: `Утре имаш консултация с ${booking.clientName || "потребител"}`,
           body: `Час: ${reminderWhen}.`
         });
       }
 
-      await dynamo.send(
-        new UpdateCommand({
-          TableName: env.bookingsTable,
-          Key: { bookingId: booking.bookingId },
-          UpdateExpression: "SET reminderSentAt = :now",
-          ConditionExpression: "attribute_not_exists(reminderSentAt)",
-          ExpressionAttributeValues: { ":now": new Date().toISOString() }
-        })
-      );
       processed += 1;
     } catch (error) {
+      if (error.name === "ConditionalCheckFailedException") continue;
       console.error("[reminders] booking failed", {
-        bookingId: booking.bookingId,
-        error: error?.message || error
+        error: error?.name || "Error"
       });
     }
   }
@@ -2375,6 +2426,7 @@ async function bootstrapUser(event) {
   const claims = requireAuth(event);
   const body = parseBody(event);
   const now = new Date().toISOString();
+  const acceptance = termsAcceptance(body, now);
 
   const existing = await getUserBySub(claims.sub);
   assertNotRestricted(existing);
@@ -2384,16 +2436,16 @@ async function bootstrapUser(event) {
   // Redeem an admin email invite (?invite=TOKEN) — grants a free, "comped"
   // consultant account (the only way to onboard a mentor until Stripe is live).
   // The invite is keyed by the invited email and the verified token must match.
-  let redeemedInvite = false;
+  let redeemedInvite = null;
   const inviteEmail = String(claims.email || body.email || "").trim().toLowerCase();
   if (body.inviteToken && inviteEmail) {
     if (groups.includes(CLIENT_GROUP) && !groups.includes(CONSULTANT_GROUP)) {
       return badRequest("Поканата не е използвана. Администратор трябва първо да премести акаунта от Cognito група clients в consultants. След това влез отново и отвори поканата.");
     }
     const redeemed = await redeemInvite(inviteEmail, String(body.inviteToken), claims.sub);
-    if (redeemed) redeemedInvite = true;
+    if (redeemed) redeemedInvite = redeemed;
   }
-  const compedConsultant = existing?.compedConsultant === true || redeemedInvite;
+  const compedConsultant = existing?.compedConsultant === true || Boolean(redeemedInvite);
   // Cognito group membership is authoritative, so a manually-created Cognito user
   // can be designated by assigning a group (picked up on next login):
   //   - "consultants" group -> mentor/consultant
@@ -2417,7 +2469,7 @@ async function bootstrapUser(event) {
         ? currentRole
         : normalizeUserRole(body.role, currentRole));
   const requestedConsultantProfileType =
-    typeof body.consultantProfileType === "undefined"
+    redeemedInvite ? normalizeConsultantProfileType(redeemedInvite.profileType, "consultant") : typeof body.consultantProfileType === "undefined"
       ? null
       : normalizeConsultantProfileType(body.consultantProfileType, "consultant");
 
@@ -2472,11 +2524,13 @@ async function bootstrapUser(event) {
     cvDocument: existing?.cvDocument || null,
     documents: Array.isArray(existing?.documents) ? existing.documents : [],
     createdAt: existing?.createdAt || now,
-    updatedAt: now
+    updatedAt: now,
+    ...(!existing && (body.socialOnboarding === true || claims.identities || /^(Google|Facebook|SignInWithApple)_/i.test(String(claims["cognito:username"] || claims.username || ""))) ? { termsAcceptanceRequired: true } : {}),
+    ...acceptance
   };
   try {
     if (existing) {
-      const fields = { updatedAt: now, cognitoUsername: nextUser.cognitoUsername };
+      const fields = { updatedAt: now, cognitoUsername: nextUser.cognitoUsername, ...acceptance };
       if (claims.email) fields.email = nextUser.email;
       if (groupRole || allowRoleChange || redeemedInvite) fields.role = requestedRole;
       if (redeemedInvite) fields.compedConsultant = true;
@@ -2809,6 +2863,9 @@ async function updateMeProfile(event) {
     return notFound("Profile not found.");
   }
   assertNotRestricted(current);
+  if (current.termsAcceptanceRequired === true && body.acceptTerms !== true) {
+    return forbidden("Приеми условията и политиката за поверителност, преди да завършиш профила си.");
+  }
 
   let nextUser = {
     ...current,
@@ -2869,7 +2926,7 @@ async function updateMeProfile(event) {
     await validateStoredDocuments(nextUser);
   }
 
-  const fields = { updatedAt: nextUser.updatedAt };
+  const fields = { updatedAt: nextUser.updatedAt, ...termsAcceptance(body, nextUser.updatedAt) };
   for (const field of ["name", "avatarUrl", "avatarStorageKey", "city", "occupation", "age", "headline", "bio", "experienceSummary", "experienceHighlights", "educationHighlights", "skills", "interests", "keywords", "goals", "preferredSessionModes", "cvDocument", "documents"]) {
     if (typeof body[field] !== "undefined") fields[field] = nextUser[field];
   }
@@ -3973,7 +4030,7 @@ async function rescheduleBooking(event) {
               Key: { bookingId },
               UpdateExpression:
                 "SET scheduledAt = :new, #s = :status, rescheduledAt = :now, rescheduledBy = :actor, " +
-                "rescheduleCount = if_not_exists(rescheduleCount, :zero) + :one",
+                "rescheduleCount = if_not_exists(rescheduleCount, :zero) + :one REMOVE reminderSentAt, reminderAttempts, reminderRetryAfter, clientReminderEmailAcceptedAt, consultantReminderEmailAcceptedAt, clientReminderNotifiedAt, consultantReminderNotifiedAt",
               ConditionExpression:
                 "(#s = :pending OR #s = :confirmed) AND scheduledAt = :oldAt",
               ExpressionAttributeNames: { "#s": "status" },
@@ -5528,6 +5585,9 @@ exports.handler = async (event) => {
       assertNotRestricted(account);
       if (account?.deletionScheduledAt && !(method === "DELETE" && path === "/me")) {
         return forbidden("Профилът е насрочен за изтриване.");
+      }
+      if (account?.termsAcceptanceRequired === true && !["/auth/bootstrap", "/me/profile"].includes(path) && !(method === "DELETE" && path === "/me")) {
+        return forbidden("Приеми условията и политиката за поверителност, преди да използваш платформата.");
       }
     }
 

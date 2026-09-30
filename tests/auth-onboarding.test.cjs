@@ -4,6 +4,7 @@ const { readFileSync } = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
 const source = path => readFileSync(require.resolve(`../${path}`), "utf8");
+const CURRENT_TERMS_VERSION = "terms-2026-09-30+privacy-2026-09-30";
 
 function handler(name, context, path = "src/app/legacy/SiteAppLegacy.tsx") {
   const file = ts.createSourceFile(path, source(path), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -22,7 +23,8 @@ function handler(name, context, path = "src/app/legacy/SiteAppLegacy.tsx") {
 function authContext(form) {
   const calls = [], errors = [];
   return {
-    calls, errors, form: { name: "QA Client", email: "qa@example.invalid", password: "Example123", role: "client", newPassword: "", confirmNewPassword: "", ...form },
+    calls, errors, CURRENT_TERMS_VERSION, acceptedTerms: true,
+    form: { name: "QA Client", email: "qa@example.invalid", password: "Example123", role: "client", newPassword: "", confirmNewPassword: "", ...form },
     canRegister: true, configured: true, isSocialOnboarding: false, user: null,
     clearFeedback() {}, setError: message => errors.push(message), setMessage() {}, setSubmitting() {}, setForm() {},
     readInviteToken: () => null, registerWithAuth: async input => calls.push(input),
@@ -44,6 +46,120 @@ test("temporary-password completion checks its actual confirmation field", async
   await handler("handleNewPasswordRequired", context)({ preventDefault() {} });
   assert.equal(context.calls.length, 0);
   assert.deepEqual(context.errors, ["Двете пароли не съвпадат."]);
+});
+
+test("social registration requires explicit acceptance but existing-account login does not", async () => {
+  const context = {
+    ...authContext(), socialConfigured: true, activeTab: "register", acceptedTerms: false,
+    resolvedRedirect: "/dashboard", writeSocialAuthIntent() {},
+    loginWithProvider: async provider => context.calls.push(provider),
+    writePendingBootstrap: input => context.calls.push(input)
+  };
+  await handler("handleSocialProvider", context)("google");
+  assert.equal(context.calls.length, 0);
+  assert.match(context.errors[0], /приеми/);
+  context.acceptedTerms = true;
+  context.errors.length = 0;
+  await handler("handleSocialProvider", context)("google");
+  assert.equal(context.calls[0].acceptTerms, true);
+  assert.equal(context.calls[0].acceptedTermsVersion, CURRENT_TERMS_VERSION);
+  assert.equal(context.calls[0].acceptedTermsAt, undefined);
+  context.activeTab = "login";
+  context.acceptedTerms = false;
+  context.calls.length = 0;
+  await handler("handleSocialProvider", context)("google");
+  assert.equal(context.calls[0].acceptTerms, undefined);
+  assert.equal(context.calls[1], "google");
+});
+
+test("email signup carries explicit acceptance to later bootstrap without a client timestamp", async () => {
+  const context = authContext();
+  context.writePendingBootstrap = input => context.pending = input;
+  await handler("handleRegister", context)({ preventDefault() {} });
+  assert.equal(context.pending.acceptTerms, true);
+  assert.equal(context.pending.acceptedTermsVersion, CURRENT_TERMS_VERSION);
+  assert.equal(context.pending.acceptedTermsAt, undefined);
+});
+
+test("first-use modal rejects unchecked save and leaving signs out without acceptance", async () => {
+  const calls = [], errors = [];
+  const context = {
+    calls, errors, requiresTerms: true, acceptedTerms: false, name: "QA", role: "client",
+    profile: { userId: "qa", role: "client", email: "qa@example.invalid" },
+    token: "fixture-token", city: "", occupation: "", avatarFile: null,
+    CURRENT_TERMS_VERSION, setError: value => errors.push(value), setSaving() {},
+    clearSocialOnboardingPending: () => calls.push("clear"), onSkip: () => calls.push("skip"),
+    logout: async () => calls.push("logout"), navigate: path => calls.push(path),
+    api: { bootstrapUser: async (_token, input) => calls.push(input), getMyProfile: async () => ({ userId: "qa", acceptedTermsVersion: CURRENT_TERMS_VERSION }) },
+    onComplete: () => calls.push("complete")
+  };
+  await handler("handleSave", context)();
+  assert.equal(calls.length, 0);
+  assert.match(errors[0], /приеми/);
+  await handler("handleSkip", context)();
+  assert.deepEqual(calls, ["logout", "/"]);
+  calls.length = 0;
+  context.acceptedTerms = true;
+  await handler("handleSave", context)();
+  assert.equal(calls[0].acceptTerms, true);
+  assert.equal(calls[0].acceptedTermsVersion, CURRENT_TERMS_VERSION);
+  assert.equal(calls[0].acceptedTermsAt, undefined);
+  assert.equal(calls.at(-1), "complete");
+  context.requiresTerms = false;
+  calls.length = 0;
+  await handler("handleSkip", context)();
+  assert.deepEqual(calls, ["clear", "skip"]);
+});
+
+test("pending onboarding is scoped to its account and documented flows match code", () => {
+  const storage = new Map();
+  const context = { exports: {}, window: { localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) } } };
+  const code = ts.transpileModule(source("src/lib/auth-flow.ts"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  vm.runInNewContext(code, context);
+  context.exports.markSocialOnboardingPending("new-social-user");
+  assert.equal(context.exports.readSocialOnboardingPending("new-social-user"), true);
+  assert.equal(context.exports.readSocialOnboardingPending("established-user"), false);
+  assert.equal(context.exports.CURRENT_TERMS_VERSION, CURRENT_TERMS_VERSION);
+  assert.match(source("src/app/layout/AppShell.tsx"), /awaitingTerms && privateRouteWithoutOnboarding/);
+  assert.match(source("src/app/layout/AppShell.tsx"), /profile\.termsAcceptanceRequired \? "\/dashboard"/);
+  const legacy = source("src/app/legacy/SiteAppLegacy.tsx");
+  assert.match(legacy, /disabled=\{saving \|\| \(requiresTerms && !acceptedTerms\)\}/);
+  assert.match(legacy, /termsAcceptanceRequired \|\| readSocialOnboardingPending\(nextProfile\.userId\)/);
+  assert.doesNotMatch(source("src/app/pages/ContactPage.tsx"), /Отговаряме до 1/);
+  assert.match(source("src/app/pages/TermsPage.tsx"), /и двете страни потвърдят/);
+  const guide = source("docs/social-login-setup.md");
+  assert.doesNotMatch(guide, /career\/infra|simulateSocialPrefill|100 OAuth|Apple key rotates/);
+  assert.match(guide, /apple_private_key = <<-KEY/);
+});
+
+test("required-agreement dashboard renders onboarding without protected reads, including admins", async () => {
+  const file = ts.createSourceFile("legacy.tsx", source("src/app/legacy/SiteAppLegacy.tsx"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let loader;
+  const visit = node => {
+    if (ts.isArrowFunction(node) && node.parameters[0]?.name.getText(file) === "nextProfile" && node.getText(file).includes("api.listBookings(token)")) loader = node;
+    else ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(loader);
+  const calls = [];
+  const context = { isAdmin: false, mounted: true, token: "fixture-token", navigate: path => calls.push(path), Promise,
+    api: { listBookings: async () => { calls.push("bookings"); return []; }, getMyConsultantProfile: async () => null, listConsultants: async () => [], listMyNotifications: async () => ({items:[],unreadCount:0}) } };
+  const code = ts.transpileModule(`this.run = ${loader.getText(file)};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  vm.runInNewContext(code, context);
+  const profile = { userId: "new-social", termsAcceptanceRequired: true };
+  const data = await context.run(profile);
+  assert.equal(data[0], profile);
+  assert.equal(data[1].length, 0);
+  assert.equal(calls.length, 0);
+  context.isAdmin = true;
+  await context.run(profile);
+  assert.equal(calls.length, 0);
+  await context.run({userId:"established-admin"});
+  assert.deepEqual(calls, ["/admin"]);
+  context.isAdmin = false;
+  calls.length = 0;
+  await context.run({userId:"established-client"});
+  assert.deepEqual(calls, ["bookings"]);
 });
 
 function apiFixture({ social = false, pending = null, existing = false, status = 404 } = {}) {
@@ -73,12 +189,15 @@ function apiFixture({ social = false, pending = null, existing = false, status =
 }
 
 test("concurrent social first-login reads share repair, preserve pending fields and flag onboarding once", async () => {
-  const fixture = apiFixture({ social: true, pending: { name: "Chosen Name", email: "qa@example.invalid", role: "client", city: "София" } });
+  const fixture = apiFixture({ social: true, pending: { name: "Chosen Name", email: "qa@example.invalid", role: "client", city: "София", acceptTerms: true, acceptedTermsVersion: CURRENT_TERMS_VERSION } });
   await Promise.all([fixture.api.getMyProfile("fixture-token"), fixture.api.getMyProfile("fixture-token")]);
   const writes = fixture.requests.filter(request => request.path.endsWith("/auth/bootstrap"));
   assert.equal(writes.length, 1);
   assert.equal(JSON.parse(writes[0].body).city, "София");
   assert.equal(JSON.parse(writes[0].body).name, "Chosen Name");
+  assert.equal(JSON.parse(writes[0].body).socialOnboarding, true);
+  assert.equal(JSON.parse(writes[0].body).acceptTerms, true);
+  assert.equal(JSON.parse(writes[0].body).acceptedTermsAt, undefined);
   assert.equal(fixture.onboarding(), 1);
 });
 

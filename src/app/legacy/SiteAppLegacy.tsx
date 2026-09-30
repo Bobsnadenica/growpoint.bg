@@ -23,6 +23,7 @@ import { useLiveBookingMessages } from "../../lib/use-live-booking-messages";
 import { mergeMessages } from "../../lib/live-messages";
 import { NewPasswordRequiredError, useAuth } from "../../lib/auth";
 import {
+  CURRENT_TERMS_VERSION,
   clearPendingBootstrap,
   clearSocialOnboardingPending,
   readInviteToken,
@@ -2462,7 +2463,7 @@ export function AuthPage() {
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
 
   const canRegister = isSocialOnboarding && user
-    ? Boolean(user)
+    ? Boolean(user && acceptedTerms)
     : Boolean(
         form.name.trim().length >= 2 &&
           emailValid &&
@@ -2520,11 +2521,17 @@ export function AuthPage() {
 
     const isRegisterFlow = activeTab === "register";
 
+    if (isRegisterFlow && !acceptedTerms) {
+      setError("Моля, приеми Условията и Политиката за поверителност.");
+      return;
+    }
+
     writePendingBootstrap({
       name: form.name.trim(),
       email: form.email.trim(),
       role: form.role,
-      plan: "free"
+      plan: "free",
+      ...(isRegisterFlow ? { acceptTerms: true, acceptedTermsVersion: CURRENT_TERMS_VERSION } : {})
     });
 
     writeSocialAuthIntent({
@@ -2636,7 +2643,9 @@ export function AuthPage() {
           plan: "free",
           avatarUrl: user.avatarUrl || "",
           city: form.city.trim() || undefined,
-          occupation: form.occupation.trim() || undefined
+          occupation: form.occupation.trim() || undefined,
+          acceptTerms: true,
+          acceptedTermsVersion: CURRENT_TERMS_VERSION
         });
         clearPendingBootstrap();
         navigate(resolvedRedirect);
@@ -2669,7 +2678,9 @@ export function AuthPage() {
         name: form.name.trim(),
         email: form.email.trim(),
         role: form.role,
-        plan: "free"
+        plan: "free",
+        acceptTerms: true,
+        acceptedTermsVersion: CURRENT_TERMS_VERSION
       });
 
       switchScreen("confirm");
@@ -3234,27 +3245,27 @@ export function AuthPage() {
                       </ul>
                     ) : null}
                   </label>
-                  <label className="auth-terms">
-                    <input
-                      type="checkbox"
-                      checked={acceptedTerms}
-                      onChange={(event) => setAcceptedTerms(event.target.checked)}
-                      disabled={submitting}
-                    />
-                    <span>
-                      Съгласявам се с{" "}
-                      <Link to="/terms" target="_blank" rel="noreferrer">
-                        Условията за ползване
-                      </Link>{" "}
-                      и{" "}
-                      <Link to="/privacy" target="_blank" rel="noreferrer">
-                        Политиката за поверителност
-                      </Link>
-                      .
-                    </span>
-                  </label>
                 </>
               ) : null}
+
+              <label className="auth-terms">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(event) => setAcceptedTerms(event.target.checked)}
+                  disabled={submitting}
+                />
+                <span>
+                  Съгласявам се с{" "}
+                  <Link to="/terms" target="_blank" rel="noreferrer">
+                    Условията за ползване
+                  </Link>{" "}
+                  и{" "}
+                  <Link to="/privacy" target="_blank" rel="noreferrer">
+                    Политиката за поверителност
+                  </Link>.
+                </span>
+              </label>
 
               <button
                 className="primary-button"
@@ -3562,7 +3573,7 @@ export function DashboardPage() {
     () => DASHBOARD_AD_ASSETS[Math.floor(Math.random() * DASHBOARD_AD_ASSETS.length)],
     []
   );
-  const [onboardingPending, setOnboardingPending] = useState(readSocialOnboardingPending);
+  const [onboardingPending, setOnboardingPending] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [accountActionLoading, setAccountActionLoading] = useState<
     "export" | "delete" | null
@@ -3597,13 +3608,7 @@ export function DashboardPage() {
   }, [loading, navigate, user]);
 
   useEffect(() => {
-    if (!loading && user && isAdmin) {
-      navigate("/admin", { replace: true });
-    }
-  }, [isAdmin, loading, navigate, user]);
-
-  useEffect(() => {
-    if (!token || isAdmin) {
+    if (!token) {
       return;
     }
 
@@ -3611,7 +3616,15 @@ export function DashboardPage() {
     setDashboardLoading(true);
     setError("");
 
-    api.getMyProfile(token).then(nextProfile => Promise.all([
+    api.getMyProfile(token).then(nextProfile => {
+      if (nextProfile.termsAcceptanceRequired) {
+        return Promise.all([nextProfile, [] as Booking[], null, [] as ConsultantProfile[], { items: [] as NotificationItem[], unreadCount: 0 }]);
+      }
+      if (isAdmin && !nextProfile.termsAcceptanceRequired) {
+        if (mounted) navigate("/admin", { replace: true });
+        return null;
+      }
+      return Promise.all([
       Promise.resolve(nextProfile),
       api.listBookings(token),
       api
@@ -3620,21 +3633,21 @@ export function DashboardPage() {
         .catch(() => null),
       api.listConsultants().catch(() => []),
       api.listMyNotifications(token).catch(() => ({ items: [], unreadCount: 0 }))
-    ]))
+      ]);
+    })
       .then(
-        ([
+        (result) => {
+        if (!mounted || !result) return;
+        const [
           nextProfile,
           nextBookings,
           nextConsultantProfile,
           nextDirectoryConsultants,
           nextNotifications
-        ]) => {
-        if (!mounted) {
-          return;
-        }
+        ] = result;
 
         setProfile(nextProfile);
-        setOnboardingPending(readSocialOnboardingPending());
+        setOnboardingPending(Boolean(nextProfile.termsAcceptanceRequired || readSocialOnboardingPending(nextProfile.userId)));
         setBookings(nextBookings);
         setConsultantProfile(nextConsultantProfile);
         setDirectoryConsultants(nextDirectoryConsultants);
@@ -3655,7 +3668,7 @@ export function DashboardPage() {
     return () => {
       mounted = false;
     };
-  }, [dashboardReloadKey, isAdmin, token]);
+  }, [dashboardReloadKey, isAdmin, navigate, token]);
 
   useEffect(() => {
     setConsultantAvailability(getUpcomingAvailabilitySlots(consultantProfile?.availability || []));
@@ -6338,6 +6351,7 @@ export function DashboardPage() {
           onComplete={(updated) => {
             setProfile((current) => ({ ...current, ...updated }));
             setOnboardingPending(false);
+            setDashboardReloadKey(current => current + 1);
           }}
           onSkip={() => setOnboardingPending(false)}
         />
@@ -6857,6 +6871,10 @@ function SocialOnboardingModal({
   onComplete: (updated: UserProfile) => void;
   onSkip: () => void;
 }) {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const requiresTerms = profile.termsAcceptanceRequired === true || !profile.acceptedTermsVersion;
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [role, setRole] = useState<UserRole>(profile.role || "client");
   const [name, setName] = useState((profile.name || fallbackName || "").trim());
   const [city, setCity] = useState(profile.city || "");
@@ -6868,7 +6886,7 @@ function SocialOnboardingModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const dialogRef = useRef<HTMLDivElement>(null);
-  useModalFocus(true, dialogRef, () => { if (!saving) handleSkip(); });
+  useModalFocus(true, dialogRef, () => { if (!saving) void handleSkip(); });
 
   function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -6881,6 +6899,10 @@ function SocialOnboardingModal({
   }
 
   async function handleSave() {
+    if (requiresTerms && !acceptedTerms) {
+      setError("Моля, приеми Условията и Политиката за поверителност.");
+      return;
+    }
     if (!name.trim()) {
       setError("Въведи името си.");
       return;
@@ -6901,7 +6923,8 @@ function SocialOnboardingModal({
         email: profile.email,
         plan: "free",
         city: city.trim(),
-        occupation: occupation.trim()
+        occupation: occupation.trim(),
+        ...(requiresTerms ? { acceptTerms: true, acceptedTermsVersion: CURRENT_TERMS_VERSION } : {})
       });
 
       let updated: UserProfile;
@@ -6938,7 +6961,20 @@ function SocialOnboardingModal({
     }
   }
 
-  function handleSkip() {
+  async function handleSkip() {
+    if (requiresTerms) {
+      setSaving(true);
+      setError("");
+      try {
+        await logout();
+        navigate("/", { replace: true });
+      } catch (value) {
+        setError(value instanceof Error ? value.message : "Неуспешен изход. Опитай отново.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     clearSocialOnboardingPending();
     onSkip();
   }
@@ -6954,11 +6990,13 @@ function SocialOnboardingModal({
           <h2>Довърши профила си</h2>
           <p className="form-note">
             Прегледай името си и добави снимка, за да изглежда профилът ти завършен.
-            Можеш да пропуснеш и да го допълниш по-късно от таблото.
+            {requiresTerms
+              ? " Преди да продължиш, приеми условията или излез без да ги приемаш."
+              : " Можеш да пропуснеш и да го допълниш по-късно от таблото."}
           </p>
         </header>
 
-        {error ? <div className="panel panel--error">{error}</div> : null}
+        {error ? <div className="panel panel--error" role="alert">{error}</div> : null}
 
         <fieldset className="onboarding-roles">
           <legend>Как ще използваш GrowPoint?</legend>
@@ -7042,20 +7080,37 @@ function SocialOnboardingModal({
           />
         </label>
 
+        {requiresTerms ? (
+          <label className="auth-terms">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(event) => setAcceptedTerms(event.target.checked)}
+              disabled={saving}
+            />
+            <span>
+              Съгласявам се с{" "}
+              <Link to="/terms" target="_blank" rel="noreferrer">Условията за ползване</Link>{" "}
+              и{" "}
+              <Link to="/privacy" target="_blank" rel="noreferrer">Политиката за поверителност</Link>.
+            </span>
+          </label>
+        ) : null}
+
         <div className="modal-card__actions">
           <button
             className="ghost-button"
             type="button"
-            onClick={handleSkip}
+            onClick={() => void handleSkip()}
             disabled={saving}
           >
-            Ще го направя по-късно
+            {requiresTerms ? "Излез без да приемаш" : "Ще го направя по-късно"}
           </button>
           <button
             className="primary-button"
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || (requiresTerms && !acceptedTerms)}
           >
             {saving ? "Запазваме..." : "Запази"}
           </button>

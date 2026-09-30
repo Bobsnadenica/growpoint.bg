@@ -189,6 +189,9 @@ export interface UserProfile {
   name: string;
   role: UserRole;
   plan: PlanTier;
+  acceptedTermsVersion?: string;
+  acceptedTermsAt?: string;
+  termsAcceptanceRequired?: boolean;
   avatarUrl?: string;
   avatarStorageKey?: string;
   city?: string;

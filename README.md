@@ -179,12 +179,15 @@ npm run smoke:prod            # read-only production checks; requires configured
 
 `npm run build` regenerates the GitHub Pages files in the repository root. Review those generated changes deliberately when preparing a frontend deployment.
 
-Tests cover authorization, identity deletion/disablement, cleanup, pagination, private meeting links, telemetry, and statistics caching. The production smoke script covers public availability, protected endpoints, CORS, and—only when explicitly authorized and invoked with its live-mutation option—the application workflow using disposable records.
+Tests cover authorization, identity deletion/disablement, cleanup, pagination, private meeting links, telemetry, and statistics caching. Production smoke is read-only. The old `--live-mutate` workflow is retired because it fabricated paid states/attendance and manually repaired data, so it could not prove production workflows.
+
+`npm run qa:identity` performs **no requests or changes** by default. After explicit owner approval, `npm run qa:identity -- --live-identity --allow-disposable` tests one suppressed-mail disposable client against the current Terraform target: login/bootstrap persistence, disable/enable, old-session rejection, deletion and automatic DynamoDB/referral cleanup. It never repairs application rows to manufacture a pass. Bounded event timeouts are inconclusive, not successful; this narrow check does not certify S3/files, expert-booking cleanup or recipient email delivery.
 
 ## Deployment and infrastructure
 
 - The production web site is published by GitHub Pages from the committed repository-root build output. Build, scan for secrets, then push the intended commit to `main`.
 - An optional private S3 + CloudFront SPA hosting stack is defined in Terraform for testing or a future DNS cutover.
+- `npm run deploy:cloudfront` publishes assets before HTML, keeps previous hashed chunks for open tabs, and invalidates all routes with one wildcard. A managed ACM certificate can be requested before aliases are enabled; Terraform waits for DNS validation before attaching it to the existing distribution. Canonical apex redirects preserve encoded invite/referral/OAuth parameters.
 - Backend and infrastructure changes are applied from `infra/terraform/`. Every new Lambda route must also have a matching `aws_apigatewayv2_route` resource.
 - Terraform enables DynamoDB point-in-time recovery, private/encrypted storage, API throttling, Lambda error/throttle and HTTP 5xx alarms, hourly maintenance, Cognito lifecycle events, and cost alerts.
 
@@ -216,7 +219,7 @@ Run `terraform -chdir=infra/terraform init -upgrade` when adopting the provider 
 
 **Expert visibility:** admins can choose **Automatic at 100%**, **Shown**, or **Hidden** on each expert card. Saving a complete profile or granting any tier (including Start) publishes an active member into the catalogue. Explicit hiding survives later edits. Showing cannot bypass inactive membership, suspension, deletion, or a disabled/missing Cognito account. Portrait/cover images are optional; provided image URLs must still be valid. The authenticated visibility route is deployed; no bulk publication was performed.
 
-**Launch is not yet certified.** The latest review fixes email signup, social first-use repair, concurrent profile/reservation/reward writes, upload quota enforcement, lifecycle retries, dialog isolation and recoverable loading errors. The production payment preview remains deliberately non-functional. See the [current QA report](docs/qa-2026-09-30.md) for release evidence and the remaining gates.
+**Launch is not yet certified.** The latest review additionally preserves mentor invite categories, retries failed/skipped reminders without duplicating in-app notices, records explicit server-timestamped terms acceptance, and keeps first-use agreement screens accessible. Legacy accounts are not retroactively marked as having accepted terms. The payment preview remains deliberately non-functional. See the [current QA report](docs/qa-2026-09-30.md) for release evidence and the remaining gates.
 
 Run `npm run smoke:prod -- --require-public-profile` to fail the read-only smoke check when no public expert is available. The normal command now reports that check as skipped, not passed.
 
@@ -224,22 +227,25 @@ Live checks use only owner-supplied QA accounts and clearly labelled synthetic d
 
 | Area tested | Result | Remaining issue / scope |
 | --- | --- | --- |
-| Regression, build, syntax, secrets, dependencies | 89/89 tests; build/syntax/secrets pass; both dependency audits clean | Backend deployed; reviewed Terraform apply destroyed nothing and follow-up plan has no changes. |
+| Regression, build, syntax, secrets, dependencies | 115/115 tests; build/syntax/secrets pass; both production dependency audits clean | Saved Terraform plans must preserve Cognito and every application table; no replacement/deletion is authorized. |
 | Existing public profile and read-only smoke | 14/14 passed live | Newly created dynamic profile URLs need a new Pages build or SPA-aware hosting. |
-| Domain TLS and HTTP redirects | **Blocked: 1/4 passed** | www HTTPS works; apex certificate expired and HTTP does not force HTTPS. Run `npm run check:launch-domains` separately from the www smoke suite. |
+| CloudFront cutover preview | 15/15 passed, including a fresh dynamic profile path; deployed HTML/JS/CSS matched the build | Preview verification is not production DNS cutover. Recheck after each release. |
+| Domain TLS and HTTP redirects | **Blocked: 2/4 passed** | www HTTPS and HTTP-to-HTTPS pass; apex certificate remains expired and its HTTP redirect is insecure. Two ACM validation records and verified DNS cutover remain. |
 | Desktop/mobile pages and redirects | 38 live checks; no overflow or uncaught JavaScript errors | Fixed mobile chip clipping; pricing bookmark now gets a static route. Unknown/retired paths intentionally return 404. |
 | Supplied-account booking/chat/files | Live acceptance, two-way automatic chat, rescheduling, cancellation, sharing/download and revocation passed | New QA booking cancelled/unpaid; new QA files removed. Archived chat reads work; sends return 400. Issued document links expire within 15 minutes. |
 | Permissions and notifications | Unrelated client receives 403; single-notification read persists | Destructive lifecycle/admin mutations on persistent accounts are not used as tests. |
 | Admin statistics | Live 200, unified panel and mobile layout checked | Cognito registrations and initialized application profiles are different, labelled populations. |
 | Signup, social repair, export and dialog errors | Fixed; regressions and isolated browser checks | Real signup email/social callbacks still need recipient/provider accounts. |
+| Explicit agreement and legacy logins | Desktop/mobile fixtures pass; no protected reads before first-use agreement | Save requires an unchecked-by-default checkbox; declining signs out without acceptance. Existing accounts remain usable. |
 | Payment preview | No card fields, no write requests, explicit mockup result | Real DSK charging, callbacks, refunds and paid entitlements are pending. |
-| Email, legal and identity launch gates | **Blocked / unverified** | SES review denied and sender unverified; owner DNS/legal details and disposable-account testing are needed. |
+| Email verification | Domain and DKIM verified; a synthetic SES mailbox-simulator message was accepted | SES production review remains denied/sandboxed. Simulator acceptance is not real inbox delivery. |
+| Legal, social callbacks and identity lifecycle | **Blocked / unverified live** | Owner/controller details, approved policies, provider handoffs and explicit disposable-test approval remain necessary. |
 
 - DKS provider integration and verified, idempotent webhooks are required before self-service paid onboarding can be enabled. The current preview never changes payment state.
 - Transactional email needs a verified SES sender and, if the AWS account is still sandboxed, recipients must be verified.
-- On 30 September, SES remains sandboxed with production review **denied**; the domain and configured sender are not verified. The owner must repair DNS/verification and obtain approval before general-recipient email is advertised. The contact form prepares a visitor-owned email, not an automatic server submission.
+- On 30 September, the domain verification TXT was repaired and SES domain/DKIM verification now succeeds. The existing advertised support address is the configured Lambda sender. SES remains sandboxed with production review **denied**: approval and real recipient delivery are still required before general-recipient email is advertised. The contact form prepares a visitor-owned email, not an automatic server submission.
 - GitHub Pages cannot return native HTTP 200 for arbitrary new `/consultants/:slug` or `/u/:id` paths until they have a static copy. In-app routing works through its 404 fallback, but this is not a satisfactory permanent direct-link/SEO solution. The existing optional CloudFront hosting supplies SPA fallback; a production DNS cutover needs the owner's Cloudflare access and a verified deployment.
-- Before launch, repair apex TLS and enforce HTTPS at the edge. The existing Pages certificate expired on 6 September and its provisioning is in a failed authorization state; www remains reachable through Cloudflare's valid edge certificate. Do not reset the custom domain until DNS is ready, or change DNS without a verified target. The existing AWS custom-domain certificates timed out because their validation records are missing; issue fresh certificates and validate them in Cloudflare before CloudFront cutover.
+- Before launch, repair apex TLS. Cloudflare now forces HTTPS for www and has a minimum TLS version of 1.2, but the apex is still DNS-only with an expired Pages certificate. A fresh AWS certificate has been requested; publish its DNS-only validation records before enabling CloudFront aliases and changing routing. Do not weaken TLS or change production routing without a validated origin and certificate.
 - GitHub Pages excludes primarily commercial-transaction sites and cautions against sensitive transactions. Given GrowPoint's paid-marketplace model, paid production should use suitable hosting rather than Pages; the existing S3/CloudFront infrastructure is the intended low-idle-cost option, not a new always-on service. See [GitHub's hosting policy](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits).
 - Static expert HTML now contains generic metadata only. Personal profile data is fetched from the live API. Previously committed metadata and third-party cached copies cannot be erased by Cognito cleanup; removal from those copies is a separate process.
 - Legal review must establish the operator/controller identity, applicable retention/legal bases and actual cancellation/refund terms; do not invent company details or treat the current policy as legal approval.

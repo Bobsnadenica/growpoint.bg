@@ -23,6 +23,7 @@ npm run dev              # local dev server (vite)
 npm run build            # GATE: check-theme + tsc + vite + route copies (run before commit)
 npm run smoke:prod       # 14 read-only prod checks (expect 14/14)
 npm run check:launch-domains   # both hosts: valid TLS + HTTP-to-HTTPS (require 4/4)
+npm run qa:identity      # safe default: zero requests; live flags need explicit disposable-test approval
 bash scripts/check-secrets.sh   # secret scan
 node --check backend/api/index.cjs   # backend syntax
 ```
@@ -50,6 +51,7 @@ node --check backend/api/index.cjs   # backend syntax
 - Secrets only in gitignored `terraform.tfvars`. `README.md` and `test.txt` are **public** — no secrets.
 - Auth comes from the API Gateway Cognito JWT authorizer; handlers call `requireAuth`/`requireAdmin`. No XSS sinks (no `innerHTML`/`dangerouslySetInnerHTML`).
 - Don't dump production Cognito user data into logs/output.
+- `--live-mutate` is retired: never fabricate paid packages/attendance or manually clean DynamoDB to claim lifecycle QA. Use the gated client-only identity script; report its S3/expert/email limitations.
 
 ## Known follow-ups
-Read `memory.md` and `docs/qa-2026-09-30.md` for current release gates; historical plans may be stale. Biggest gates: apex TLS/HTTPS redirects, suitable commercial/SPA hosting, SES production delivery, deployed disposable-account lifecycle tests, and DKS integration. Backend fixes are deployed; future AWS changes still require a reviewed plan. Existing CloudFront is the intended cutover target, but fresh certificate DNS validation and owner Cloudflare access are required first. `/admin/dashboard` uses existing Cognito admin access only. Never certify readiness from the www-only smoke suite when the separate domain gate fails.
+Read `memory.md` and `docs/qa-2026-09-30.md` for current release gates; historical plans may be stale. Biggest gates: apex TLS/hosting cutover, SES production delivery, approved operator/legal details, deployed disposable-account lifecycle tests, and DKS integration. SES domain/DKIM now verify, but production review is denied; sandbox/simulator acceptance is not delivery. Existing CloudFront is verified as a preview; its fresh managed certificate still needs two DNS validation records before alias activation/cutover. Cloudflare is signed in, but the locked Mac prevents remaining DNS edits. `/admin/dashboard` uses existing Cognito admin access only. Never certify readiness from www-only smoke when the domain gate fails.

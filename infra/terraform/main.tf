@@ -33,11 +33,13 @@ locals {
     local.apple_enabled ? ["Apple"] : [],
     local.linkedin_enabled ? ["LinkedIn"] : []
   )
-  cognito_ses_identity_arn = var.cognito_ses_from_email != "" ? "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.cognito_ses_from_email}" : ""
-  cognito_uses_ses         = local.cognito_ses_identity_arn != ""
-  frontend_bucket_name     = var.frontend_bucket_name != "" ? var.frontend_bucket_name : "${local.name_prefix}-frontend-${data.aws_caller_identity.current.account_id}"
-  frontend_origin_id       = "${local.name_prefix}-frontend-s3"
-  frontend_aliases         = var.frontend_acm_certificate_arn != "" ? var.frontend_domain_aliases : []
+  cognito_ses_identity_arn         = var.cognito_ses_from_email != "" ? "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.cognito_ses_from_email}" : ""
+  cognito_uses_ses                 = local.cognito_ses_identity_arn != ""
+  frontend_bucket_name             = var.frontend_bucket_name != "" ? var.frontend_bucket_name : "${local.name_prefix}-frontend-${data.aws_caller_identity.current.account_id}"
+  frontend_origin_id               = "${local.name_prefix}-frontend-s3"
+  frontend_use_managed_certificate = var.frontend_acm_certificate_arn == "" && length(var.frontend_certificate_domains) > 0 && length(var.frontend_domain_aliases) > 0
+  frontend_certificate_arn         = var.frontend_acm_certificate_arn != "" ? var.frontend_acm_certificate_arn : local.frontend_use_managed_certificate ? aws_acm_certificate_validation.frontend[0].certificate_arn : ""
+  frontend_aliases                 = local.frontend_certificate_arn != "" ? var.frontend_domain_aliases : []
 }
 
 data "aws_caller_identity" "current" {}
@@ -313,6 +315,41 @@ resource "aws_s3_bucket_public_access_block" "cv_documents" {
   restrict_public_buckets = true
 }
 
+data "aws_iam_policy_document" "cv_documents_bucket" {
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.cv_documents.arn,
+      "${aws_s3_bucket.cv_documents.arn}/*"
+    ]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+
+    # AWS service-to-service requests can redact transport context.
+    condition {
+      test     = "Bool"
+      variable = "aws:PrincipalIsAWSService"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "cv_documents" {
+  bucket = aws_s3_bucket.cv_documents.id
+  policy = data.aws_iam_policy_document.cv_documents_bucket.json
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "cv_documents" {
   bucket = aws_s3_bucket.cv_documents.id
 
@@ -404,12 +441,31 @@ resource "aws_cloudfront_function" "frontend_rewrite" {
   count   = var.frontend_hosting_enabled ? 1 : 0
   name    = "${local.name_prefix}-frontend-rewrite"
   runtime = "cloudfront-js-2.0"
-  comment = "Resolve directory-style requests to their index.html object"
+  comment = "Canonicalize the apex host and resolve directory-style requests"
   publish = true
   code    = <<-EOT
     function handler(event) {
       var request = event.request;
       var uri = request.uri;
+      var host = request.headers.host ? request.headers.host.value.toLowerCase().split(':')[0] : '';
+      if (host === 'growpoint.bg') {
+        var query = request.querystring || {};
+        var pairs = [];
+        Object.keys(query).forEach(function(key) {
+          // CloudFront values are already URL-encoded. multiValue includes the
+          // first value too; do not encode again or append that value twice.
+          var values = query[key].multiValue || [query[key]];
+          values.forEach(function(item) { pairs.push(key + '=' + item.value); });
+        });
+        return {
+          statusCode: 301,
+          statusDescription: 'Moved Permanently',
+          headers: {
+            location: { value: 'https://www.growpoint.bg' + uri + (pairs.length ? '?' + pairs.join('&') : '') },
+            'cache-control': { value: 'no-store' }
+          }
+        };
+      }
       if (uri.endsWith('/')) {
         request.uri = uri + 'index.html';
       } else if (uri.lastIndexOf('.') < uri.lastIndexOf('/')) {
@@ -502,6 +558,11 @@ resource "aws_cloudfront_distribution" "frontend" {
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend_security[0].id
     compress                   = true
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.frontend_rewrite[0].arn
+    }
   }
 
   custom_error_response {
@@ -525,10 +586,10 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   viewer_certificate {
-    acm_certificate_arn            = var.frontend_acm_certificate_arn != "" ? var.frontend_acm_certificate_arn : null
-    cloudfront_default_certificate = var.frontend_acm_certificate_arn == ""
-    minimum_protocol_version       = var.frontend_acm_certificate_arn != "" ? "TLSv1.2_2021" : null
-    ssl_support_method             = var.frontend_acm_certificate_arn != "" ? "sni-only" : null
+    acm_certificate_arn            = local.frontend_certificate_arn != "" ? local.frontend_certificate_arn : null
+    cloudfront_default_certificate = local.frontend_certificate_arn == ""
+    minimum_protocol_version       = local.frontend_certificate_arn != "" ? "TLSv1.2_2021" : null
+    ssl_support_method             = local.frontend_certificate_arn != "" ? "sni-only" : null
   }
 
   tags = merge(local.common_tags, {
@@ -538,6 +599,34 @@ resource "aws_cloudfront_distribution" "frontend" {
 
 data "aws_iam_policy_document" "frontend_bucket" {
   count = var.frontend_hosting_enabled ? 1 : 0
+
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.frontend[0].arn,
+      "${aws_s3_bucket.frontend[0].arn}/*"
+    ]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+
+    # Preserve CloudFront OAC calls when AWS redacts transport context.
+    condition {
+      test     = "Bool"
+      variable = "aws:PrincipalIsAWSService"
+      values   = ["false"]
+    }
+  }
 
   statement {
     sid     = "AllowCloudFrontRead"
@@ -583,10 +672,21 @@ resource "aws_acm_certificate" "frontend" {
   })
 }
 
+# Request first with no aliases; publish the output CNAMEs in DNS. Setting
+# aliases then enables this wait before the existing distribution changes.
+resource "aws_acm_certificate_validation" "frontend" {
+  count    = local.frontend_use_managed_certificate ? 1 : 0
+  provider = aws.us_east_1
+
+  certificate_arn         = aws_acm_certificate.frontend[0].arn
+  validation_record_fqdns = [for record in aws_acm_certificate.frontend[0].domain_validation_options : record.resource_record_name]
+}
+
 resource "aws_dynamodb_table" "users" {
-  name         = "${local.name_prefix}-users"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "userId"
+  name                        = "${local.name_prefix}-users"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "userId"
+  deletion_protection_enabled = true
 
 
   attribute {
@@ -606,9 +706,10 @@ resource "aws_dynamodb_table" "users" {
 }
 
 resource "aws_dynamodb_table" "consultants" {
-  name         = "${local.name_prefix}-consultants"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "consultantId"
+  name                        = "${local.name_prefix}-consultants"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "consultantId"
+  deletion_protection_enabled = true
 
   attribute {
     name = "consultantId"
@@ -669,9 +770,10 @@ resource "aws_dynamodb_table" "consultants" {
 }
 
 resource "aws_dynamodb_table" "bookings" {
-  name         = "${local.name_prefix}-bookings"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "bookingId"
+  name                        = "${local.name_prefix}-bookings"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "bookingId"
+  deletion_protection_enabled = true
 
   attribute {
     name = "bookingId"
@@ -781,11 +883,18 @@ resource "aws_iam_role_policy" "lambda" {
         Resource = "${aws_s3_bucket.cv_documents.arn}/*"
       },
       {
-        Effect = "Allow"
-        Action = [
-          "ses:SendEmail",
-          "ses:GetAccount"
-        ]
+        Effect   = "Allow"
+        Action   = ["ses:SendEmail"]
+        Resource = var.ses_domain_identity != "" ? aws_ses_domain_identity.platform[0].arn : "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.ses_from_email}"
+        Condition = {
+          StringEquals = {
+            "ses:FromAddress" = var.ses_from_email
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ses:GetAccount"]
         Resource = "*"
       },
       {

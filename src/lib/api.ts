@@ -39,6 +39,9 @@ type BootstrapInput = {
   occupation?: string;
   headline?: string;
   consultantProfileType?: ConsultantProfileType;
+  acceptTerms?: boolean;
+  acceptedTermsVersion?: string;
+  socialOnboarding?: boolean;
   // When true, an existing user's role is updated to `role` (used by the
   // social-onboarding role choice). Cognito group membership still wins.
   setRole?: boolean;
@@ -71,9 +74,11 @@ type UpdateProfileInput = Partial<
     | "preferredSessionModes"
     | "plan"
     | "documents"
+    | "acceptedTermsVersion"
   >
 > & {
   cvDocument?: UploadedDocument | null;
+  acceptTerms?: boolean;
 };
 
 type UpdateConsultantInput = Partial<
@@ -230,7 +235,7 @@ export const api = {
     );
     if (inviteToken) clearInviteToken();
     if (ref) clearReferralCode();
-    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name } }));
+    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name, termsAcceptanceRequired: profile.termsAcceptanceRequired } }));
     return profile;
   },
 
@@ -250,12 +255,13 @@ export const api = {
           role: "client",
           plan: "free",
           ...(pending || {}),
+          socialOnboarding: true,
           // Empty social-login form values must not replace the IdP identity.
           name: pending?.name?.trim() || undefined,
           email: pending?.email?.trim() || undefined,
           avatarUrl: pending?.avatarUrl || undefined
         } : {}).then(profile => {
-          if (socialIntent) markSocialOnboardingPending();
+          if (socialIntent) markSocialOnboardingPending(profile.userId);
           return profile;
         }).finally(() => profileRepairs.delete(token));
         profileRepairs.set(token, repair);
@@ -270,7 +276,7 @@ export const api = {
       { method: "PUT", body: JSON.stringify(input) },
       token
     );
-    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name } }));
+    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name, termsAcceptanceRequired: profile.termsAcceptanceRequired } }));
     return profile;
   },
 

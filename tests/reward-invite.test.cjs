@@ -110,3 +110,26 @@ test("group-designated clients get actionable guidance before their expert invit
   assert.equal(reads, 1);
   assert.equal(writes, 0);
 });
+
+test("redeemed mentor invite overrides an untrusted bootstrap subtype, including retry", async () => {
+  const invite = { userId: "invite#client@example.invalid", status: "redeemed", redeemedBy: "client", token: "unit-token", profileType: "mentor" };
+  const user = { userId: "client", role: "client", referralCode: "abcdefgh", documents: [] };
+  let draft;
+  const api = loadApi({ send: async command => {
+    const input = command.input;
+    if (command.constructor.name === "GetCommand") return { Item: copy(input.Key.userId.startsWith("invite#") ? invite : user) };
+    if (command.constructor.name === "QueryCommand") return { Items: draft ? [copy(draft)] : [] };
+    if (command.constructor.name === "UpdateCommand") {
+      const target = input.TableName === "unit-users" ? user : draft;
+      for (const [key, field] of Object.entries(input.ExpressionAttributeNames)) if (key.startsWith("#field")) target[field] = input.ExpressionAttributeValues[key.replace("#", ":")];
+      return { Attributes: copy(target) };
+    }
+    if (command.constructor.name === "TransactWriteCommand") draft = input.TransactItems.map(item => item.Put?.Item).find(item => item?.name !== undefined);
+    return {};
+  } }).test;
+  const event = { body: JSON.stringify({ inviteToken: "unit-token", consultantProfileType: "consultant" }), requestContext: { authorizer: { jwt: { claims: { sub: "client", email: "client@example.invalid" } } } } };
+  assert.equal((await api.bootstrapUser(event)).statusCode, 200);
+  assert.equal(draft.profileType, "mentor");
+  assert.equal((await api.bootstrapUser(event)).statusCode, 200);
+  assert.equal(draft.profileType, "mentor");
+});
