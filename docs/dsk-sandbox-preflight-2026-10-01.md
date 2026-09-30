@@ -40,7 +40,7 @@ After notification controls are resolved, enable UAT deliberately and run severa
 
 For each case retain UTC time, synthetic case ID, environment, amount/currency, expected versus actual result, server-verified bank status/action code and redacted checkout/portal screenshots. Provider order references needed by the bank belong in a **private owner dossier outside Git**, not this public report. Confirm no production membership/booking/meeting access changed and no mail was emitted. Record incomplete cases as blocked/untested rather than successful.
 
-Before paid launch, implement immutable price snapshots, monthly package expiry/renewal semantics, authoritative reconciliation when a browser never returns, provider-approved callback authentication, refunds/cancellation and approved legal/operator details. Existing paid/manual/comped states are preserved during UAT.
+Before paid launch, implement immutable price snapshots, monthly package expiry/renewal semantics and authoritative reconciliation when a browser never returns. Callbacks need provider-approved verification. Refunds, cancellations and legal/operator details also require approval. Existing paid/manual/comped states are preserved during UAT.
 
 ## Official references
 
