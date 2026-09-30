@@ -19,7 +19,7 @@ The project is a React single-page app with a small serverless AWS backend. Its 
 
 The homepage and catalogue now render **API-backed expert profiles only**. The six static fictional profiles have been retired; their old `/examples/:id` links redirect to the catalogue. Empty results and API failures remain explicit rather than being replaced with mock cards.
 
-An owner-supplied demonstration consultant has been filled through the normal profile forms, with an AI portrait, illustrative biography, and a conspicuous **Пример** label. It is a real application record, so it follows the same membership, visibility, booking, and statistics rules as other accounts; there is no hardcoded visibility bypass. It must have an active membership before it can appear publicly. Keep demonstration content labelled and never publish its login credentials. See [portrait provenance](docs/example-portraits.md) and the [latest QA report](docs/qa-2026-09-06.md).
+An owner-supplied demonstration consultant has been filled through the normal profile forms, with an AI portrait, illustrative biography, and a conspicuous **Пример** label. It is a real application record, so it follows the same membership, visibility, booking, and statistics rules as other accounts; there is no hardcoded visibility bypass. It must have an active membership before it can appear publicly. Keep demonstration content labelled and never publish its login credentials. See [portrait provenance](docs/example-portraits.md) and the [latest QA report](docs/qa-2026-09-30.md).
 
 The homepage uses a lightweight animated SVG: floating elements, a drawing growth curve, progress, and conversation dots. Animation pauses offscreen or in a hidden tab and respects reduced-motion preferences. The animation adds no AWS service or recurring compute job.
 
@@ -212,33 +212,34 @@ Run `terraform -chdir=infra/terraform init -upgrade` when adopting the provider 
 
 ## Current limitations and roadmap
 
-### QA snapshot — 10 September 2026
+### QA snapshot — 30 September 2026
 
-**Expert visibility:** admins can choose **Automatic at 100%**, **Shown**, or **Hidden** on each expert card. Saving a complete profile or granting any tier (including Start) publishes an active member into the catalogue. Explicit hiding survives later edits. Showing cannot bypass inactive membership, suspension, deletion, or a disabled/missing Cognito account. Portrait/cover images are optional; provided image URLs must still be valid. Existing complete hidden profiles can be shown from admin after deployment; no bulk publication was performed. Deploy the new authenticated `/admin/consultants/{consultantId}/visibility` route and Lambda before publishing the frontend.
+**Expert visibility:** admins can choose **Automatic at 100%**, **Shown**, or **Hidden** on each expert card. Saving a complete profile or granting any tier (including Start) publishes an active member into the catalogue. Explicit hiding survives later edits. Showing cannot bypass inactive membership, suspension, deletion, or a disabled/missing Cognito account. Portrait/cover images are optional; provided image URLs must still be valid. The authenticated visibility route is deployed; no bulk publication was performed.
 
-**Release status: frontend and backend deployed; remaining launch checks below.** The regression suite passes 48/48 and post-apply live smoke passes 14/14, including the public expert's direct page. Terraform apply on 10 September updated Lambda in place and created the alert email subscription without destroying any resources; a follow-up plan reports no changes. Chat refresh, archived-chat reads, conversation-switch races and first-login profile repair are covered by local checks. SES is still sandboxed (verified 10 September), and the alert email subscription needs confirmation. General email delivery and deployed identity-lifecycle tests remain launch gates. Card payments remain intentionally mocked.
+**Launch is not yet certified.** The latest review fixes email signup, social first-use repair, concurrent profile/reservation/reward writes, upload quota enforcement, lifecycle retries, dialog isolation and recoverable loading errors. The production payment preview remains deliberately non-functional. See the [current QA report](docs/qa-2026-09-30.md) for release evidence and the remaining gates.
 
 Run `npm run smoke:prod -- --require-public-profile` to fail the read-only smoke check when no public expert is available. The normal command now reports that check as skipped, not passed.
 
-Local results describe the prepared code, not a deployed release. The earlier authenticated QA used owner-supplied production test accounts; this correction pass used isolated browser fixtures and read-only production smoke. See the [latest QA report](docs/qa-2026-09-10.md) for evidence and rollout requirements.
+Live checks use only owner-supplied QA accounts and clearly labelled synthetic data. Automated and intercepted-browser fixtures are separate evidence, not proof of actual email, social-provider or destructive identity workflows.
 
 | Area tested | Result | Remaining issue / scope |
 | --- | --- | --- |
-| Automated regression checks | **48/48 passed locally** | Includes duplicate-expert scoring, occupied availability, identity/profile repair, chat archives and refresh policy. |
-| Production smoke | **14/14 passed** | Public expert API and direct website page both respond successfully. |
-| Sign-in, profile saves, own-file upload/download/delete | Passed with supplied QA accounts in the earlier live pass | No destructive identity deletion test on those persistent accounts. |
-| Mobile links, header names, portrait keyboard controls | Fixed and browser-tested locally | Requires frontend publication. |
-| Shared visual polish | 20 local page/viewport checks without overflow or JavaScript exceptions; light/dark screenshots inspected | Reduced-motion button transitions verified off; no new dependencies or infrastructure. |
-| Expert completion and admin calculation | Local tests agree; complete editable expert form reaches 100% | Requires frontend **and backend** deployment; no membership or visibility bypass. |
-| Card checkout and terms | Mockup action, return flow, focus handling and six clauses checked | No card collection or payment requests; real processor and refunds are not implemented. |
-| Bootstrap and role repair | Regression passed locally; backend deployed | Missing profiles initialize on first use; group role reconciles on profile read; missing expert drafts remain private. Disposable live identity-lifecycle verification remains pending. |
-| Booking lifecycle | Passed for one labelled live QA booking on 8 September | Slot filtering and reservation snapshot guards are now deployed. The full authenticated lifecycle still needs repeating against the new backend. |
-| Chat and file sharing | Live persistence/sharing previously passed; refresh fixes now browser-tested locally | Open conversations refresh without reload; archives are read-only; delayed sends stay in their original thread. File-link revocation remains bounded by signed-link expiry. |
-| Admin metrics and mobile navigation | Partial pass | Metrics return 200; six identities versus four app profiles need reconciliation review. 390px views have no horizontal overflow; message route works. |
-| Email and full release readiness | Not certified | SES was sandboxed at the last live check; delivery and disposable-account lifecycle tests remain release gates. |
+| Regression, build, syntax, secrets, dependencies | 89/89 tests; build/syntax/secrets pass; both dependency audits clean | Backend deployed; reviewed Terraform apply destroyed nothing and follow-up plan has no changes. |
+| Existing public profile and read-only smoke | 14/14 passed live | Newly created dynamic profile URLs need a new Pages build or SPA-aware hosting. |
+| Desktop/mobile pages and redirects | 38 live checks; no overflow or uncaught JavaScript errors | Fixed mobile chip clipping; pricing bookmark now gets a static route. Unknown/retired paths intentionally return 404. |
+| Supplied-account booking/chat/files | Live acceptance, two-way automatic chat, rescheduling, cancellation, sharing/download and revocation passed | New QA booking cancelled/unpaid; new QA files removed. Archived chat reads work; sends return 400. Issued document links expire within 15 minutes. |
+| Permissions and notifications | Unrelated client receives 403; single-notification read persists | Destructive lifecycle/admin mutations on persistent accounts are not used as tests. |
+| Admin statistics | Live 200, unified panel and mobile layout checked | Cognito registrations and initialized application profiles are different, labelled populations. |
+| Signup, social repair, export and dialog errors | Fixed; regressions and isolated browser checks | Real signup email/social callbacks still need recipient/provider accounts. |
+| Payment preview | No card fields, no write requests, explicit mockup result | Real DSK charging, callbacks, refunds and paid entitlements are pending. |
+| Email, legal and identity launch gates | **Blocked / unverified** | SES review denied and sender unverified; owner DNS/legal details and disposable-account testing are needed. |
 
 - DKS provider integration and verified, idempotent webhooks are required before self-service paid onboarding can be enabled. The current preview never changes payment state.
 - Transactional email needs a verified SES sender and, if the AWS account is still sandboxed, recipients must be verified.
+- On 30 September, SES remains sandboxed with production review **denied**; the domain and configured sender are not verified. The owner must repair DNS/verification and obtain approval before general-recipient email is advertised. The contact form prepares a visitor-owned email, not an automatic server submission.
+- GitHub Pages cannot return native HTTP 200 for arbitrary new `/consultants/:slug` or `/u/:id` paths until they have a static copy. In-app routing works through its 404 fallback, but this is not a satisfactory permanent direct-link/SEO solution. The existing optional CloudFront hosting supplies SPA fallback; a production DNS cutover needs the owner's Cloudflare access and a verified deployment.
+- Static expert HTML now contains generic metadata only. Personal profile data is fetched from the live API. Previously committed metadata and third-party cached copies cannot be erased by Cognito cleanup; removal from those copies is a separate process.
+- Legal review must establish the operator/controller identity, applicable retention/legal bases and actual cancellation/refund terms; do not invent company details or treat the current policy as legal approval.
 - The large `SiteAppLegacy.tsx` and Lambda handler remain consolidation points; regression tests and lazy admin chunks are now present.
 - See [`plan.txt`](plan.txt) for the maintained implementation queue and [`docs/social-login-setup.md`](docs/social-login-setup.md) for social-login configuration.
 
@@ -258,4 +259,4 @@ Apply reviewed backend infrastructure before publishing the rebuilt frontend. Lo
 - Exercise bookings, chat, uploads, invitations, cancellation, and points after deployment.
 - Keep DKS labelled as a preview until the real integration is implemented and tested.
 
-Do not label the release fully production-verified until these checks pass. Never commit Terraform plans, state, deployment archives, credentials, or personal data.
+Do not label the release fully production-verified until these checks pass. Never commit Terraform plans, state, credentials, or personal data. The pre-existing tracked Lambda ZIP is versioned with an authorized backend deployment; do not add other generated archives.

@@ -36,6 +36,15 @@
       "renderStatic": true
     },
     {
+      "path": "/pricing",
+      "canonicalPath": "/users",
+      "title": "Кариерни консултанти и ментори | GrowPoint",
+      "description": "Каталог с кариерни консултанти и ментори в GrowPoint.",
+      "index": false,
+      "sitemap": false,
+      "renderStatic": true
+    },
+    {
       "path": "/consultants",
       "canonicalPath": "/users",
       "title": "Кариерни консултанти и ментори | GrowPoint",

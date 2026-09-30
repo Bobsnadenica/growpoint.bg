@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { applyMemberProfileSeo } from "../../lib/seo";
+import { applyMemberProfileSeo, applyUnavailableProfileSeo } from "../../lib/seo";
+import { usePublicRefresh } from "../../lib/use-public-refresh";
 import type { PublicUserProfile } from "../../lib/types";
 import PageScene from "../layout/PageScene";
 
@@ -31,13 +32,11 @@ export default function MemberProfilePage() {
     seedValid ? "ready" : "loading"
   );
   const [shareMessage, setShareMessage] = useState("");
+  const publicRevision = usePublicRefresh();
 
   useEffect(() => {
     let mounted = true;
-    const hasSeed = Boolean(seedValid);
-    if (hasSeed && seedValid) {
-      applyMemberProfileSeo(seedValid);
-    } else {
+    if (!member || member.userId !== id) {
       setStatus("loading");
     }
     api
@@ -50,14 +49,15 @@ export default function MemberProfilePage() {
       })
       .catch(() => {
         if (!mounted) return;
-        // Keep showing the seeded card if the background refresh fails.
-        if (!hasSeed) setStatus("error");
+        setMember(null);
+        setStatus("error");
+        applyUnavailableProfileSeo(`/u/${id}`);
       });
     return () => {
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, publicRevision]);
 
   useEffect(() => {
     if (!shareMessage) return;

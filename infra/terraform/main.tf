@@ -53,7 +53,8 @@ resource "random_string" "suffix" {
 resource "aws_cognito_user_pool" "main" {
   # AWS/provider 6.63 support an in-place friendly-name update. Never replace
   # this pool: its immutable ID owns existing logins and social identities.
-  name = "${local.name_prefix}-users"
+  name                = "${local.name_prefix}-users"
+  deletion_protection = "ACTIVE"
 
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
@@ -597,6 +598,10 @@ resource "aws_dynamodb_table" "users" {
     enabled = true
   }
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   tags = local.common_tags
 }
 
@@ -656,6 +661,10 @@ resource "aws_dynamodb_table" "consultants" {
     enabled = true
   }
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   tags = local.common_tags
 }
 
@@ -699,6 +708,10 @@ resource "aws_dynamodb_table" "bookings" {
 
   point_in_time_recovery {
     enabled = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 
   tags = local.common_tags
@@ -804,6 +817,19 @@ data "archive_file" "api" {
   type        = "zip"
   source_dir  = "${path.module}/../../backend/api"
   output_path = "${path.module}/.terraform-build/growpoint-api.zip"
+}
+
+# Adopt the existing live log group without deleting its history. Remove this
+# migration block when provisioning a separate, brand-new environment.
+import {
+  to = aws_cloudwatch_log_group.api
+  id = "/aws/lambda/growpoint-dev-api"
+}
+
+resource "aws_cloudwatch_log_group" "api" {
+  name              = "/aws/lambda/${local.name_prefix}-api"
+  retention_in_days = 30
+  tags              = local.common_tags
 }
 
 resource "aws_lambda_function" "api" {

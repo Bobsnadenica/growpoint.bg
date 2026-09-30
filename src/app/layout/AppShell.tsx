@@ -6,8 +6,6 @@ import { useAuth } from "../../lib/auth";
 import {
   clearPendingBootstrap,
   clearSocialAuthIntent,
-  markSocialOnboardingPending,
-  readPendingBootstrap,
   readSocialAuthIntent
 } from "../../lib/auth-flow";
 import { config } from "../../lib/config";
@@ -153,6 +151,7 @@ function HeaderNotificationPopover({
   items,
   unreadCount,
   busy,
+  error,
   onClose,
   onMarkAllRead,
   onSelectNotification
@@ -161,6 +160,7 @@ function HeaderNotificationPopover({
   items: NotificationItem[];
   unreadCount: number;
   busy: boolean;
+  error: string;
   onClose: () => void;
   onMarkAllRead: () => void | Promise<void>;
   onSelectNotification: (item: NotificationItem) => void;
@@ -193,6 +193,8 @@ function HeaderNotificationPopover({
           <span aria-hidden="true">×</span>
         </button>
       </header>
+
+      {error ? <p className="form-note form-note--error" role="alert">{error}</p> : null}
 
       {visibleItems.length ? (
         <ul className="topbar-popover__list" aria-label={`${title} в горната лента`}>
@@ -231,7 +233,7 @@ function HeaderNotificationPopover({
             );
           })}
         </ul>
-      ) : (
+      ) : error ? null : (
         <p className="topbar-popover__empty">
           {isMessages
             ? "Няма нови съобщения. След потвърдена среща разговорите ще се появяват тук."
@@ -309,6 +311,7 @@ export default function AppShell() {
   const [headerNotifications, setHeaderNotifications] = useState<NotificationItem[]>([]);
   const [activeHeaderPanel, setActiveHeaderPanel] = useState<HeaderPanel | null>(null);
   const [headerNotificationsBusy, setHeaderNotificationsBusy] = useState(false);
+  const [headerNotificationsError, setHeaderNotificationsError] = useState("");
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
   const topbarPanelRef = useRef<HTMLDivElement | null>(null);
   const themeSwitchTimerRef = useRef<number | null>(null);
@@ -403,9 +406,6 @@ export default function AppShell() {
       return;
     }
 
-    // Captured as non-null locals so the narrowing survives into the nested
-    // async closure below (TS won't re-narrow the captured hook value there).
-    const authedUser = user;
     const intent = socialIntent;
 
     let cancelled = false;
@@ -413,34 +413,9 @@ export default function AppShell() {
 
     async function finishSocialSignIn() {
       try {
-        const pendingBootstrap = readPendingBootstrap();
-        let profileExists = true;
-
-        try {
-          await api.getMyProfile(token);
-        } catch (value) {
-          const message = value instanceof Error ? value.message : "";
-
-          if (message.includes("Profile not found")) {
-            profileExists = false;
-          } else {
-            throw value;
-          }
-        }
-
-        // Only create + flag onboarding for genuinely new social accounts;
-        // returning users skip straight to their dashboard.
-        if (!profileExists) {
-          await api.bootstrapUser(token, {
-            role: "client",
-            plan: "free",
-            ...(pendingBootstrap || {}),
-            name: pendingBootstrap?.name?.trim() || authedUser.name || authedUser.email,
-            email: pendingBootstrap?.email?.trim() || authedUser.email,
-            avatarUrl: authedUser.avatarUrl || pendingBootstrap?.avatarUrl || ""
-          });
-          markSocialOnboardingPending();
-        }
+        // The shared read repairs a missing profile once and flags onboarding;
+        // header/dashboard reads can run concurrently without consuming it.
+        await api.getMyProfile(token);
 
         clearPendingBootstrap();
 
@@ -475,6 +450,8 @@ export default function AppShell() {
   useEffect(() => {
     if (loading || !user || !token) {
       setHeaderNotifications([]);
+      setHeaderNotificationsError("");
+      setSelectedNotification(null);
       return;
     }
 
@@ -487,10 +464,11 @@ export default function AppShell() {
         const result = await api.listMyNotifications(token);
         if (!cancelled) {
           setHeaderNotifications(result.items || []);
+          setHeaderNotificationsError("");
         }
-      } catch {
+      } catch (value) {
         if (!cancelled) {
-          setHeaderNotifications([]);
+          setHeaderNotificationsError(value instanceof Error ? value.message : "Известията не могат да бъдат заредени.");
         }
       }
     }
@@ -611,16 +589,11 @@ export default function AppShell() {
     if (!token || !user || isAdmin || item.readAt) {
       return;
     }
-    const readAt = new Date().toISOString();
-    setHeaderNotifications((items) =>
-      items.map((n) => (n.id === item.id ? { ...n, readAt } : n))
-    );
-    window.dispatchEvent(
-      new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, {
-        detail: { readAt, notificationId: item.id }
-      })
-    );
-    void api.markMyNotificationsRead(token, item.id).catch(() => {});
+    void api.markMyNotificationsRead(token, item.id).then(() => {
+      const readAt = new Date().toISOString();
+      setHeaderNotifications(items => items.map(n => n.id === item.id ? { ...n, readAt } : n));
+      window.dispatchEvent(new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, { detail: { readAt, notificationId: item.id } }));
+    }).catch(value => setHeaderNotificationsError(value instanceof Error ? value.message : "Известието не беше маркирано като прочетено."));
   }
 
   async function markHeaderNotificationsRead() {
@@ -639,6 +612,8 @@ export default function AppShell() {
       window.dispatchEvent(
         new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, { detail: { readAt } })
       );
+    } catch (value) {
+      setHeaderNotificationsError(value instanceof Error ? value.message : "Известията не бяха маркирани като прочетени.");
     } finally {
       setHeaderNotificationsBusy(false);
     }
@@ -771,6 +746,7 @@ export default function AppShell() {
                         items={activeHeaderItems}
                         unreadCount={activeUnreadCount}
                         busy={headerNotificationsBusy}
+                        error={headerNotificationsError}
                         onClose={() => setActiveHeaderPanel(null)}
                         onMarkAllRead={markHeaderNotificationsRead}
                         onSelectNotification={openHeaderNotification}

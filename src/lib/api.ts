@@ -1,8 +1,11 @@
 import {
   clearInviteToken,
   clearReferralCode,
+  markSocialOnboardingPending,
   readInviteToken,
-  readReferralCode
+  readPendingBootstrap,
+  readReferralCode,
+  readSocialAuthIntent
 } from "./auth-flow";
 import { config, isApiConfigured } from "./config";
 import { getCvUploadContentType, getDocumentUploadContentType } from "./uploads";
@@ -227,6 +230,7 @@ export const api = {
     );
     if (inviteToken) clearInviteToken();
     if (ref) clearReferralCode();
+    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name } }));
     return profile;
   },
 
@@ -240,7 +244,20 @@ export const api = {
       if (!(error instanceof Error) || !error.message.includes("Profile not found")) throw error;
       let repair = profileRepairs.get(token);
       if (!repair) {
-        repair = api.bootstrapUser(token, {}).finally(() => profileRepairs.delete(token));
+        const socialIntent = readSocialAuthIntent();
+        const pending = socialIntent ? readPendingBootstrap() : null;
+        repair = api.bootstrapUser(token, socialIntent ? {
+          role: "client",
+          plan: "free",
+          ...(pending || {}),
+          // Empty social-login form values must not replace the IdP identity.
+          name: pending?.name?.trim() || undefined,
+          email: pending?.email?.trim() || undefined,
+          avatarUrl: pending?.avatarUrl || undefined
+        } : {}).then(profile => {
+          if (socialIntent) markSocialOnboardingPending();
+          return profile;
+        }).finally(() => profileRepairs.delete(token));
         profileRepairs.set(token, repair);
       }
       return repair;

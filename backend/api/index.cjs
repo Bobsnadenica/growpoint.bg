@@ -17,6 +17,7 @@ const {
 const {
   S3Client,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   DeleteObjectCommand
@@ -290,6 +291,38 @@ async function getUserBySub(userId) {
   return result.Item || null;
 }
 
+// Targeted updates leave points, notifications, reservations and admin state
+// untouched. Alias every field because DynamoDB reserves ordinary names.
+function fieldUpdate(tableName, key, fields, guard = {}) {
+  const entries = Object.entries(fields).filter(([, value]) => typeof value !== "undefined");
+  return {
+    TableName: tableName, Key: key,
+    UpdateExpression: "SET " + entries.map((_, index) => `#field${index} = :field${index}`).join(", "),
+    ...(guard.condition ? { ConditionExpression: guard.condition } : {}),
+    ExpressionAttributeNames: { ...guard.names, ...Object.fromEntries(entries.map(([name], index) => [`#field${index}`, name])) },
+    ExpressionAttributeValues: { ...guard.values, ...Object.fromEntries(entries.map(([, value], index) => [`:field${index}`, value])) }
+  };
+}
+
+function recordSnapshot(record, fields) {
+  const names = {}, values = {};
+  const conditions = fields.map((field, index) => {
+    const name = `#snapshot${index}`;
+    names[name] = field;
+    if (!Object.prototype.hasOwnProperty.call(record, field)) return `attribute_not_exists(${name})`;
+    const value = `:snapshot${index}`;
+    values[value] = record[field];
+    return `${name} = ${value}`;
+  });
+  return { condition: conditions.join(" AND "), names, values };
+}
+
+const USER_MUTATION_GUARD = {
+  condition: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND attribute_not_exists(deletionScheduledAt) AND (attribute_not_exists(identityDisabled) OR identityDisabled <> :notRestricted) AND (attribute_not_exists(restricted) OR restricted <> :notRestricted)",
+  values: { ":notRestricted": true }
+};
+const CONSULTANT_ACCESS_FIELDS = ["updatedAt", "restricted", "identityDisabled", "identityDeleted", "deletionScheduledAt", "comped", "packageTier", "packageSource", "visibilityMode"];
+
 // --- Points / rewards (clients only) ----------------------------------------
 // Users earn points for engagement and spend 100 for a free consultation.
 const POINTS = Object.freeze({
@@ -345,37 +378,6 @@ async function addPointsEntry(userId, amount, type, reason) {
   }
 }
 
-// Award `amount` once, guarded by a boolean flag on the user record. Returns
-// true only on the first award (so callers can chain referral payouts etc.).
-async function awardOnceUser(userId, flagAttr, amount, type, reason) {
-  if (!userId) return false;
-  try {
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: env.usersTable,
-        Key: { userId },
-        UpdateExpression:
-          "SET points = if_not_exists(points, :zero) + :amt, #flag = :true, " +
-          "pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
-        ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND (attribute_not_exists(#flag) OR #flag <> :true)",
-        ExpressionAttributeNames: { "#flag": flagAttr },
-        ExpressionAttributeValues: {
-          ":zero": 0,
-          ":amt": amount,
-          ":true": true,
-          ":empty": [],
-          ":entry": [pointsHistoryEntry(amount, type, reason)]
-        }
-      })
-    );
-    return true;
-  } catch (error) {
-    if (error.name === "ConditionalCheckFailedException") return false;
-    console.error("[points] awardOnce failed", { userId, flagAttr, error: error?.message || error });
-    return false;
-  }
-}
-
 // Spend points with a balance guard (no negative balances under races).
 async function spendPoints(userId, amount, type, reason) {
   try {
@@ -392,47 +394,6 @@ async function spendPoints(userId, amount, type, reason) {
           ":empty": [],
           ":entry": [pointsHistoryEntry(-amount, type, reason)]
         }
-      })
-    );
-    return true;
-  } catch (error) {
-    if (error.name === "ConditionalCheckFailedException") return false;
-    throw error;
-  }
-}
-
-// Set a boolean flag on a booking only if unset; true on first set. Used to make
-// per-booking point awards (and refunds) idempotent.
-async function setBookingFlagOnce(bookingId, flagAttr) {
-  try {
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: env.bookingsTable,
-        Key: { bookingId },
-        UpdateExpression: "SET #flag = :true",
-        ConditionExpression: "attribute_not_exists(#flag)",
-        ExpressionAttributeNames: { "#flag": flagAttr },
-        ExpressionAttributeValues: { ":true": true }
-      })
-    );
-    return true;
-  } catch (error) {
-    if (error.name === "ConditionalCheckFailedException") return false;
-    throw error;
-  }
-}
-
-// Set a boolean flag on a user once (no points). True on first set.
-async function setUserFlagOnce(userId, flagAttr) {
-  try {
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: env.usersTable,
-        Key: { userId },
-        UpdateExpression: "SET #flag = :true",
-        ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND (attribute_not_exists(#flag) OR #flag <> :true)",
-        ExpressionAttributeNames: { "#flag": flagAttr },
-        ExpressionAttributeValues: { ":true": true }
       })
     );
     return true;
@@ -531,30 +492,37 @@ async function awardProfileCompletionIfEligible(userId, user) {
   if (user.awardedProfileComplete === true) return 0;
   if (computeUserProfileCompletion(user) !== 100) return 0;
 
-  const first = await awardOnceUser(
-    userId,
-    "awardedProfileComplete",
-    POINTS.profileComplete,
-    "profile",
-    "Попълнен профил на 100%"
-  );
-  if (!first) return 0;
-
-  if (user.referredByUserId && user.referralCredited !== true) {
-    const credited = await setUserFlagOnce(userId, "referralCredited");
-    if (credited) {
-      await addPointsEntry(
-        user.referredByUserId,
-        POINTS.referral,
-        "referral",
-        "Покана: приятел завърши профила си"
-      );
-      await appendUserNotification(user.referredByUserId, {
-        type: "admin_message",
-        title: `Спечели ${POINTS.referral} точки от покана`,
-        body: "Приятел, когото покани, завърши профила си в GrowPoint."
-      });
-    }
+  const referralCandidate = user.referredByUserId && user.referredByUserId !== userId && user.referralCredited !== true
+    ? await getUserBySub(user.referredByUserId) : null;
+  const creditReferral = referralCandidate && !referralCandidate.identityDeleted;
+  const items = [{ Update: {
+    TableName: env.usersTable, Key: { userId },
+    UpdateExpression: "SET points = if_not_exists(points, :zero) + :amount, awardedProfileComplete = :yes, " +
+      "pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)" + (creditReferral ? ", referralCredited = :yes" : ""),
+    ConditionExpression: USER_MUTATION_GUARD.condition + " AND (attribute_not_exists(awardedProfileComplete) OR awardedProfileComplete <> :yes)",
+    ExpressionAttributeValues: { ...USER_MUTATION_GUARD.values, ":zero": 0, ":amount": POINTS.profileComplete, ":yes": true, ":empty": [],
+      ":entry": [pointsHistoryEntry(POINTS.profileComplete, "profile", "Попълнен профил на 100%")] }
+  } }];
+  if (creditReferral) items.push({ Update: {
+    TableName: env.usersTable, Key: { userId: user.referredByUserId },
+    UpdateExpression: "SET points = if_not_exists(points, :zero) + :amount, pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
+    ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted)",
+    ExpressionAttributeValues: { ":zero": 0, ":amount": POINTS.referral, ":empty": [],
+      ":entry": [pointsHistoryEntry(POINTS.referral, "referral", "Покана: приятел завърши профила си")] }
+  } });
+  try {
+    // Completion, referral flag and both balances commit together. Transient
+    // failures leave all flags unset, so the next save/read can safely retry.
+    await dynamo.send(new TransactWriteCommand({ TransactItems: items }));
+  } catch (error) {
+    if (error.name === "TransactionCanceledException" && error.CancellationReasons?.some(reason => reason.Code === "ConditionalCheckFailed")) return 0;
+    throw error;
+  }
+  if (creditReferral) {
+    await appendUserNotification(user.referredByUserId, {
+      type: "admin_message", title: `Спечели ${POINTS.referral} точки от покана`,
+      body: "Приятел, когото покани, завърши профила си в GrowPoint."
+    });
   }
   return POINTS.profileComplete;
 }
@@ -651,7 +619,7 @@ class SlugConflictError extends Error {
   }
 }
 
-async function putConsultantWithSlugClaim({ consultant, previousSlug = null }) {
+async function putConsultantWithSlugClaim({ consultant, previousSlug = null, previousConsultant = null }) {
   const transactItems = [];
   const now = new Date().toISOString();
 
@@ -669,14 +637,22 @@ async function putConsultantWithSlugClaim({ consultant, previousSlug = null }) {
     });
   }
 
-  transactItems.push({
-    Put: {
-      TableName: env.consultantsTable,
-      Item: consultant,
-      ConditionExpression: bookedSlotsSnapshot(consultant).condition,
-      ...(Array.isArray(consultant.bookedSlots) ? { ExpressionAttributeValues: bookedSlotsSnapshot(consultant).values } : {})
-    }
-  });
+  if (previousConsultant) {
+    const guard = recordSnapshot(previousConsultant, CONSULTANT_ACCESS_FIELDS);
+    const slots = bookedSlotsSnapshot(previousConsultant);
+    const changed = Object.fromEntries(Object.entries(consultant).filter(([field, value]) =>
+      !["consultantId", "ownerUserId", "bookedSlots"].includes(field) && JSON.stringify(value) !== JSON.stringify(previousConsultant[field])));
+    changed.updatedAt = consultant.updatedAt;
+    transactItems.push({ Update: fieldUpdate(env.consultantsTable, { consultantId: consultant.consultantId }, changed, {
+      condition: "attribute_exists(consultantId) AND " + slots.condition + " AND " + guard.condition,
+      names: guard.names, values: { ...slots.values, ...guard.values }
+    }) });
+  } else {
+    transactItems.push({ Put: {
+      TableName: env.consultantsTable, Item: consultant,
+      ConditionExpression: "attribute_not_exists(consultantId)"
+    } });
+  }
 
   if (previousSlug && previousSlug !== consultant.slug) {
     transactItems.push({
@@ -1624,8 +1600,8 @@ function validateUploadRequest({ kind, contentType, fileSize }) {
     return "contentType is required.";
   }
 
-  if (!Number.isFinite(safeFileSize) || safeFileSize <= 0) {
-    return "fileSize must be a positive number.";
+  if (!Number.isSafeInteger(safeFileSize) || safeFileSize <= 0) {
+    return "fileSize must be a positive integer.";
   }
 
   // CV and Document slots share the same rules now: any file type, up to
@@ -1751,7 +1727,7 @@ function getBookableAvailability(consultant) {
   const occupied = normalizeAvailabilitySlots(consultant.bookedSlots || [], []);
   return normalizeAvailabilitySlots(consultant.availability || [], []).filter((slot) => {
     const start = Date.parse(slot);
-    return start > Date.now() && !occupied.some((booked) => {
+    return start > Date.now() + 5 * 60 * 1000 && !occupied.some((booked) => {
       const other = Date.parse(booked);
       return start < other + duration && other < start + duration;
     });
@@ -2404,12 +2380,16 @@ async function bootstrapUser(event) {
   assertNotRestricted(existing);
   const currentPlan = normalizePlanTier(existing?.plan, "free");
   const currentRole = normalizeUserRole(existing?.role, "client");
+  const groups = getClaimGroups(claims);
   // Redeem an admin email invite (?invite=TOKEN) — grants a free, "comped"
   // consultant account (the only way to onboard a mentor until Stripe is live).
   // The invite is keyed by the invited email and the verified token must match.
   let redeemedInvite = false;
   const inviteEmail = String(claims.email || body.email || "").trim().toLowerCase();
   if (body.inviteToken && inviteEmail) {
+    if (groups.includes(CLIENT_GROUP) && !groups.includes(CONSULTANT_GROUP)) {
+      return badRequest("Поканата не е използвана. Администратор трябва първо да премести акаунта от Cognito група clients в consultants. След това влез отново и отвори поканата.");
+    }
     const redeemed = await redeemInvite(inviteEmail, String(body.inviteToken), claims.sub);
     if (redeemed) redeemedInvite = true;
   }
@@ -2420,7 +2400,6 @@ async function bootstrapUser(event) {
   //   - "clients" group      -> regular user (also lets an admin demote)
   // If "consultants" wins when both are set. Without either group, fall back to
   // the existing role, then the role chosen at registration, then "client".
-  const groups = getClaimGroups(claims);
   const groupRole = groups.includes(CONSULTANT_GROUP)
     ? "consultant"
     : groups.includes(CLIENT_GROUP)
@@ -2442,8 +2421,8 @@ async function bootstrapUser(event) {
       ? null
       : normalizeConsultantProfileType(body.consultantProfileType, "consultant");
 
-  // Points / referral state. Bootstrap rewrites the whole user record (PutCommand
-  // below), so every persistent field must be carried over or points reset to 0.
+  // Existing accounts use targeted updates below; rewards, notifications and
+  // admin restrictions must never be rewritten from this bootstrap snapshot.
   const referralCode = await ensureReferralCode(claims.sub, existing?.referralCode);
   let referredByUserId = existing?.referredByUserId || "";
   if (!existing && body.ref) {
@@ -2451,7 +2430,7 @@ async function bootstrapUser(event) {
     if (refOwner && refOwner !== claims.sub) referredByUserId = refOwner;
   }
 
-  const nextUser = {
+  let nextUser = {
     ...existing,
     userId: claims.sub,
     cognitoUsername: claims["cognito:username"] || claims.username || claims.sub,
@@ -2495,14 +2474,24 @@ async function bootstrapUser(event) {
     createdAt: existing?.createdAt || now,
     updatedAt: now
   };
-  const planFields = getConsultantPlanFields(nextUser.plan);
-
   try {
-    await dynamo.send(new PutCommand({
-      TableName: env.usersTable,
-      Item: nextUser,
-      ...(!existing ? { ConditionExpression: "attribute_not_exists(userId)" } : {})
-    }));
+    if (existing) {
+      const fields = { updatedAt: now, cognitoUsername: nextUser.cognitoUsername };
+      if (claims.email) fields.email = nextUser.email;
+      if (groupRole || allowRoleChange || redeemedInvite) fields.role = requestedRole;
+      if (redeemedInvite) fields.compedConsultant = true;
+      if (!existing.referralCode) fields.referralCode = referralCode;
+      for (const field of ["name", "avatarUrl", "city", "occupation", "headline"]) {
+        if (typeof body[field] !== "undefined") fields[field] = nextUser[field];
+      }
+      const saved = await dynamo.send(new UpdateCommand({
+        ...fieldUpdate(env.usersTable, { userId: claims.sub }, fields, USER_MUTATION_GUARD),
+        ReturnValues: "ALL_NEW"
+      }));
+      nextUser = saved.Attributes || { ...existing, ...fields };
+    } else {
+      await dynamo.send(new PutCommand({ TableName: env.usersTable, Item: nextUser, ConditionExpression: "attribute_not_exists(userId)" }));
+    }
   } catch (error) {
     if (!existing && error.name === "ConditionalCheckFailedException") {
       const created = await getUserBySub(claims.sub);
@@ -2531,27 +2520,14 @@ async function bootstrapUser(event) {
       });
       await putConsultantDraftWithUniqueSlug(draft);
     } else {
-      await dynamo.send(
-        new PutCommand({
-          TableName: env.consultantsTable,
-          ConditionExpression: bookedSlotsSnapshot(existingConsultant).condition,
-          ...(Array.isArray(existingConsultant.bookedSlots) ? { ExpressionAttributeValues: bookedSlotsSnapshot(existingConsultant).values } : {}),
-          Item: {
-            ...existingConsultant,
-            comped: existingConsultant.comped === true || compedConsultant,
-            profileType:
-              requestedConsultantProfileType ||
-              existingConsultant.profileType ||
-              "consultant",
-            avatarUrl:
-              body.avatarUrl ??
-              existingConsultant.avatarUrl ??
-              nextUser.avatarUrl ??
-              "",
-            ...planFields
-          }
-        })
-      );
+      const fields = { updatedAt: now };
+      if (compedConsultant) fields.comped = true;
+      if (requestedConsultantProfileType) fields.profileType = requestedConsultantProfileType;
+      if (typeof body.avatarUrl !== "undefined") fields.avatarUrl = nextUser.avatarUrl;
+      await dynamo.send(new UpdateCommand(fieldUpdate(env.consultantsTable, { consultantId: existingConsultant.consultantId }, fields, {
+        condition: "attribute_exists(consultantId) AND attribute_not_exists(identityDeleted) AND attribute_not_exists(deletionScheduledAt) AND (attribute_not_exists(restricted) OR restricted <> :notRestricted)",
+        values: { ":notRestricted": true }
+      })));
     }
   }
 
@@ -2802,6 +2778,28 @@ async function createMyDocumentDownloadUrl(event) {
   });
 }
 
+async function validateStoredDocuments(nextUser) {
+  const documents = getStoredUserDocuments(nextUser);
+  await Promise.all(documents.map(async document => {
+    let metadata;
+    try {
+      metadata = await s3.send(new HeadObjectCommand({ Bucket: env.cvBucket, Key: document.storageKey }));
+    } catch (error) {
+      if (error.$metadata?.httpStatusCode === 404 || ["NotFound", "NoSuchKey"].includes(error.name)) {
+        throw Object.assign(new Error("Документът още не е качен. Опитай отново."), { statusCode: 400 });
+      }
+      throw error;
+    }
+    if (!Number.isSafeInteger(metadata.ContentLength) || metadata.ContentLength <= 0 || metadata.ContentLength > MAX_DOCUMENT_BYTES) {
+      throw Object.assign(new Error("Невалиден размер на документа."), { statusCode: 400 });
+    }
+    document.sizeBytes = metadata.ContentLength;
+  }));
+  if (documents.reduce((total, document) => total + (Number(document.sizeBytes) || 0), 0) > MAX_USER_TOTAL_DOCUMENT_BYTES) {
+    throw Object.assign(new Error("Достигна лимита от 50 MB общо за документи."), { statusCode: 400 });
+  }
+}
+
 async function updateMeProfile(event) {
   const claims = requireAuth(event);
   const body = parseBody(event);
@@ -2812,7 +2810,7 @@ async function updateMeProfile(event) {
   }
   assertNotRestricted(current);
 
-  const nextUser = {
+  let nextUser = {
     ...current,
     name: normalizeText(body.name, current.name, 120),
     avatarUrl: normalizeText(body.avatarUrl, current.avatarUrl ?? "", 2000),
@@ -2862,13 +2860,32 @@ async function updateMeProfile(event) {
   };
 
   await assertDocumentSharingAllowed(claims.sub, nextUser, body);
+  const documentsChanged = typeof body.cvDocument !== "undefined" || typeof body.documents !== "undefined";
+  if (documentsChanged) {
+    // Fallback collections still belong to the read snapshot. Clone before
+    // replacing legacy client-declared sizes with S3 metadata.
+    nextUser.cvDocument = nextUser.cvDocument ? { ...nextUser.cvDocument } : null;
+    nextUser.documents = nextUser.documents.map(document => ({ ...document }));
+    await validateStoredDocuments(nextUser);
+  }
 
-  await dynamo.send(
-    new PutCommand({
-      TableName: env.usersTable,
-      Item: nextUser
-    })
-  );
+  const fields = { updatedAt: nextUser.updatedAt };
+  for (const field of ["name", "avatarUrl", "avatarStorageKey", "city", "occupation", "age", "headline", "bio", "experienceSummary", "experienceHighlights", "educationHighlights", "skills", "interests", "keywords", "goals", "preferredSessionModes", "cvDocument", "documents"]) {
+    if (typeof body[field] !== "undefined") fields[field] = nextUser[field];
+  }
+  if (documentsChanged) {
+    fields.cvDocument = nextUser.cvDocument;
+    fields.documents = nextUser.documents;
+  }
+  const documentGuard = recordSnapshot(current, documentsChanged ? ["cvDocument", "documents"] : []);
+  const saved = await dynamo.send(new UpdateCommand({
+    ...fieldUpdate(env.usersTable, { userId: claims.sub }, fields, {
+      condition: USER_MUTATION_GUARD.condition + (documentGuard.condition ? " AND " + documentGuard.condition : ""),
+      names: documentGuard.names, values: { ...USER_MUTATION_GUARD.values, ...documentGuard.values }
+    }),
+    ReturnValues: "ALL_NEW"
+  }));
+  nextUser = saved.Attributes || { ...current, ...fields };
 
   try {
     const previousKeys = [
@@ -3052,6 +3069,11 @@ async function updateMyConsultant(event) {
   );
   delete nextConsultant.priceBgn;
 
+  if (current && nextConsultant.sessionLengthMinutes !== (Number(current.sessionLengthMinutes) || 60) &&
+      normalizeAvailabilitySlots(current.bookedSlots || [], []).some(slot => Date.parse(slot) + (Number(current.sessionLengthMinutes) || 60) * 60000 > Date.now())) {
+    return badRequest("Продължителността не може да се променя при активни резервации. Запази я или изчакай сесиите да приключат.");
+  }
+
   // Auto-publish: an ACTIVE (paid or admin-invited/comped) consultant whose
   // profile is complete becomes public automatically — no admin approval step.
   // Inactive accounts never go public; they must be invited or pay first.
@@ -3060,7 +3082,8 @@ async function updateMyConsultant(event) {
   try {
     await putConsultantWithSlugClaim({
       consultant: nextConsultant,
-      previousSlug
+      previousSlug,
+      previousConsultant: current
     });
   } catch (error) {
     if (error instanceof SlugConflictError) {
@@ -3076,6 +3099,7 @@ async function updateMyConsultant(event) {
       new UpdateCommand({
         TableName: env.usersTable,
         Key: { userId: claims.sub },
+        ConditionExpression: USER_MUTATION_GUARD.condition,
         UpdateExpression:
           "SET #n = :name, headline = :headline, city = :city, " +
           "avatarUrl = :avatarUrl, avatarStorageKey = :avatarStorageKey, updatedAt = :now",
@@ -3086,7 +3110,8 @@ async function updateMyConsultant(event) {
           ":city": nextConsultant.city,
           ":avatarUrl": nextConsultant.avatarUrl,
           ":avatarStorageKey": nextConsultant.avatarStorageKey || "",
-          ":now": new Date().toISOString()
+          ":now": new Date().toISOString(),
+          ...USER_MUTATION_GUARD.values
         }
       })
     );
@@ -3156,10 +3181,11 @@ async function createUploadUrl(event) {
   const command = new PutObjectCommand({
     Bucket: env.cvBucket,
     Key: storageKey,
-    ContentType: body.contentType || "application/octet-stream"
+    ContentType: body.contentType || "application/octet-stream",
+    ContentLength: Number(body.fileSize)
   });
 
-  const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
+  const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300, signableHeaders: new Set(["content-length"]) });
 
   return response(200, {
     uploadUrl,
@@ -3250,7 +3276,7 @@ async function createBooking(event) {
     if (item.status === "cancelled" || item.status === "declined") return false;
     const existingStart = new Date(item.scheduledAt).getTime();
     if (Number.isNaN(existingStart)) return false;
-    const existingEnd = existingStart + sessionMs;
+    const existingEnd = existingStart + (Number(item.sessionLengthMinutes) > 0 ? Number(item.sessionLengthMinutes) * 60000 : sessionMs);
     return newStart < existingEnd && existingStart < newEnd;
   });
 
@@ -3311,6 +3337,7 @@ async function createBooking(event) {
     createdAt: new Date().toISOString()
   };
 
+  const consultantGuard = recordSnapshot(consultant, CONSULTANT_ACCESS_FIELDS);
   const bookingTransactItems = [
     {
       Update: {
@@ -3319,9 +3346,11 @@ async function createBooking(event) {
         UpdateExpression:
           "SET bookedSlots = list_append(if_not_exists(bookedSlots, :emptySlots), :slotList)",
         ConditionExpression:
-          "contains(availability, :scheduledAt) AND " + bookedSlotsSnapshot(consultant).condition,
+          "contains(availability, :scheduledAt) AND " + bookedSlotsSnapshot(consultant).condition + " AND " + consultantGuard.condition,
+        ExpressionAttributeNames: consultantGuard.names,
         ExpressionAttributeValues: {
           ...bookedSlotsSnapshot(consultant).values,
+          ...consultantGuard.values,
           ":scheduledAt": normalizedScheduledAt,
           ":emptySlots": [],
           ":slotList": [normalizedScheduledAt]
@@ -3345,8 +3374,9 @@ async function createBooking(event) {
         UpdateExpression:
           "SET points = points - :cost, " +
           "pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
-        ConditionExpression: "points >= :cost",
+        ConditionExpression: USER_MUTATION_GUARD.condition + " AND points >= :cost",
         ExpressionAttributeValues: {
+          ...USER_MUTATION_GUARD.values,
           ":cost": POINTS.freeConsultation,
           ":empty": [],
           ":entry": [
@@ -3355,6 +3385,12 @@ async function createBooking(event) {
         }
       }
     });
+  } else {
+    bookingTransactItems.push({ ConditionCheck: {
+      TableName: env.usersTable, Key: { userId: user.userId },
+      ConditionExpression: USER_MUTATION_GUARD.condition,
+      ExpressionAttributeValues: USER_MUTATION_GUARD.values
+    } });
   }
 
   try {
@@ -3405,7 +3441,8 @@ async function loadBookingAndConsultant(bookingId) {
   const bookingResult = await dynamo.send(
     new GetCommand({
       TableName: env.bookingsTable,
-      Key: { bookingId }
+      Key: { bookingId },
+      ConsistentRead: true
     })
   );
   const booking = bookingResult.Item;
@@ -3492,83 +3529,89 @@ async function confirmBookingSession(event) {
 
   if (!bookingId) return badRequest("bookingId is required.");
 
-  const { booking, consultant } = await loadBookingAndConsultant(bookingId);
-  if (!booking) return notFound("Booking not found.");
-  if (!consultant) return notFound("Consultant not found.");
-
-  const participantRole = getBookingParticipantRole({ claims, booking, consultant });
-  if (!participantRole) {
-    return forbidden("Not allowed to confirm this session.");
+  let updated, consultant, participantRole;
+  let didConfirm = false;
+  // Compare the map we read so simultaneous confirmations cannot erase each
+  // other. Re-read consistently and merge after a competing confirmation.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const loaded = await loadBookingAndConsultant(bookingId);
+    const booking = loaded.booking;
+    consultant = loaded.consultant;
+    if (!booking) return notFound("Booking not found.");
+    if (!consultant) return notFound("Consultant not found.");
+    participantRole = getBookingParticipantRole({ claims, booking, consultant });
+    if (!participantRole) return forbidden("Not allowed to confirm this session.");
+    if (booking.status !== "confirmed") {
+      return badRequest("Само потвърдени резервации могат да бъдат маркирани като проведени.");
+    }
+    if (getBookingSessionEndMs(booking, consultant) > Date.now()) {
+      return badRequest("Сесията още не е приключила.");
+    }
+    const confirmation = getBookingSessionConfirmation(booking);
+    const field = participantRole === "client" ? "clientConfirmedAt" : "consultantConfirmedAt";
+    if (confirmation[field]) {
+      updated = booking;
+      break;
+    }
+    const nextConfirmation = { ...confirmation, [field]: new Date().toISOString() };
+    const hasStoredConfirmation = Object.prototype.hasOwnProperty.call(booking, "sessionConfirmation");
+    try {
+      const result = await dynamo.send(new UpdateCommand({
+        TableName: env.bookingsTable,
+        Key: { bookingId },
+        UpdateExpression: "SET sessionConfirmation = :confirmation",
+        ConditionExpression: "#s = :confirmed AND scheduledAt = :scheduledAt AND " +
+          (hasStoredConfirmation ? "sessionConfirmation = :previous" : "attribute_not_exists(sessionConfirmation)"),
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":confirmation": nextConfirmation, ":confirmed": "confirmed", ":scheduledAt": booking.scheduledAt,
+          ...(hasStoredConfirmation ? { ":previous": booking.sessionConfirmation } : {})
+        },
+        ReturnValues: "ALL_NEW"
+      }));
+      updated = result.Attributes || { ...booking, sessionConfirmation: nextConfirmation };
+      didConfirm = true;
+      break;
+    } catch (error) {
+      if (error.name !== "ConditionalCheckFailedException" || attempt === 2) throw error;
+    }
   }
-
-  if (booking.status !== "confirmed") {
-    return badRequest("Само потвърдени резервации могат да бъдат маркирани като проведени.");
-  }
-
-  const sessionEndMs = getBookingSessionEndMs(booking, consultant);
-  if (sessionEndMs > Date.now()) {
-    return badRequest("Сесията още не е приключила.");
-  }
-
-  const confirmation = getBookingSessionConfirmation(booking);
-  const field =
-    participantRole === "client"
-      ? "clientConfirmedAt"
-      : "consultantConfirmedAt";
-
-  if (confirmation[field]) {
-    return response(200, {
-      ...booking,
-      sessionConfirmation: confirmation
-    });
-  }
-
-  const now = new Date().toISOString();
-  const nextConfirmation = {
-    ...confirmation,
-    [field]: now
-  };
-
-  await dynamo.send(
-    new UpdateCommand({
-      TableName: env.bookingsTable,
-      Key: { bookingId },
-      UpdateExpression: "SET sessionConfirmation = :confirmation",
-      ConditionExpression: "#s = :confirmed",
-      ExpressionAttributeNames: { "#s": "status" },
-      ExpressionAttributeValues: {
-        ":confirmation": nextConfirmation,
-        ":confirmed": "confirmed"
-      }
-    })
-  );
-
-  const updated = {
-    ...booking,
-    sessionConfirmation: nextConfirmation
-  };
   const otherUserId =
-    participantRole === "client" ? consultant.ownerUserId : booking.clientId;
-  await appendUserNotification(otherUserId, {
+    participantRole === "client" ? consultant.ownerUserId : updated.clientId;
+  if (didConfirm) await appendUserNotification(otherUserId, {
     type: "session_confirmed",
     title:
       participantRole === "client"
-        ? `${booking.clientName || "Потребител"} потвърди проведената сесия`
-        : `${consultant.name || booking.consultantName || "Консултант"} потвърди проведената сесия`,
+        ? `${updated.clientName || "Потребител"} потвърди проведената сесия`
+        : `${consultant.name || updated.consultantName || "Консултант"} потвърди проведената сесия`,
     body: isBookingSessionConfirmedByBoth(updated)
       ? "И двете страни потвърдиха срещата. Отзивът вече може да бъде оставен от потребителя."
       : "Очаква се потвърждение и от другата страна."
   });
 
-  // Both parties confirmed an attended session -> award the client points (once).
-  if (isBookingSessionConfirmedByBoth(updated)) {
-    if (await setBookingFlagOnce(bookingId, "pointsAwardedSession")) {
-      await addPointsEntry(
-        booking.clientId,
-        POINTS.sessionConfirmed,
-        "session",
-        "Проведена и потвърдена консултация"
-      );
+  // Credit and the once-only flag commit together. A failed credit can be
+  // retried by either participant without losing or duplicating the reward.
+  if (isBookingSessionConfirmedByBoth(updated) && updated.pointsAwardedSession !== true) {
+    try {
+      await dynamo.send(new TransactWriteCommand({ TransactItems: [
+        { Update: {
+          TableName: env.bookingsTable, Key: { bookingId },
+          UpdateExpression: "SET pointsAwardedSession = :yes",
+          ConditionExpression: "#s = :confirmed AND scheduledAt = :scheduledAt AND sessionConfirmation = :confirmation AND (attribute_not_exists(pointsAwardedSession) OR pointsAwardedSession <> :yes)",
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: { ":yes": true, ":confirmed": "confirmed", ":scheduledAt": updated.scheduledAt, ":confirmation": updated.sessionConfirmation }
+        } },
+        { Update: {
+          TableName: env.usersTable, Key: { userId: updated.clientId },
+          UpdateExpression: "SET points = if_not_exists(points, :zero) + :amount, pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
+          ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted)",
+          ExpressionAttributeValues: { ":zero": 0, ":amount": POINTS.sessionConfirmed, ":empty": [],
+            ":entry": [pointsHistoryEntry(POINTS.sessionConfirmed, "session", "Проведена и потвърдена консултация")] }
+        } }
+      ] }));
+      updated.pointsAwardedSession = true;
+    } catch (error) {
+      if (error.name !== "TransactionCanceledException" || !error.CancellationReasons?.some(reason => reason.Code === "ConditionalCheckFailed")) throw error;
     }
   }
 
@@ -3860,6 +3903,10 @@ async function rescheduleBooking(event) {
   if (booking.status !== "pending" && booking.status !== "confirmed") {
     return badRequest("Only pending or confirmed bookings can be rescheduled.");
   }
+  const confirmation = getBookingSessionConfirmation(booking);
+  if (Date.parse(booking.scheduledAt) <= Date.now() || confirmation.clientConfirmedAt || confirmation.consultantConfirmedAt || booking.review) {
+    return badRequest("Започнала или проведена сесия не може да се премества. Направи нова резервация.");
+  }
 
   const oldScheduledAt = booking.scheduledAt;
   const normalizedNew = newScheduledAt.toISOString();
@@ -3888,7 +3935,7 @@ async function rescheduleBooking(event) {
     if (item.status === "cancelled" || item.status === "declined") return false;
     const start = new Date(item.scheduledAt).getTime();
     if (Number.isNaN(start)) return false;
-    const end = start + sessionMs;
+    const end = start + (Number(item.sessionLengthMinutes) > 0 ? Number(item.sessionLengthMinutes) * 60000 : sessionMs);
     return newStart < end && start < newEnd;
   });
   if (hasConflict) {
@@ -4389,41 +4436,37 @@ async function submitReview(event) {
   });
 }
 
+async function mutateNotifications(userId, transform) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await dynamo.send(new GetCommand({
+      TableName: env.usersTable, Key: { userId }, ProjectionExpression: "notifications", ConsistentRead: true
+    }));
+    const stored = Array.isArray(result.Item?.notifications) ? result.Item.notifications : [];
+    const next = transform(stored);
+    if (JSON.stringify(next) === JSON.stringify(stored)) return next;
+    const hasStored = Object.prototype.hasOwnProperty.call(result.Item || {}, "notifications");
+    try {
+      await dynamo.send(new UpdateCommand({
+        TableName: env.usersTable, Key: { userId },
+        UpdateExpression: "SET notifications = :next",
+        ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND " +
+          (hasStored ? "notifications = :previous" : "attribute_not_exists(notifications)"),
+        ExpressionAttributeValues: { ":next": next, ...(hasStored ? { ":previous": result.Item.notifications } : {}) }
+      }));
+      return next;
+    } catch (error) {
+      if (error.name !== "ConditionalCheckFailedException" || attempt === 2) throw error;
+    }
+  }
+}
+
 async function getMyNotifications(event) {
   const claims = requireAuth(event);
-  const result = await dynamo.send(
-    new GetCommand({
-      TableName: env.usersTable,
-      Key: { userId: claims.sub },
-      ProjectionExpression: "notifications",
-      ConsistentRead: true
-    })
-  );
-  const stored = Array.isArray(result.Item?.notifications)
-    ? result.Item.notifications
-    : [];
-  // Newest first, capped at NOTIFICATION_KEEP. Also trim the row in DynamoDB
-  // if it grew past the cap, so lists stay bounded over time.
-  const sorted = [...stored].sort(
-    (a, b) =>
-      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-  );
-  if (sorted.length > NOTIFICATION_KEEP) {
-    const trimmed = sorted.slice(0, NOTIFICATION_KEEP);
-    try {
-      await dynamo.send(
-        new UpdateCommand({
-          TableName: env.usersTable,
-          Key: { userId: claims.sub },
-          UpdateExpression: "SET notifications = :n",
-          ExpressionAttributeValues: { ":n": trimmed }
-        })
-      );
-    } catch {
-      /* best effort */
-    }
-    return response(200, { items: trimmed, unreadCount: trimmed.filter((n) => !n.readAt).length });
-  }
+  const items = await mutateNotifications(claims.sub, stored => {
+    if (stored.length <= NOTIFICATION_KEEP) return stored;
+    return [...stored].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0, NOTIFICATION_KEEP);
+  });
+  const sorted = [...items].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   return response(200, {
     items: sorted,
     unreadCount: sorted.filter((n) => !n.readAt).length
@@ -4436,31 +4479,12 @@ async function markMyNotificationsRead(event) {
   // whole list is marked read (the original behaviour).
   const body = parseBody(event);
   const notificationId = String(body.notificationId || "").trim();
-  const result = await dynamo.send(
-    new GetCommand({
-      TableName: env.usersTable,
-      Key: { userId: claims.sub },
-      ProjectionExpression: "notifications",
-      ConsistentRead: true
-    })
-  );
-  const stored = Array.isArray(result.Item?.notifications)
-    ? result.Item.notifications
-    : [];
   const now = new Date().toISOString();
-  const next = stored.map((n) => {
+  const next = await mutateNotifications(claims.sub, stored => stored.map((n) => {
     if (n.readAt) return n;
     if (notificationId && n.id !== notificationId) return n;
     return { ...n, readAt: now };
-  });
-  await dynamo.send(
-    new UpdateCommand({
-      TableName: env.usersTable,
-      Key: { userId: claims.sub },
-      UpdateExpression: "SET notifications = :n",
-      ExpressionAttributeValues: { ":n": next }
-    })
-  );
+  }));
   const unreadCount = next.filter((n) => !n.readAt).length;
   return response(200, { ok: true, unreadCount });
 }
@@ -5041,12 +5065,11 @@ async function setConsultantPackage(event) {
     updatedAt: now
   });
 
-  await dynamo.send(
-    new PutCommand({
-      TableName: env.consultantsTable,
-      Item: updated
-    })
-  );
+  const packageFields = Object.fromEntries(["packageTier", "packageSource", "packageUpdatedAt", "packageUpdatedBy", "packageUpdatedByEmail", "updatedAt", "isPublic", "profileStatus", "autoPublishedAt"].map(field => [field, updated[field]]));
+  const guard = recordSnapshot(existing.Item, CONSULTANT_ACCESS_FIELDS);
+  await dynamo.send(new UpdateCommand(fieldUpdate(env.consultantsTable, { consultantId }, packageFields, {
+    ...guard, condition: "attribute_exists(consultantId) AND " + guard.condition
+  })));
 
   return response(200, {
     consultantId: updated.consultantId,
@@ -5114,12 +5137,11 @@ async function setConsultantFeatured(event) {
     updatedAt: now
   };
 
-  await dynamo.send(
-    new PutCommand({
-      TableName: env.consultantsTable,
-      Item: updated
-    })
-  );
+  const featuredFields = Object.fromEntries(["featured", "featuredUpdatedAt", "featuredUpdatedBy", "featuredUpdatedByEmail", "updatedAt"].map(field => [field, updated[field]]));
+  const guard = recordSnapshot(existing.Item, CONSULTANT_ACCESS_FIELDS);
+  await dynamo.send(new UpdateCommand(fieldUpdate(env.consultantsTable, { consultantId }, featuredFields, {
+    ...guard, condition: "attribute_exists(consultantId) AND " + guard.condition
+  })));
 
   return response(
     200,
@@ -5148,8 +5170,10 @@ function inviteKey(email) {
 async function redeemInvite(email, token, userId) {
   const key = inviteKey(email);
   const invite = await getUserBySub(key);
-  if (!invite || invite.status !== "pending") return null;
+  if (!invite) return null;
   if (String(invite.token || "") !== String(token || "")) return null;
+  if (invite.status === "redeemed") return invite.redeemedBy === userId ? invite : null;
+  if (invite.status !== "pending") return null;
   if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) return null;
   const now = new Date().toISOString();
   try {
@@ -5168,9 +5192,11 @@ async function redeemInvite(email, token, userId) {
         }
       })
     );
-  } catch {
-    // Lost the race (already redeemed) — treat as not redeemable.
-    return null;
+  } catch (error) {
+    if (error.name !== "ConditionalCheckFailedException") throw error;
+    // Only the same identity can resume an invite whose profile grant failed.
+    const redeemed = await getUserBySub(key);
+    return redeemed?.status === "redeemed" && redeemed.redeemedBy === userId && redeemed.token === invite.token ? redeemed : null;
   }
   return invite;
 }
@@ -5271,28 +5297,16 @@ async function setUserRestricted(event) {
   const now = new Date().toISOString();
   const restricted = body.restricted;
 
-  await dynamo.send(
-    new PutCommand({
-      TableName: env.usersTable,
-      Item: {
-        ...user,
-        restricted,
-        restrictedAt: restricted ? now : "",
-        restrictedBy: restricted ? claims.sub : "",
-        restrictedByEmail: restricted ? claims.email || "" : "",
-        updatedAt: now
-      }
-    })
-  );
+  await dynamo.send(new UpdateCommand(fieldUpdate(env.usersTable, { userId }, {
+    restricted, restrictedAt: restricted ? now : "", restrictedBy: restricted ? claims.sub : "",
+    restrictedByEmail: restricted ? claims.email || "" : "", updatedAt: now
+  }, { condition: "attribute_exists(userId) AND attribute_not_exists(identityDeleted)" })));
 
   const consultant = await getConsultantByOwner(userId);
   if (consultant) {
-    await dynamo.send(
-      new PutCommand({
-        TableName: env.consultantsTable,
-        Item: { ...consultant, restricted, updatedAt: now }
-      })
-    );
+    await dynamo.send(new UpdateCommand(fieldUpdate(env.consultantsTable, { consultantId: consultant.consultantId }, {
+      restricted, updatedAt: now
+    }, { condition: "attribute_exists(consultantId) AND attribute_not_exists(identityDeleted)" })));
   }
 
   if (env.userPoolId) {

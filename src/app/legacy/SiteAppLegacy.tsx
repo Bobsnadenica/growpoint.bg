@@ -57,7 +57,7 @@ import PaymentPlaceholder from "../components/PaymentPlaceholder";
 import { useModalFocus } from "../../lib/use-modal-focus";
 import { expertCompletion } from "../../lib/expert-completion";
 import { NOTIFICATION_ICONS, getNotificationCategory } from "../../lib/notifications";
-import { applyConsultantProfileSeo } from "../../lib/seo";
+import { applyConsultantProfileSeo, applyUnavailableProfileSeo } from "../../lib/seo";
 import {
   DOCUMENT_UPLOAD_ACCEPT,
   DOCUMENT_UPLOAD_FORMAT_LABEL,
@@ -1767,6 +1767,7 @@ export function ConsultantPage() {
     sessionLength: string;
     format: string;
   } | null>(null);
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -1777,10 +1778,12 @@ export function ConsultantPage() {
         if (!mounted) return;
         setConsultant(value);
         setError("");
-        setSelectedSlot((current) => value.availability.includes(current) ? current : getUpcomingAvailabilitySlots(value.availability, 1)[0] || "");
+        setSelectedSlot((current) => value.availability.includes(current) ? current : getUpcomingAvailabilitySlots(value.availability, 1, 5)[0] || "");
       })
       .catch((value) => {
         if (!mounted) return;
+        setConsultant(null);
+        applyUnavailableProfileSeo(`/consultants/${slug}`);
         setError(value instanceof Error ? value.message : "Неуспешно зареждане.");
       });
 
@@ -1816,7 +1819,8 @@ export function ConsultantPage() {
               <h1>Профилът ти още не е публичен.</h1>
               <p className="section-caption">
                 Страницата се показва, когато имаш активно членство, достатъчно
-                попълнен профил и бъдещи свободни часове. Не се изисква одобрение.
+                попълнен профил. Добави бъдещи свободни часове, за да могат хората
+                да резервират. Не се изисква одобрение.
               </p>
               <div className="profile-actions">
                 <Link className="primary-button" to="/dashboard#consultant-profile">
@@ -1860,7 +1864,7 @@ export function ConsultantPage() {
         (ownConsultant && consultant.consultantId === ownConsultant.consultantId))
   );
   const bookingCtaTo = user ? "/dashboard" : "/auth?tab=register";
-  const visibleAvailability = getUpcomingAvailabilitySlots(consultant.availability, 12);
+  const visibleAvailability = getUpcomingAvailabilitySlots(consultant.availability, 12, 5);
   const themeStyle = getConsultantThemeStyle(consultant);
   const hasTheme = hasConsultantTheme(consultant);
   const profileSummary =
@@ -1900,6 +1904,7 @@ export function ConsultantPage() {
 
   const submitBooking = async (event: FormEvent) => {
     event.preventDefault();
+    if (bookingSubmitting) return;
     setMessage("");
     setError("");
 
@@ -1922,6 +1927,7 @@ export function ConsultantPage() {
       return;
     }
 
+    setBookingSubmitting(true);
     try {
       await api.createBooking(bookingToken, {
         consultantId: consultant.consultantId,
@@ -1929,6 +1935,13 @@ export function ConsultantPage() {
         note: note.trim(),
         useFreePoints
       });
+      // A pending request reserves overlapping slots immediately. Do not offer
+      // the occupied time again before the next public catalogue refresh.
+      const duration = (consultant.sessionLengthMinutes || 60) * 60000;
+      setConsultant(current => current ? {
+        ...current,
+        availability: current.availability.filter(slot => Math.abs(Date.parse(slot) - Date.parse(selectedSlot)) >= duration)
+      } : current);
       setConfirmedBooking({
         slot: selectedSlot,
         sessionLength: getSessionLengthLabel(consultant),
@@ -1940,6 +1953,8 @@ export function ConsultantPage() {
       setMessage("");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно създаване на заявка.");
+    } finally {
+      setBookingSubmitting(false);
     }
   };
 
@@ -1947,7 +1962,7 @@ export function ConsultantPage() {
     setConfirmedBooking(null);
     setError("");
     setMessage("");
-    setSelectedSlot(getUpcomingAvailabilitySlots(consultant.availability, 1)[0] || "");
+    setSelectedSlot(getUpcomingAvailabilitySlots(consultant.availability, 1, 5)[0] || "");
   };
 
   return (
@@ -2172,10 +2187,10 @@ export function ConsultantPage() {
                 </div>
               </dl>
               <p className="booking-success__hint">
-                Часът е резервиран и чака потвърждение от консултанта. Изпратихме
-                имейл и на двамата — щом{" "}
+                Часът е резервиран и чака потвърждение от консултанта. Щом{" "}
                 {consultant.name} приеме или откаже, ще получиш отделно
-                известие. Можеш да следиш статуса от таблото си.
+                известие в платформата. Следи статуса от таблото си. Имейлите ще
+                бъдат достъпни след активиране на услугата.
               </p>
               <div className="booking-success__actions">
                 <Link className="primary-button" to="/dashboard">
@@ -2298,9 +2313,9 @@ export function ConsultantPage() {
               <button
                 className="primary-button"
                 type="submit"
-                disabled={viewerProfileLoading || !visibleAvailability.length || !selectedSlot}
+                disabled={bookingSubmitting || viewerProfileLoading || !visibleAvailability.length || !selectedSlot}
               >
-                {!user
+                {bookingSubmitting ? "Изпращаме заявката..." : !user
                   ? "Влез, за да резервираш"
                   : selectedSlot
                     ? `Заяви ${formatAvailabilityShortLabel(selectedSlot)}`
@@ -2329,7 +2344,7 @@ function HowItWorksCard() {
         <li>
           <div className="how-it-works__step">
             <strong>Избираш час</strong>
-            <span>Заявка се изпраща веднага по имейл.</span>
+            <span>Заявката се появява веднага в таблото на консултанта.</span>
           </div>
         </li>
         <li>
@@ -2340,8 +2355,8 @@ function HowItWorksCard() {
         </li>
         <li>
           <div className="how-it-works__step">
-            <strong>Напомняне 24 часа преди</strong>
-            <span>И двете страни получават имейл с детайлите.</span>
+            <strong>Следиш детайлите от таблото</strong>
+            <span>Имейл известията и напомнянията предстоят след активиране на услугата.</span>
           </div>
         </li>
       </ol>
@@ -2635,16 +2650,6 @@ export function AuthPage() {
       return;
     }
 
-    if (!form.confirmNewPassword.trim()) {
-      setError("Повтори новата парола.");
-      return;
-    }
-
-    if (form.newPassword.trim() !== form.confirmNewPassword.trim()) {
-      setError("Двете пароли не съвпадат.");
-      return;
-    }
-
     if (!configured) {
       setError("Системата за регистрация не е конфигурирана.");
       return;
@@ -2730,6 +2735,11 @@ export function AuthPage() {
       !newPasswordChecks.digit
     ) {
       setError("Новата парола трябва да съдържа минимум 8 символа, малка и главна буква и цифра.");
+      return;
+    }
+
+    if (form.newPassword.trim() !== form.confirmNewPassword.trim()) {
+      setError("Двете пароли не съвпадат.");
       return;
     }
 
@@ -3509,32 +3519,6 @@ export function AccountPage() {
   return <Navigate to="/dashboard" replace />;
 }
 
-async function fetchProfileWithRetry(token: string) {
-  // The dashboard requires a user profile record. It normally exists after
-  // register → bootstrap, but a Cognito user created manually (e.g. assigned a
-  // role group in the console) has never been bootstrapped, so /me/profile 404s
-  // and the dashboard can't load. If the profile is missing, bootstrap it now —
-  // the backend fills name/email from the JWT claims and applies the
-  // consultants/clients group role — then read it back. This also covers the
-  // brief read-after-write race right after registration. Backoff: ~600ms.
-  try {
-    return await api.getMyProfile(token);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (!message.toLowerCase().includes("not found")) {
-      throw error;
-    }
-    try {
-      await api.bootstrapUser(token, {});
-    } catch {
-      // A concurrent bootstrap (or a transient error) is fine; the retry read
-      // below still resolves the profile if it now exists.
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 600));
-    return api.getMyProfile(token);
-  }
-}
-
 export function DashboardPage() {
   const { user, token, loading, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -3568,6 +3552,8 @@ export function DashboardPage() {
   const [messageSendingId, setMessageSendingId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const sessionsDialog = useRef<HTMLDivElement>(null);
+  useModalFocus(sessionsOpen, sessionsDialog, () => setSessionsOpen(false));
   useLiveBookingMessages(token, sessionsOpen ? openMessageBookingId : null, (items, status) => {
     setBookings(current => current.map(booking => booking.bookingId === openMessageBookingId
       ? { ...booking, status: status || booking.status, messages: mergeMessages(booking.messages || [], items) } : booking));
@@ -3588,9 +3574,11 @@ export function DashboardPage() {
         event instanceof CustomEvent && typeof event.detail?.readAt === "string"
           ? event.detail.readAt
           : new Date().toISOString();
+      const onlyId = event instanceof CustomEvent && typeof event.detail?.notificationId === "string"
+        ? event.detail.notificationId : null;
       setNotifications((current) =>
         current.map((notification) =>
-          notification.readAt ? notification : { ...notification, readAt }
+          notification.readAt || (onlyId && notification.id !== onlyId) ? notification : { ...notification, readAt }
         )
       );
     }
@@ -3623,7 +3611,7 @@ export function DashboardPage() {
     setDashboardLoading(true);
     setError("");
 
-    fetchProfileWithRetry(token).then(nextProfile => Promise.all([
+    api.getMyProfile(token).then(nextProfile => Promise.all([
       Promise.resolve(nextProfile),
       api.listBookings(token),
       api
@@ -3646,6 +3634,7 @@ export function DashboardPage() {
         }
 
         setProfile(nextProfile);
+        setOnboardingPending(readSocialOnboardingPending());
         setBookings(nextBookings);
         setConsultantProfile(nextConsultantProfile);
         setDirectoryConsultants(nextDirectoryConsultants);
@@ -3807,7 +3796,7 @@ export function DashboardPage() {
       setBookings((current) =>
         current.map((item) => (item.bookingId === bookingId ? updated : item))
       );
-      setMessage("Заявката е приета. Потребителят е уведомен по имейл.");
+      setMessage("Заявката е приета. Потребителят получава известие в платформата.");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно потвърждение.");
     } finally {
@@ -3834,7 +3823,7 @@ export function DashboardPage() {
       setBookings((current) =>
         current.map((item) => (item.bookingId === bookingId ? updated : item))
       );
-      setMessage("Заявката е отказана. Потребителят е уведомен по имейл.");
+      setMessage("Заявката е отказана. Потребителят получава известие в платформата.");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно отказване на заявката.");
     } finally {
@@ -4197,7 +4186,7 @@ export function DashboardPage() {
   const nextBooking = getNextBooking(bookings);
   const consultantNextAvailable =
     profile.role === "consultant"
-      ? getUpcomingAvailabilitySlots(consultantAvailability, 1)[0] || consultantProfile?.nextAvailable || ""
+      ? getUpcomingAvailabilitySlots(consultantAvailability, 1)[0] || ""
       : "";
   const dashboardMatchedConsultants =
     profile.role === "client"
@@ -6134,7 +6123,7 @@ export function DashboardPage() {
                       <button
                         className="ghost-button"
                         type="button"
-                        onClick={() => setRescheduleModalBooking(booking)}
+                        onClick={() => { setError(""); setRescheduleModalBooking(booking); }}
                       >
                         Премести часа
                       </button>
@@ -6179,7 +6168,7 @@ export function DashboardPage() {
                       <button
                         className="primary-button"
                         type="button"
-                        onClick={() => setReviewModalBooking(booking)}
+                        onClick={() => { setError(""); setReviewModalBooking(booking); }}
                       >
                         Остави отзив
                       </button>
@@ -6212,14 +6201,17 @@ export function DashboardPage() {
             return (
               <OverlayPortal>
               <div
+                ref={sessionsDialog}
                 className="modal-backdrop"
                 role="dialog"
                 aria-modal="true"
+                aria-label="Предстоящи сесии"
                 onClick={(event) => {
                   if (event.target === event.currentTarget) setSessionsOpen(false);
                 }}
               >
                 <div className="modal-card sessions-modal">
+                  {error ? <p className="form-note form-note--error" role="alert">{error}</p> : null}
                   <header className="dashboard-bookings__head">
                     <div>
                       <h2>Предстоящи сесии</h2>
@@ -6307,9 +6299,11 @@ export function DashboardPage() {
               <h2>Контрол върху твоите данни.</h2>
             </header>
             <p className="form-note">
-              Можеш да поискаш копие на личните си данни по имейл — виж Политиката за
-              поверителност.
+              Свали копие на данните си или насрочи изтриване на профила.
             </p>
+            <button className="ghost-button" type="button" onClick={() => void exportMyDataAction()} disabled={accountActionLoading !== null}>
+              {accountActionLoading === "export" ? "Подготвяме копието..." : "Свали моите данни"}
+            </button>
             <div className="privacy-actions privacy-actions--danger">
               <div>
                 <strong>Изтрий профила</strong>
@@ -6322,7 +6316,7 @@ export function DashboardPage() {
               <button
                 className="ghost-button ghost-button--danger"
                 type="button"
-                onClick={() => setDeleteConfirmOpen(true)}
+                onClick={() => { setError(""); setDeleteConfirmOpen(true); }}
                 disabled={accountActionLoading !== null}
               >
                 {accountActionLoading === "delete" ? "Насрочваме..." : "Изтрий профила ми"}
@@ -6351,6 +6345,7 @@ export function DashboardPage() {
       {reviewModalBooking ? (
         <ReviewModal
           booking={reviewModalBooking}
+          error={error}
           submitting={reviewSubmitting}
           onClose={() => setReviewModalBooking(null)}
           onSubmit={submitReviewAction}
@@ -6359,6 +6354,7 @@ export function DashboardPage() {
       {rescheduleModalBooking ? (
         <RescheduleModal
           booking={rescheduleModalBooking}
+          error={error}
           consultant={consultantProfile}
           dashboardMatchedConsultants={dashboardMatchedConsultants}
           submitting={rescheduleSubmitting}
@@ -6368,6 +6364,7 @@ export function DashboardPage() {
       ) : null}
       {deleteConfirmOpen ? (
         <DeleteProfileModal
+          error={error}
           submitting={accountActionLoading === "delete"}
           onClose={() => setDeleteConfirmOpen(false)}
           onConfirm={deleteMyAccountAction}
@@ -6706,10 +6703,12 @@ function BookingMessages({
 }
 
 function DeleteProfileModal({
+  error,
   submitting,
   onClose,
   onConfirm
 }: {
+  error: string;
   submitting: boolean;
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
@@ -6717,6 +6716,8 @@ function DeleteProfileModal({
   const [acknowledgedPrivateData, setAcknowledgedPrivateData] = useState(false);
   const [acknowledgedSchedule, setAcknowledgedSchedule] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(true, dialogRef, () => { if (!submitting) onClose(); });
   const canConfirm =
     acknowledgedPrivateData &&
     acknowledgedSchedule &&
@@ -6724,8 +6725,9 @@ function DeleteProfileModal({
 
   return (
     <OverlayPortal>
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
+    <div ref={dialogRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Насрочване на изтриване">
       <div className="modal-card delete-profile-modal">
+        {error ? <p className="form-note form-note--error" role="alert">{error}</p> : null}
         <header className="modal-card__head">
           <p className="eyebrow">Изтриване на профил</p>
           <h2>Насрочване на автоматично изтриване</h2>
@@ -6865,6 +6867,8 @@ function SocialOnboardingModal({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(true, dialogRef, () => { if (!saving) handleSkip(); });
 
   function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -6943,7 +6947,7 @@ function SocialOnboardingModal({
 
   return (
     <OverlayPortal>
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
+    <div ref={dialogRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Довърши профила си">
       <div className="modal-card">
         <header className="modal-card__head">
           <p className="eyebrow">Добре дошъл в GrowPoint</p>
@@ -7063,11 +7067,13 @@ function SocialOnboardingModal({
 }
 
 function ReviewModal({
+  error,
   booking,
   submitting,
   onClose,
   onSubmit
 }: {
+  error: string;
   booking: Booking;
   submitting: boolean;
   onClose: () => void;
@@ -7075,11 +7081,14 @@ function ReviewModal({
 }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(true, dialogRef, () => { if (!submitting) onClose(); });
 
   return (
     <OverlayPortal>
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
+    <div ref={dialogRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Оцени сесията">
       <div className="modal-card">
+        {error ? <p className="form-note form-note--error" role="alert">{error}</p> : null}
         <header className="modal-card__head">
           <p className="eyebrow">Отзив</p>
           <h2>Оцени сесията с {booking.consultantName}</h2>
@@ -7136,6 +7145,7 @@ function ReviewModal({
 }
 
 function RescheduleModal({
+  error,
   booking,
   consultant,
   dashboardMatchedConsultants,
@@ -7143,6 +7153,7 @@ function RescheduleModal({
   onClose,
   onSubmit
 }: {
+  error: string;
   booking: Booking;
   consultant: ConsultantProfile | null;
   dashboardMatchedConsultants: Array<{ consultant: ConsultantProfile; match?: MatchInsight | null }>;
@@ -7172,6 +7183,8 @@ function RescheduleModal({
   const [selected, setSelected] = useState("");
   const [manualValue, setManualValue] = useState("");
   const inputId = `reschedule-${booking.bookingId}`;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(true, dialogRef, () => { if (!submitting) onClose(); });
 
   const handleSubmit = () => {
     const chosen = selected || (manualValue ? new Date(manualValue).toISOString() : "");
@@ -7181,8 +7194,9 @@ function RescheduleModal({
 
   return (
     <OverlayPortal>
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
+    <div ref={dialogRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Преместване на резервация">
       <div className="modal-card">
+        {error ? <p className="form-note form-note--error" role="alert">{error}</p> : null}
         <header className="modal-card__head">
           <p className="eyebrow">Преместване</p>
           <h2>Избери нов час за резервацията</h2>
@@ -7485,6 +7499,7 @@ export function FilesPageBody() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -7494,11 +7509,12 @@ export function FilesPageBody() {
       return;
     }
     setLoading(true);
-    Promise.all([
-      api.getMyProfile(token).catch(() => null),
-      api.listBookings(token).catch(() => [] as Booking[]),
-      api.listConsultants().catch(() => [] as ConsultantProfile[])
-    ])
+    setError("");
+    api.getMyProfile(token).then(profileResult => Promise.all([
+      Promise.resolve(profileResult),
+      api.listBookings(token),
+      api.listConsultants()
+    ]))
       .then(([profileResult, bookings, consultants]) => {
         if (!mounted) return;
         setProfile(profileResult);
@@ -7516,13 +7532,19 @@ export function FilesPageBody() {
             : []
         );
       })
+      .catch(value => {
+        if (!mounted) return;
+        setProfile(null);
+        setShareTargets([]);
+        setError(value instanceof Error ? value.message : "Файловете не могат да бъдат заредени.");
+      })
       .finally(() => {
         if (mounted) setLoading(false);
       });
     return () => {
       mounted = false;
     };
-  }, [token]);
+  }, [reloadKey, token]);
 
   async function uploadDocument(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -7664,8 +7686,10 @@ export function FilesPageBody() {
             {error ? <div className="panel panel--error">{error}</div> : null}
           </div>
 
-          {loading || !profile ? (
+          {loading ? (
             <p className="form-note">Зареждаме файловете...</p>
+          ) : !profile ? (
+            <button className="ghost-button" type="button" onClick={() => setReloadKey(current => current + 1)}>Опитай отново</button>
           ) : (
             <div className="documents-zone">
               <form className="documents-upload" onSubmit={uploadDocument}>
@@ -7949,7 +7973,8 @@ function ConsultantStatusBanner({ consultant }: { consultant: ConsultantProfile 
       <div className="panel panel--subtle status-banner status-banner--success">
         <div>
           <strong>Профилът е активен.</strong>
-          <p>Показването в каталога изисква активно членство, попълнен профил и бъдещи свободни часове.</p>
+          <p>Показването в каталога изисква активно членство и попълнен профил.</p>
+          {!getUpcomingAvailabilitySlots(consultant.availability, 1).length ? <p>Добави бъдещи свободни часове, за да могат хората да резервират.</p> : null}
         </div>
       </div>
     );
@@ -7971,7 +7996,7 @@ function ConsultantStatusBanner({ consultant }: { consultant: ConsultantProfile 
       <strong>Довърши профила си.</strong>
       <p>
         Не е необходимо одобрение от администратор. За публичен профил са нужни активно
-        членство, попълнена информация и бъдещи свободни часове.
+        членство и попълнена информация. Добави бъдещи свободни часове за резервации.
       </p>
     </div>
   );

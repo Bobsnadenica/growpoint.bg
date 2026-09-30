@@ -206,6 +206,11 @@ export function applyRouteSeo(pathname: string) {
   upsertStructuredData(route);
 }
 
+export function applyUnavailableProfileSeo(pathname: string) {
+  applyRouteSeo(pathname);
+  upsertMeta("name", "robots", "noindex,nofollow");
+}
+
 export function applyMemberProfileSeo(member: {
   userId: string;
   name?: string;

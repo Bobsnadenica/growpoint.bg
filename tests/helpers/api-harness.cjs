@@ -6,7 +6,7 @@ const path = require("node:path");
 const filename = path.resolve(__dirname, "../../backend/api/index.cjs");
 const realRequire = createRequire(filename);
 
-function loadApi({ send = async () => ({}), environment = {} } = {}) {
+function loadApi({ send = async () => ({}), environment = {}, presign } = {}) {
   class Client { async send(command) { return send(command); } }
   const context = {
     exports: {}, Buffer, URL, Date, setTimeout, clearTimeout,
@@ -14,12 +14,13 @@ function loadApi({ send = async () => ({}), environment = {} } = {}) {
     process: { env: { USERS_TABLE: "unit-users", CONSULTANTS_TABLE: "unit-consultants", BOOKINGS_TABLE: "unit-bookings", ...environment } },
     require(name) {
       const actual = realRequire(name);
+      if (name === "@aws-sdk/s3-request-presigner" && presign) return { ...actual, getSignedUrl: presign };
       if (name === "@aws-sdk/lib-dynamodb") return { ...actual, DynamoDBDocumentClient: { from: () => new Client() } };
       if (name.startsWith("@aws-sdk/client-")) return Object.fromEntries(Object.entries(actual).map(([key, value]) => [key, key.endsWith("Client") ? Client : value]));
       return actual;
     }
   };
-  vm.runInNewContext(readFileSync(filename, "utf8") + "\nexports.test = { getMeProfile, getBookableAvailability, bookedSlotsSnapshot, stripSensitiveConsultantFields, createBooking, rescheduleBooking, applyAutomaticVisibility, setConsultantVisibility, setConsultantPackage, bootstrapUser, scanWithFilter, queryConsultantsByStatus, scanAllItems, buildAdminMetrics, bookingForViewer, parseBody, isVisibleConsultant, sendEmail, refundFreePointsIfNeeded, listBookings, exportMyData };", context, { filename });
+  vm.runInNewContext(readFileSync(filename, "utf8") + "\nexports.test = { getMeProfile, getBookableAvailability, bookedSlotsSnapshot, stripSensitiveConsultantFields, createBooking, rescheduleBooking, confirmBookingSession, updateMeProfile, updateMyConsultant, createUploadUrl, validateStoredDocuments, getMyNotifications, markMyNotificationsRead, redeemInvite, awardProfileCompletionIfEligible, setConsultantFeatured, setUserRestricted, applyAutomaticVisibility, setConsultantVisibility, setConsultantPackage, bootstrapUser, scanWithFilter, queryConsultantsByStatus, scanAllItems, buildAdminMetrics, bookingForViewer, parseBody, isVisibleConsultant, sendEmail, refundFreePointsIfNeeded, listBookings, exportMyData };", context, { filename });
   return context.exports;
 }
 module.exports = { loadApi };

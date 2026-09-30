@@ -83,12 +83,14 @@ function createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listCo
       } while (ContinuationToken);
     }
     for (const consultant of consultants) {
-      // Minimal non-public tombstone keeps counterpart booking history usable;
-      // no personal biography, media, contact fields, slug, or availability.
-      await dynamo.send(new PutCommand({ TableName: env.consultantsTable, Item: { consultantId: consultant.consultantId, ownerUserId: userId, name: "[Изтрит профил]", isPublic: false, profileStatus: "rejected", identityDeleted: true, anonymizedAt: now } }));
+      // Delete the claim before discarding its slug. If deletion fails, the
+      // next attempt can still find the exact claim from the original profile.
       if (consultant.slug) await dynamo.send(new DeleteCommand({ TableName: env.consultantsTable, Key: { consultantId: `slug-claim#${consultant.slug}` },
         ConditionExpression: "ownerUserId = :owner", ExpressionAttributeValues: { ":owner": userId }
       })).catch((error) => { if (error.name !== "ConditionalCheckFailedException") throw error; });
+      // Minimal non-public tombstone keeps counterpart booking history usable;
+      // no personal biography, media, contact fields, slug, or availability.
+      await dynamo.send(new PutCommand({ TableName: env.consultantsTable, Item: { consultantId: consultant.consultantId, ownerUserId: userId, name: "[Изтрит профил]", isPublic: false, profileStatus: "rejected", identityDeleted: true, anonymizedAt: now } }));
     }
     if (user?.referralCode) await dynamo.send(new DeleteCommand({ TableName: env.usersTable, Key: { userId: `referral#${user.referralCode}` },
       ConditionExpression: "refUserId = :owner", ExpressionAttributeValues: { ":owner": userId }
@@ -125,10 +127,15 @@ function createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listCo
         }
         disabled = current.Enabled !== true;
       }
-      if (Boolean(user.identityDisabled) === disabled) continue;
-      const rows = await listConsultantsByOwner(user.userId);
-      for (const row of [{ table: env.usersTable, key: { userId: user.userId } }, ...rows.map((c) => ({ table: env.consultantsTable, key: { consultantId: c.consultantId } }))]) {
-        await dynamo.send(new UpdateCommand({ TableName: row.table, Key: row.key, UpdateExpression: "SET identityDisabled = :disabled", ExpressionAttributeValues: { ":disabled": disabled } }));
+      const consultants = await listConsultantsByOwner(user.userId);
+      // Compare each row independently: an earlier attempt may have updated
+      // the user before failing on an expert profile (or the reverse).
+      const rows = [{ table: env.usersTable, key: { userId: user.userId }, record: user }, ...consultants.map((c) => ({ table: env.consultantsTable, key: { consultantId: c.consultantId }, record: c }))]
+        .filter((row) => Boolean(row.record.identityDisabled) !== disabled);
+      if (!rows.length) continue;
+      for (const row of rows) {
+        await dynamo.send(new UpdateCommand({ TableName: row.table, Key: row.key, UpdateExpression: "SET identityDisabled = :disabled",
+          ConditionExpression: `attribute_exists(${Object.keys(row.key)[0]})`, ExpressionAttributeValues: { ":disabled": disabled } }));
       }
       updated++;
     }

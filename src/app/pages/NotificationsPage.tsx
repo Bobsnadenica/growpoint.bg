@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -20,31 +20,39 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<NotificationItem | null>(null);
+  const [error, setError] = useState("");
+  const revision = useRef(0);
 
   const load = useCallback(async () => {
+    const currentRevision = ++revision.current;
     if (!token) {
       setItems([]);
       setLoading(false);
       return;
     }
     setLoading(true);
+    setError("");
     try {
       const result = await api.listMyNotifications(token);
-      setItems(result.items || []);
-    } catch {
-      setItems([]);
+      if (currentRevision === revision.current) setItems(result.items || []);
+    } catch (value) {
+      if (currentRevision === revision.current) setError(value instanceof Error ? value.message : "Известията не могат да бъдат заредени.");
     } finally {
-      setLoading(false);
+      if (currentRevision === revision.current) setLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
+    setItems([]);
+    setSelected(null);
     void load();
+    return () => { revision.current++; };
   }, [load]);
 
   async function markAllRead() {
     if (!token || isAdmin || busy) return;
     setBusy(true);
+    setError("");
     try {
       await api.markMyNotificationsRead(token);
       const readAt = new Date().toISOString();
@@ -54,6 +62,8 @@ export default function NotificationsPage() {
       window.dispatchEvent(
         new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, { detail: { readAt } })
       );
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Известията не бяха маркирани като прочетени.");
     } finally {
       setBusy(false);
     }
@@ -63,16 +73,11 @@ export default function NotificationsPage() {
   function openNotification(item: NotificationItem) {
     setSelected(item);
     if (!token || isAdmin || item.readAt) return;
-    const readAt = new Date().toISOString();
-    setItems((current) =>
-      current.map((n) => (n.id === item.id ? { ...n, readAt } : n))
-    );
-    window.dispatchEvent(
-      new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, {
-        detail: { readAt, notificationId: item.id }
-      })
-    );
-    void api.markMyNotificationsRead(token, item.id).catch(() => {});
+    void api.markMyNotificationsRead(token, item.id).then(() => {
+      const readAt = new Date().toISOString();
+      setItems(current => current.map(n => n.id === item.id ? { ...n, readAt } : n));
+      window.dispatchEvent(new CustomEvent(NOTIFICATIONS_MARKED_READ_EVENT, { detail: { readAt, notificationId: item.id } }));
+    }).catch(value => setError(value instanceof Error ? value.message : "Известието не беше маркирано като прочетено."));
   }
 
   const sorted = [...items].sort(
@@ -109,6 +114,7 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <section className="panel notifications-panel">
+              {error ? <p className="form-note form-note--error" role="alert">{error} <button className="ghost-button" type="button" onClick={() => void load()}>Опитай отново</button></p> : null}
               <header className="notifications-panel__head">
                 <div>
                   <p className="eyebrow">Списък</p>
@@ -162,7 +168,7 @@ export default function NotificationsPage() {
                     );
                   })}
                 </ul>
-              ) : (
+              ) : error ? null : (
                 <p className="form-note">
                   Все още няма известия. Нови резервации, съобщения и админ съобщения
                   ще се показват тук.

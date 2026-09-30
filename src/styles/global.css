@@ -3613,6 +3613,9 @@ textarea {
 
 .chip {
   min-height: 38px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
   color: var(--primary-dark);
   background: var(--primary-soft);
   border-color: #cfdbd4;
@@ -5740,6 +5743,7 @@ textarea {
 
 .consultant-expertise {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 

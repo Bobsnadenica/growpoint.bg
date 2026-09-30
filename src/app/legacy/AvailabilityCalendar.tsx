@@ -49,7 +49,7 @@ export default function AvailabilityCalendar(props: AvailabilityCalendarProps) {
   // Group the upcoming available slots by day for the dots / hour chips.
   const slotsByDay = useMemo(() => {
     const map = new Map<string, string[]>();
-    getUpcomingAvailabilitySlots(availability).forEach((slot) => {
+    getUpcomingAvailabilitySlots(availability, Number.POSITIVE_INFINITY, mode === "book" ? 5 : 0).forEach((slot) => {
       const key = getAvailabilityDayKey(slot);
       if (!key) return;
       const existing = map.get(key);
@@ -57,13 +57,13 @@ export default function AvailabilityCalendar(props: AvailabilityCalendarProps) {
       else map.set(key, [slot]);
     });
     return map;
-  }, [availability]);
+  }, [availability, mode]);
 
   const todayKey = getAvailabilityDayKey(new Date().toISOString());
 
   const [viewDate, setViewDate] = useState(() => {
     // In book mode start on the month of the first available day.
-    const first = getUpcomingAvailabilitySlots(availability, 1)[0];
+    const first = getUpcomingAvailabilitySlots(availability, 1, mode === "book" ? 5 : 0)[0];
     const base = first ? new Date(first) : new Date();
     return new Date(base.getFullYear(), base.getMonth(), 1);
   });
@@ -71,7 +71,7 @@ export default function AvailabilityCalendar(props: AvailabilityCalendarProps) {
   const [selectedDayKey, setSelectedDayKey] = useState<string>(() => {
     if (mode === "book") {
       return getAvailabilityDayKey(
-        getUpcomingAvailabilitySlots(availability, 1)[0] || ""
+        getUpcomingAvailabilitySlots(availability, 1, 5)[0] || ""
       );
     }
     return "";

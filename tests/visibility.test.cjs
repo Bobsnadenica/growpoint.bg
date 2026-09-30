@@ -63,7 +63,7 @@ test("granting Start is an active admin grant and publishes a complete profile",
   let item;
   const api = loadApi({ send: async command => {
     if (command.constructor.name === "GetCommand") return { Item: { ...complete, comped: false } };
-    if (command.constructor.name === "PutCommand") item = command.input.Item;
+    if (command.constructor.name === "UpdateCommand") item = Object.fromEntries(Object.entries(command.input.ExpressionAttributeNames).filter(([key]) => key.startsWith("#field")).map(([key, field]) => [field, command.input.ExpressionAttributeValues[key.replace("#", ":")]]));
     return {};
   } });
   const result = await api.test.setConsultantPackage({ ...event("auto"), body: JSON.stringify({ packageTier: "start" }) });

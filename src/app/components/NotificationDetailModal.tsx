@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useRef } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { formatDateTimeBg } from "../../lib/datetime";
@@ -8,6 +8,7 @@ import {
   type NotificationCategory
 } from "../../lib/notifications";
 import type { NotificationItem } from "../../lib/types";
+import { useModalFocus } from "../../lib/use-modal-focus";
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, string> = {
   admin: "Админ",
@@ -40,13 +41,8 @@ export default function NotificationDetailModal({
   notification: NotificationItem;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  const dialog = useRef<HTMLDivElement>(null);
+  useModalFocus(true, dialog, onClose);
 
   if (typeof document === "undefined") return null;
 
@@ -54,6 +50,7 @@ export default function NotificationDetailModal({
 
   return createPortal(
     <div
+      ref={dialog}
       className="modal-backdrop"
       role="dialog"
       aria-modal="true"

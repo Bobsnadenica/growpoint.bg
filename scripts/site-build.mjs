@@ -107,83 +107,22 @@ async function loadBuildEnv() {
   return { ...fromFiles, ...process.env };
 }
 
-function clipText(value, maxLength = 155) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, maxLength - 1).trim()}…`;
-}
-
-function consultantRoleLabel(profileType) {
-  return profileType === "mentor" ? "ментор" : "кариерен консултант";
-}
-
-function consultantDescription(item, seoData) {
-  const primary = clipText(item.headline || item.bio || "", 155);
-  if (primary) return primary;
-
-  const role = consultantRoleLabel(item.profileType);
-  const city = item.city ? ` в ${item.city}` : "";
-  return `Резервирай среща с ${item.name || "експерт"} - ${role}${city} в GrowPoint.`;
-}
-
-function isStablePublicImageUrl(value, allowedHosts = []) {
-  if (!value) return false;
-
-  try {
-    const url = new URL(String(value));
-    const isSignedUrl =
-      url.searchParams.has("X-Amz-Algorithm") ||
-      url.searchParams.has("X-Amz-Signature") ||
-      url.searchParams.has("X-Amz-Expires") ||
-      url.searchParams.has("X-Amz-Security-Token");
-    if (isSignedUrl) return false;
-    if (!allowedHosts.length) return true;
-    return allowedHosts.some(
-      (host) => url.hostname === host || url.hostname.endsWith(`.${host}`)
-    );
-  } catch {
-    return false;
-  }
-}
-
-// Only trust images hosted by GrowPoint itself or our own S3 bucket for SEO /
-// social metadata. Signed S3 URLs are temporary, so they fall back to the
-// stable branded default image rather than becoming stale social-card assets.
-function seoImageHosts(seoData) {
-  const hosts = new Set(["amazonaws.com"]);
-  try {
-    hosts.add(new URL(seoData.siteUrl).hostname);
-  } catch {}
-  return Array.from(hosts);
-}
-
-function consultantSeoImage(item, seoData) {
-  const allowedHosts = seoImageHosts(seoData);
-  const candidates = [item.heroUrl, item.avatarUrl];
-  return (
-    candidates.find((url) => isStablePublicImageUrl(url, allowedHosts)) ||
-    seoData.defaultImage
-  );
-}
-
 function consultantRoute(item, seoData) {
-  if (!item || !item.slug || !item.name) return null;
+  if (!item || !item.slug) return null;
   const slug = String(item.slug).trim().replace(/^\/+|\/+$/g, "");
   if (!slug) return null;
 
-  const role = consultantRoleLabel(item.profileType);
-  const updatedAt = item.updatedAt || item.statusUpdatedAt || item.createdAt;
-  const lastmod = updatedAt ? String(updatedAt).slice(0, 10) : new Date().toISOString().slice(0, 10);
-
+  // GitHub Pages and Git history cannot erase per-person static metadata when
+  // Cognito deletes an account. Keep the route, but fetch identity only live.
   return {
     path: `/consultants/${slug}`,
-    title: `${item.name} - ${role} | ${seoData.siteName}`,
-    description: consultantDescription(item, seoData),
-    image: consultantSeoImage(item, seoData),
+    title: `Кариерен консултант или ментор | ${seoData.siteName}`,
+    description: "Публичен профил на кариерен консултант или ментор в GrowPoint.",
+    image: seoData.defaultImage,
     schemaType: "ProfilePage",
     changefreq: "weekly",
     priority: "0.7",
-    lastmod,
+    lastmod: new Date().toISOString().slice(0, 10),
     index: true,
     sitemap: true,
     renderStatic: true

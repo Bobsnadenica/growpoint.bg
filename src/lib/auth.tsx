@@ -155,7 +155,7 @@ function describeOAuthError(raw: string): string {
     text.includes("account exists") ||
     text.includes("presignup failed")
   ) {
-    return "Вече има профил с този имейл. Влез по начина, с който си се регистрирал(а) първоначално (имейл и парола или Google), след което можеш да добавиш и LinkedIn.";
+    return "Вече има профил с този имейл. Влез по начина, с който си се регистрирал(а) първоначално. Ако нямаш достъп, свържи се с екипа.";
   }
   if (text.includes("email") && (text.includes("required") || text.includes("attribute"))) {
     return "Доставчикът не сподели имейл адрес. Разреши достъп до имейла си при входа и опитай отново.";
@@ -163,10 +163,7 @@ function describeOAuthError(raw: string): string {
   if (text.includes("invalid_scope") || text.includes("scope")) {
     return "Входът с този доставчик не е напълно конфигуриран (обхвати). Опитай по-късно или използвай друг метод.";
   }
-  if (!raw) {
-    return "Входът с външния профил не беше завършен. Опитай отново или използвай имейл и парола.";
-  }
-  return `Входът с външния профил не беше завършен: ${raw}`;
+  return "Входът с външния профил не беше завършен. Опитай отново или използвай имейл и парола.";
 }
 
 function readOAuthErrorFromUrl(): string {
@@ -185,7 +182,8 @@ function readOAuthErrorFromUrl(): string {
     ["error", "error_description", "state"].forEach((k) => url.searchParams.delete(k));
     window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
   }
-  return desc ? describeOAuthError(decodeURIComponent(desc)) : "";
+  // URLSearchParams already decodes once; a literal '%' must not crash auth.
+  return desc ? describeOAuthError(desc) : "";
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

@@ -97,12 +97,13 @@ export function normalizeAvailabilitySlots(value: string[]) {
 
 export function getUpcomingAvailabilitySlots(
   value: string[],
-  limit = Number.POSITIVE_INFINITY
+  limit = Number.POSITIVE_INFINITY,
+  minimumLeadMinutes = 0
 ) {
-  const cutoff = Date.now() - 5 * 60 * 1000;
+  const cutoff = Date.now() + minimumLeadMinutes * 60 * 1000;
 
   return normalizeAvailabilitySlots(value)
-    .filter((item) => new Date(item).getTime() >= cutoff)
+    .filter((item) => new Date(item).getTime() > cutoff)
     .slice(0, limit);
 }
 

@@ -16,10 +16,13 @@ export function useModalFocus(open: boolean, dialog: RefObject<HTMLElement>, onC
     siblings.forEach(node => { node.inert = true; });
     document.body.style.overflow = "hidden";
     const controls = () => Array.from(element.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]'
+      'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]'
     )).filter(node => node.getClientRects().length > 0);
     (element.hasAttribute("tabindex") ? element : controls()[0])?.focus();
     function key(event: KeyboardEvent) {
+      // A nested portal marks this dialog inert; only the top dialog handles
+      // Escape/Tab so closing it restores focus to its still-open parent.
+      if (!element || element.inert || element.closest("[inert]")) return;
       if (event.key === "Escape") { event.preventDefault(); close.current(); }
       if (event.key !== "Tab") return;
       const items = controls();
