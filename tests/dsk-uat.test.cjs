@@ -8,6 +8,7 @@ const otherId = "11111111-1111-1111-1111-111111111111";
 const ref = "gp-uat-fixture-01";
 const returnUrl = `https://www.growpoint.bg/admin?paymentTest=${otherId}`;
 const formUrl = `https://uat.dskbank.bg/payment/payment/merchants/ecom/payment_bg.html?mdOrder=${id}`;
+const sharedFormUrl = `https://uat.dskbank.bg/payment/merchants/multiecom/payment.html?mdOrder=${id}&language=bg`;
 const fixedTime = "2026-10-01T12:00:00.000Z";
 const response = (body, options = {}) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" }, ...options });
 const statusReply = (patch = {}) => ({
@@ -132,7 +133,24 @@ test("checkout URL is limited to documented HTTPS UAT forms and matching unique 
   ]) assert.throws(() => validateCheckoutUrl(url, id), { code: "DSK_UAT_REPLY_INVALID" });
 });
 
-test("registration timeout recovers once by merchant orderNumber with no duplicate or fabricated form URL", async () => {
+test("actual sandbox register multiecom form keeps its matching UUID and explicit language without status fallback", async () => {
+  const { adapter, calls } = fixture([response({ orderId: id, formUrl: sharedFormUrl })]);
+  const result = await adapter.register({ orderNumber: ref, returnUrl });
+  assert.equal(result.checkoutUrl, sharedFormUrl);
+  assert.equal(result.recovered, false);
+  assert.equal(calls.length, 1);
+  assert.equal(validateCheckoutUrl(sharedFormUrl.replace("language=bg", "language=en"), id).endsWith("language=en"), true);
+  for (const url of [
+    sharedFormUrl.replace("multiecom", "other-merchant"), sharedFormUrl.replace("payment.html", "finish.html"),
+    sharedFormUrl.replace("https:", "http:"), sharedFormUrl.replace("uat.dskbank.bg", "epg.dskbank.bg"),
+    sharedFormUrl.replace(id, otherId), sharedFormUrl.replace("&language=bg", ""),
+    sharedFormUrl.replace("language=bg", "language=../private"), sharedFormUrl.replace("language=bg", "language=BG"),
+    `${sharedFormUrl}&language=bg`, `${sharedFormUrl}&mdOrder=${id}`, `${sharedFormUrl}&redirect=https://evil.invalid`, `${sharedFormUrl}#fragment`,
+  ]) assert.throws(() => validateCheckoutUrl(url, id), { code: "DSK_UAT_REPLY_INVALID" });
+  assert.throws(() => validateCheckoutUrl(sharedFormUrl, "not-a-uuid"), { code: "DSK_UAT_REPLY_INVALID" });
+});
+
+test("registration timeout recovers once by merchant orderNumber and verified canonical UAT form without duplicate registration", async () => {
   const { adapter, calls } = fixture([
     (_, init) => new Promise((resolve, reject) => init.signal.addEventListener("abort", () => reject(new Error("private network detail")), { once: true })),
     response(statusReply({ orderStatus: 0, actionCode: -100 })),
@@ -141,10 +159,25 @@ test("registration timeout recovers once by merchant orderNumber with no duplica
   assert.equal(result.status, "created");
   assert.equal(result.recovered, true);
   assert.equal(result.gatewayOrderId, id);
-  assert.equal(result.checkoutUrl, undefined);
+  assert.equal(result.checkoutUrl, sharedFormUrl);
   assert.deepEqual(calls.map(call => new URL(call.url).pathname), ["/payment/rest/register.do", "/payment/rest/getOrderStatusExtended.do"]);
   assert.equal(calls[1].fields.orderNumber, ref);
   assert.equal(calls[1].fields.orderId, undefined);
+});
+
+test("previously registered order without URL recovers only from bank-verified unpaid identity/financial evidence", async () => {
+  const recovered = fixture([response(statusReply({ orderStatus: 0, actionCode: -100 }))]);
+  assert.equal((await recovered.adapter.getStatus({ orderNumber: ref, orderId: id })).checkoutUrl, sharedFormUrl);
+  assert.equal(recovered.calls.length, 1);
+  assert.ok(recovered.calls[0].url.endsWith("/getOrderStatusExtended.do"));
+  for (const patch of [{ orderNumber: "other-ref" }, { amount: 200 }, { currency: "975" }, { attributes: [{ name: "mdOrder", value: otherId }] }]) {
+    const mismatch = fixture([response(statusReply({ orderStatus: 0, actionCode: -100, ...patch }))]);
+    await assert.rejects(mismatch.adapter.getStatus({ orderNumber: ref, orderId: id }), { code: "DSK_UAT_REPLY_INVALID" });
+  }
+  for (const bankStatus of [1, 2, 3, 4, 5, 6, 7, 8, 99]) {
+    const nonInitial = fixture([response(statusReply({ orderStatus: bankStatus }))]);
+    assert.equal((await nonInitial.adapter.getStatus({ orderNumber: ref, orderId: id })).checkoutUrl, undefined);
+  }
 });
 
 test("duplicate merchant order is reconciled rather than registered again", async () => {

@@ -13,11 +13,10 @@ set -uo pipefail
 fail=0
 err() { printf '::error::%s\n' "$1" >&2; fail=1; }
 
-# Scan public documentation and deploy assets too. Only exclude the scanner
-# definitions themselves. Untracked, non-ignored files are included before commit.
+# Scan public documentation and deploy assets too. Exclude vendored dependencies
+# and scanner definitions. Untracked, non-ignored files are included before commit.
 EXCLUDES=(
   ':!backend/api/node_modules'
-  ':!dist'
   ':!scripts/check-secrets.sh'
   ':!.gitleaks.toml'
 )
@@ -45,10 +44,12 @@ fi
 
 # 3) .env.production may hold ONLY public client config (it ships in the bundle).
 if [ -f .env.production ]; then
-  envbad=$(grep -niE 'secret|password|private[_-]?key|GOCSPX-|WPL_AP1|BEGIN [A-Z ]*PRIVATE KEY' .env.production || true)
-  if [ -n "$envbad" ]; then
+  envbad_lines=$(grep -niE 'secret|password|private[_-]?key|GOCSPX-|WPL_AP1|BEGIN [A-Z ]*PRIVATE KEY' .env.production | cut -d: -f1 || true)
+  if [ -n "$envbad_lines" ]; then
     err ".env.production contains secret-looking entries (only public VITE_* allowed):"
-    printf '%s\n' "$envbad" >&2
+    while IFS= read -r line; do
+      printf '.env.production:%s (value withheld)\n' "$line" >&2
+    done <<< "$envbad_lines"
   fi
 fi
 
@@ -62,4 +63,4 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-printf '✓ Secret scan passed — no sensitive material tracked.\n'
+printf '✓ Public-file secret guard passed (pattern/file checks; audit history separately).\n'

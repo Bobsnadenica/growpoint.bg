@@ -12,3 +12,10 @@ test("public booking calendar exposes hour buttons without a nested height limit
   // The consultant editor retains its separate pick-mode styling.
   assert.match(css, /\.availability-calendar--pick\s*\{\s*max-height:\s*none;\s*overflow:\s*visible;/);
 });
+
+test("narrow public booking tracks shrink without clipping the seventh day or payment choices", () => {
+  const css = readFileSync("src/styles/global.css", "utf8");
+  assert.match(css, /\.profile-aside-stack \.booking-panel\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(css, /\.booking-panel \.cal__weekdays\s*\{[^}]*repeat\(7, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.booking-panel \.cal__cell\s*\{[^}]*min-height:\s*44px;\s*aspect-ratio:\s*auto/);
+});

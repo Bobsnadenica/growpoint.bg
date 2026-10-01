@@ -6,21 +6,29 @@ title = "GrowPoint gitleaks config"
 useDefault = true
 
 [allowlist]
-description = "Public client config, vendored deps, build output, docs and templates"
-# These paths never contain real secrets:
-#  - .env.production: PUBLIC client config only (API URL + Cognito pool/app IDs).
-#  - *.example / templates: placeholders.
-#  - README.md / test.txt: docs that may quote secret-shaped patterns in prose.
-#  - node_modules / dist / assets: vendored deps and build output.
+description = "Vendored dependencies and scanner definitions only"
+# Documentation, templates, public client config and generated builds must be scanned.
+# Confirmed false positives below are scoped to one rule and exact safe content.
 paths = [
   '''backend/api/node_modules/''',
-  '''(^|/)dist/''',
-  '''(^|/)assets/''',
-  '''\.env\.production$''',
-  '''\.example$''',
-  '''(^|/)README\.md$''',
-  '''(^|/)test\.txt$''',
-  '''(^|/)package-lock\.json$''',
   '''\.gitleaks\.toml$''',
   '''scripts/check-secrets\.sh$''',
 ]
+
+[[rules]]
+id = "hashicorp-tf-password"
+[[rules.allowlists]]
+description = "Cognito authentication-flow enum, not a Terraform password"
+condition = "AND"
+paths = ['''(^|/)infra/terraform/main\.tf$''']
+regexTarget = "secret"
+regexes = ['''^\s*"?ALLOW_(USER_PASSWORD|USER_SRP|REFRESH_TOKEN)_AUTH"?,?\s*$''']
+
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "Exact historical launch-readiness prose, not an API credential"
+condition = "AND"
+paths = ['''(^|/)docs/dsk-sandbox-preflight-2026-10-01\.md$''']
+regexTarget = "secret"
+regexes = ['''^refunds/cancellation$''']

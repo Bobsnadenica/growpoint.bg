@@ -11,6 +11,7 @@ import type {
 } from "../../lib/types";
 import PageScene from "../layout/PageScene";
 import DskSandboxPanel from "../components/DskSandboxPanel";
+import { AdminBenefitsPanel } from "../components/ExpertBenefitsPanel";
 
 type Filter = "all" | "public" | "featured" | "restricted";
 
@@ -420,6 +421,8 @@ export default function AdminPage() {
       <MonitoringDashboardPage embedded />
 
       <DskSandboxPanel key={user.id} token={token} />
+
+      <section className="section section--tight"><div className="container"><AdminBenefitsPanel key={user.id} token={token} /></div></section>
 
       <section className="section section--tight">
         <div className="container">

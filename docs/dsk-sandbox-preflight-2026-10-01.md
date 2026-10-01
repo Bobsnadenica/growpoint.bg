@@ -1,5 +1,7 @@
 # DSK sandbox integration preflight — 1 October 2026
 
+**Historical preflight snapshot, superseded by the [later sandbox results](dsk-sandbox-results-2026-10-01.md).** The owner subsequently authorized automatic bank notices, two provider transactions completed, and a separate credential-security blocker paused the remaining website tests. Statements below describe only the earlier disabled release.
+
 **This is not proof of successful bank transactions or bank approval.** No real funds, card details, memberships, bookings, meeting access, notifications or account credentials were changed. No emails/messages were sent by the agent. The owner submits any final test dossier to DSK; step 6 is not performed here.
 
 ## Integration checklist

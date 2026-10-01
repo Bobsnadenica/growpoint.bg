@@ -191,6 +191,8 @@ export interface ConsultantProfile {
   heroStorageKey?: string;
   tags: string[];
   availability: string[];
+  /** Public months with an unclaimed expert-funded free session (Europe/Sofia). */
+  monthlyFreeSessionAvailableMonths?: string[];
   /** Owner/admin only; never returned in the public catalogue. */
   bookedSlots?: string[];
   idealFor?: string[];

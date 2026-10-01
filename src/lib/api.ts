@@ -127,7 +127,7 @@ function requireBackend() {
 
 const REQUEST_TIMEOUT_MS = 15000;
 
-async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   requireBackend();
 
   const headers = new Headers(options.headers || {});
@@ -307,6 +307,7 @@ export const api = {
       scheduledAt: string;
       note?: string;
       useFreePoints?: boolean;
+      useMonthlyFreeSession?: boolean;
     }
   ) {
     return request<Booking>(

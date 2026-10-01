@@ -125,7 +125,7 @@ resource "aws_cognito_user_pool" "main" {
 
 # Authorise Cognito to send emails through the configured SES identity.
 # Only created when cognito_ses_from_email is set (otherwise Cognito falls back to
-# its built-in COGNITO_DEFAULT sender, which uses no-reply@verificationemail.com).
+# SES sends only from the verified GrowPoint domain identity.
 resource "aws_ses_identity_policy" "cognito_sender" {
   count    = local.cognito_uses_ses ? 1 : 0
   identity = var.cognito_ses_from_email
@@ -861,6 +861,7 @@ resource "aws_iam_role_policy" "lambda" {
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
+          "dynamodb:ConditionCheckItem",
           "dynamodb:TransactWriteItems",
           "dynamodb:Query",
           "dynamodb:Scan"
@@ -1061,6 +1062,38 @@ resource "aws_apigatewayv2_route" "consultants_me_get" {
 resource "aws_apigatewayv2_route" "consultants_me_put" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "PUT /consultants/me"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "expert_benefits_list" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /consultants/me/benefit-requests"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "expert_benefits_create" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /consultants/me/benefit-requests"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "admin_benefits_list" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /admin/benefit-requests"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "admin_benefits_update" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "PATCH /admin/benefit-requests/{requestId}"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
   authorization_type = "JWT"

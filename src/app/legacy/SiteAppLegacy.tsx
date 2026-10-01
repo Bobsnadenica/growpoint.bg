@@ -40,21 +40,20 @@ import {
   type PersonaPreset
 } from "../../lib/personas";
 import {
-  buildAvailabilityPreset,
-  buildAvailabilitySlot,
   formatAvailabilityDayLabel,
   formatAvailabilityShortLabel,
   formatAvailabilityTimeLabel,
   formatDateInputValue,
-  generateAvailabilityPattern,
   getAvailabilityDayKey,
-  getRelativeDateInputValue,
-  getUpcomingAvailabilitySlots,
-  normalizeAvailabilitySlots
+  getUpcomingAvailabilitySlots
 } from "./availability";
 import AvailabilityCalendar from "./AvailabilityCalendar";
 import HeroAnimation from "./HeroAnimation";
 import PaymentPlaceholder from "../components/PaymentPlaceholder";
+import ConsultantAvailabilityEditor from "../components/ConsultantAvailabilityEditor";
+import SpotlightShowcase from "../components/SpotlightShowcase";
+import { ExpertBenefitsPanel } from "../components/ExpertBenefitsPanel";
+import { expertPackageRank, hasMonthlyFreeSession, sessionMonthInSofia } from "../../lib/expert-package-display";
 import { useModalFocus } from "../../lib/use-modal-focus";
 import { expertCompletion } from "../../lib/expert-completion";
 import { NOTIFICATION_ICONS, getNotificationCategory } from "../../lib/notifications";
@@ -400,8 +399,7 @@ function getConsultantPackageTier(consultant: ConsultantProfile) {
 }
 
 function getConsultantPackageRank(consultant: ConsultantProfile) {
-  const tier = getConsultantPackageTier(consultant);
-  return tier === "spotlight" ? 2 : tier === "grow" ? 1 : 0;
+  return expertPackageRank(consultant);
 }
 
 const PACKAGE_BADGES: Record<string, string | null> = {
@@ -419,6 +417,7 @@ function getConsultantThemeVisual(theme?: ConsultantProfile["theme"]) {
 }
 
 function getConsultantThemeStyle(consultant: ConsultantProfile): ConsultantThemeStyle | undefined {
+  if (getConsultantPackageTier(consultant) !== "spotlight") return undefined;
   const visual = getConsultantThemeVisual(consultant.theme);
 
   if (!visual) {
@@ -435,7 +434,7 @@ function getConsultantThemeStyle(consultant: ConsultantProfile): ConsultantTheme
 }
 
 function hasConsultantTheme(consultant: ConsultantProfile) {
-  return Boolean(getConsultantThemeVisual(consultant.theme));
+  return getConsultantPackageTier(consultant) === "spotlight" && Boolean(getConsultantThemeVisual(consultant.theme));
 }
 
 function formatBookingStatusLabel(status: Booking["status"]) {
@@ -543,18 +542,6 @@ function scrollToDashboardSection(id: string) {
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
-
-const AVAILABILITY_WEEKDAYS = [
-  { value: 1, short: "Пон" },
-  { value: 2, short: "Вто" },
-  { value: 3, short: "Сря" },
-  { value: 4, short: "Чет" },
-  { value: 5, short: "Пет" },
-  { value: 6, short: "Съб" },
-  { value: 0, short: "Нед" }
-] as const;
-
-const AVAILABILITY_HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 – 20:00
 
 // Рекламното каре в таблото показва ротация от наличните рекламни активи
 // (owner-provided creatives in assets/advertisement/).
@@ -1312,6 +1299,8 @@ export function HomePage() {
         </div>
       </section>
 
+      <SpotlightShowcase profiles={homeConsultants} />
+
       <section className="section">
         <div className="container">
           <div className="section-heading">
@@ -1405,16 +1394,9 @@ export function UsersPage() {
           : getConsultantMatch(profile, consultant)
       }))
       .sort((left, right) => {
-        // "Водещи профили" / избрана област: Grow & Spotlight packages come
-        // before the rest (per the designer doc), Spotlight ahead of Grow.
-        if (topOnly || persona) {
-          const packageDiff =
-            getConsultantPackageRank(right.consultant) -
-            getConsultantPackageRank(left.consultant);
-          if (packageDiff !== 0) {
-            return packageDiff;
-          }
-        }
+        // Apply the advertised visibility benefit within the user's filters.
+        const packageDiff = getConsultantPackageRank(right.consultant) - getConsultantPackageRank(left.consultant);
+        if (packageDiff !== 0) return packageDiff;
 
         const leftScore = left.match?.score || 0;
         const rightScore = right.match?.score || 0;
@@ -1759,6 +1741,7 @@ export function ConsultantPage() {
   const [selectedSlot, setSelectedSlot] = useState("");
   const [note, setNote] = useState("");
   const [useFreePoints, setUseFreePoints] = useState(false);
+  const [useMonthlyFreeSession, setUseMonthlyFreeSession] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [shareMessage, setShareMessage] = useState("");
@@ -1769,6 +1752,10 @@ export function ConsultantPage() {
     format: string;
   } | null>(null);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!consultant || !hasMonthlyFreeSession(consultant, selectedSlot)) setUseMonthlyFreeSession(false);
+  }, [consultant, selectedSlot]);
 
   useEffect(() => {
     let mounted = true;
@@ -1934,14 +1921,16 @@ export function ConsultantPage() {
         consultantId: consultant.consultantId,
         scheduledAt: selectedSlot,
         note: note.trim(),
-        useFreePoints
+        useFreePoints,
+        useMonthlyFreeSession: useMonthlyFreeSession && hasMonthlyFreeSession(consultant, selectedSlot)
       });
       // A pending request reserves overlapping slots immediately. Do not offer
       // the occupied time again before the next public catalogue refresh.
       const duration = (consultant.sessionLengthMinutes || 60) * 60000;
       setConsultant(current => current ? {
         ...current,
-        availability: current.availability.filter(slot => Math.abs(Date.parse(slot) - Date.parse(selectedSlot)) >= duration)
+        availability: current.availability.filter(slot => Math.abs(Date.parse(slot) - Date.parse(selectedSlot)) >= duration),
+        monthlyFreeSessionAvailableMonths: useMonthlyFreeSession ? current.monthlyFreeSessionAvailableMonths?.filter(month => month !== sessionMonthInSofia(selectedSlot)) : current.monthlyFreeSessionAvailableMonths
       } : current);
       setConfirmedBooking({
         slot: selectedSlot,
@@ -1951,6 +1940,7 @@ export function ConsultantPage() {
       setNote("");
       setSelectedSlot("");
       setUseFreePoints(false);
+      setUseMonthlyFreeSession(false);
       setMessage("");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Неуспешно създаване на заявка.");
@@ -2267,12 +2257,24 @@ export function ConsultantPage() {
                   />
                 </label>
 
+                {hasMonthlyFreeSession(consultant, selectedSlot) ? (
+                  <label className="booking-free-points">
+                    <input type="checkbox" checked={useMonthlyFreeSession} onChange={event => {
+                      setUseMonthlyFreeSession(event.target.checked);
+                      if (event.target.checked) setUseFreePoints(false);
+                    }} />
+                    <span>Безплатната сесия на експерта за този месец · без точки. Една резервация за всички клиенти; потвърждава се при изпращане.</span>
+                  </label>
+                ) : null}
                 {!isConsultantViewer && (viewerProfile?.points ?? 0) >= 100 ? (
                   <label className="booking-free-points">
                     <input
                       type="checkbox"
                       checked={useFreePoints}
-                      onChange={(event) => setUseFreePoints(event.target.checked)}
+                      onChange={(event) => {
+                        setUseFreePoints(event.target.checked);
+                        if (event.target.checked) setUseMonthlyFreeSession(false);
+                      }}
                     />
                     <span>
                       Използвай 100 точки за безплатна консултация (имаш{" "}
@@ -2295,7 +2297,7 @@ export function ConsultantPage() {
                       </strong>
                       <span className="booking-summary__hint">
                         {getSessionLengthLabel(consultant)} ·{" "}
-                        {getConsultantPriceLabel(consultant)}
+                        {(useMonthlyFreeSession && hasMonthlyFreeSession(consultant, selectedSlot)) || useFreePoints ? "Безплатна сесия" : getConsultantPriceLabel(consultant)}
                       </span>
                     </>
                   ) : (
@@ -3539,11 +3541,9 @@ export function DashboardPage() {
   const [directoryConsultants, setDirectoryConsultants] = useState<ConsultantProfile[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [consultantAvailability, setConsultantAvailability] = useState<string[]>([]);
-  const [availabilityDate, setAvailabilityDate] = useState(getRelativeDateInputValue(1));
-  const [availabilityTime, setAvailabilityTime] = useState("09:00");
-  const [patternWeekdays, setPatternWeekdays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [patternHours, setPatternHours] = useState<number[]>([10, 14]);
-  const [patternWeeksAhead, setPatternWeeksAhead] = useState(4);
+  const [consultantSaving, setConsultantSaving] = useState(false);
+  const consultantSaveBusy = useRef(false);
+  const [availabilitySaveError, setAvailabilitySaveError] = useState("");
   const [activeProfileSection, setActiveProfileSection] = useState("identity");
   const [activeConsultantSection, setActiveConsultantSection] = useState("presentation");
   const [message, setMessage] = useState("");
@@ -3672,7 +3672,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     setConsultantAvailability(getUpcomingAvailabilitySlots(consultantProfile?.availability || []));
-  }, [consultantProfile]);
+  }, [consultantProfile?.availability]);
 
   useEffect(() => {
     if (!profile || !dashboardLocation.hash) {
@@ -3699,20 +3699,10 @@ export function DashboardPage() {
   // returns below. The Rules of Hooks require a consistent hook count on
   // every render — calling a hook only when `profile` is non-null would
   // make React's internal cursor desync and crash the route.
-  const patternPreview = useMemo(
-    () =>
-      generateAvailabilityPattern({
-        weekdays: patternWeekdays,
-        hours: patternHours,
-        weeksAhead: patternWeeksAhead
-      }),
-    [patternWeekdays, patternHours, patternWeeksAhead]
-  );
-
-  const patternNewSlots = useMemo(
-    () => patternPreview.filter((slot) => !consultantAvailability.includes(slot)),
-    [patternPreview, consultantAvailability]
-  );
+  const occupiedAvailability = useMemo(() => Array.from(new Set([
+    ...(consultantProfile?.bookedSlots || []),
+    ...bookings.filter(booking => booking.status === "pending" || booking.status === "confirmed").map(booking => booking.scheduledAt)
+  ])), [consultantProfile?.bookedSlots, bookings]);
 
   if (loading || !user) {
     return (
@@ -4066,6 +4056,10 @@ export function DashboardPage() {
 
   async function saveConsultantProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (consultantSaveBusy.current) return;
+    consultantSaveBusy.current = true;
+    setConsultantSaving(true);
+    setAvailabilitySaveError("");
     setError("");
     setMessage("");
 
@@ -4134,6 +4128,7 @@ export function DashboardPage() {
         headline: String(
           formData.get("consultantHeadline") || consultantProfile?.headline || ""
         ),
+        theme: String(formData.get("consultantTheme") || "") as ConsultantProfile["theme"],
         bio: String(formData.get("consultantBio") || consultantProfile?.bio || ""),
         experienceSummary: String(
           formData.get("consultantExperienceSummary") || consultantProfile?.experienceSummary || ""
@@ -4187,7 +4182,18 @@ export function DashboardPage() {
       );
       setMessage("Консултантският профил е обновен.");
     } catch (value) {
-      setError(value instanceof Error ? value.message : "Неуспешно записване.");
+      const failure = value instanceof Error ? value.message : "Неуспешно записване.";
+      setError(failure);
+      setAvailabilitySaveError(failure);
+      // A reservation may have arrived while editing. Refresh occupied metadata
+      // only; replacing the profile/availability would silently erase the draft.
+      try {
+        const fresh = await api.getMyConsultantProfile(token);
+        setConsultantProfile(current => current ? { ...current, bookedSlots: fresh.bookedSlots || [] } : current);
+      } catch { /* Keep the draft and the original actionable save error. */ }
+    } finally {
+      consultantSaveBusy.current = false;
+      setConsultantSaving(false);
     }
   }
 
@@ -4208,15 +4214,9 @@ export function DashboardPage() {
             consultant,
             match: getConsultantMatch(profile, consultant)
           }))
-          .sort((left, right) => (right.match?.score || 0) - (left.match?.score || 0))
+          .sort((left, right) => expertPackageRank(right.consultant) - expertPackageRank(left.consultant) || (right.match?.score || 0) - (left.match?.score || 0))
           .slice(0, 3)
       : [];
-  const availabilityPresetOptions = [
-    buildAvailabilityPreset(1, 9),
-    buildAvailabilityPreset(1, 14),
-    buildAvailabilityPreset(2, 11),
-    buildAvailabilityPreset(3, 16)
-  ];
   const firstName = (profile.name || "").trim().split(" ")[0] || "";
   const consultantPublicSlug =
     consultantProfile?.slug || slugifyValue(consultantProfile?.name || profile.name);
@@ -4334,71 +4334,6 @@ export function DashboardPage() {
   );
   const activeProfileSetup = profileSetupSections[activeProfileSectionIndex];
   const activeConsultantSetup = consultantSetupSections[activeConsultantSectionIndex];
-
-  function addAvailabilitySlot(slot: string) {
-    if (!slot) {
-      setError("Избери дата и час, за да добавиш свободен слот.");
-      return;
-    }
-
-    if (new Date(slot).getTime() < Date.now()) {
-      setError("Избраният момент вече е минал. Избери час в бъдещето.");
-      return;
-    }
-
-    setError("");
-    setMessage("");
-    setConsultantAvailability((current) => getUpcomingAvailabilitySlots([...current, slot]));
-  }
-
-  function addManualAvailabilitySlot() {
-    addAvailabilitySlot(buildAvailabilitySlot(availabilityDate, availabilityTime));
-  }
-
-  function removeAvailabilitySlot(slot: string) {
-    setConsultantAvailability((current) => current.filter((item) => item !== slot));
-  }
-
-  function toggleAvailabilitySlot(slot: string) {
-    if (consultantAvailability.includes(slot)) {
-      removeAvailabilitySlot(slot);
-    } else {
-      addAvailabilitySlot(slot);
-    }
-  }
-
-  function addAvailabilitySlots(slots: string[]) {
-    if (!slots.length) return;
-    setError("");
-    setMessage("");
-    setConsultantAvailability((current) => {
-      const merged = new Set(current);
-      for (const slot of slots) merged.add(slot);
-      return getUpcomingAvailabilitySlots(Array.from(merged));
-    });
-  }
-
-  function clearAllAvailability() {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm("Сигурен ли си, че искаш да изтриеш всички свободни часове?")
-    ) {
-      return;
-    }
-    setConsultantAvailability([]);
-  }
-
-  function togglePatternWeekday(value: number) {
-    setPatternWeekdays((current) =>
-      current.includes(value) ? current.filter((v) => v !== value) : [...current, value].sort()
-    );
-  }
-
-  function togglePatternHour(value: number) {
-    setPatternHours((current) =>
-      current.includes(value) ? current.filter((v) => v !== value) : [...current, value].sort((a, b) => a - b)
-    );
-  }
 
   function moveProfileSection(direction: -1 | 1) {
     const nextIndex = activeProfileSectionIndex + direction;
@@ -4773,6 +4708,8 @@ export function DashboardPage() {
               </div>
             </section>
           ) : null}
+
+          {profile.role === "consultant" ? <ExpertBenefitsPanel key={profile.userId} token={token} /> : null}
 
           {profile.role === "client" && profileCompletion >= 100 ? (
             <section className="panel" id="matches">
@@ -5238,8 +5175,9 @@ export function DashboardPage() {
 
           {profile.role === "consultant" ? (
             <form
-              className="panel form-stack"
+              className={`panel form-stack${activeConsultantSection === "booking" ? " consultant-hours-form" : ""}`}
               id="consultant-profile"
+              aria-busy={consultantSaving}
               noValidate
               onSubmit={saveConsultantProfile}
             >
@@ -5407,6 +5345,18 @@ export function DashboardPage() {
                       </span>
                     </label>
                   </div>
+                  <label>
+                    Цветова визия · Spotlight
+                    <select name="consultantTheme" defaultValue={consultantProfile?.theme || ""} disabled={consultantProfile?.packageTier !== "spotlight"}>
+                      <option value="">Стандартна</option>
+                      <option value="violet">Виолетова</option>
+                      <option value="sky">Небесносиня</option>
+                      <option value="rose">Розова</option>
+                      <option value="mint">Ментова</option>
+                      <option value="amber">Кехлибарена</option>
+                    </select>
+                    <span className="form-note">Spotlight добавя цветова визия и банер на началната страница с твоята снимка и заглавие. Другите пакети запазват стандартната визия.</span>
+                  </label>
                   <div className="media-preview-grid">
                     <article className="media-preview-card">
                       <span className="search-shortcuts__label">Профилна снимка</span>
@@ -5624,7 +5574,7 @@ export function DashboardPage() {
                   </div>
 
                   <div
-                    className={`profile-setup-panel ${
+                    className={`profile-setup-panel profile-setup-panel--availability ${
                       activeConsultantSection === "booking" ? "profile-setup-panel--active" : ""
                     }`}
                   >
@@ -5678,210 +5628,15 @@ export function DashboardPage() {
                     value={consultantAvailability.join("\n")}
                     readOnly
                   />
-                  <div className="availability-composer">
-                    <div className="availability-composer__header">
-                      <div>
-                        <strong>Свободни часове</strong>
-                        <p>
-                          Избери дни и часове наведнъж — пиши седмичен график вместо да добавяш по
-                          един слот.
-                        </p>
-                      </div>
-                      <span
-                        className={
-                          consultantAvailability.length
-                            ? "status-badge status-badge--success"
-                            : "plan-pill"
-                        }
-                      >
-                        {consultantAvailability.length
-                          ? `${consultantAvailability.length} активни`
-                          : "Няма слотове"}
-                      </span>
-                    </div>
-
-                    <div className="availability-calendar availability-calendar--pick">
-                      <p className="form-note">
-                        Натисни ден и след това час, за да добавиш или премахнеш свободен
-                        слот.
-                      </p>
-                      <AvailabilityCalendar
-                        mode="pick"
-                        availability={consultantAvailability}
-                        onToggleSlot={toggleAvailabilitySlot}
-                      />
-                    </div>
-
-                    <details className="availability-pattern-toggle">
-                      <summary>Или добави цял седмичен график наведнъж</summary>
-                    <div className="availability-pattern">
-                      <div className="availability-pattern__row">
-                        <span className="availability-pattern__label">Дни от седмицата</span>
-                        <div className="availability-pattern__chips">
-                          {AVAILABILITY_WEEKDAYS.map((day) => {
-                            const active = patternWeekdays.includes(day.value);
-                            return (
-                              <button
-                                key={day.value}
-                                type="button"
-                                className={`pattern-chip ${active ? "pattern-chip--active" : ""}`}
-                                onClick={() => togglePatternWeekday(day.value)}
-                                aria-pressed={active}
-                              >
-                                {day.short}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="availability-pattern__row">
-                        <span className="availability-pattern__label">Часове</span>
-                        <div className="availability-pattern__chips">
-                          {AVAILABILITY_HOURS.map((hour) => {
-                            const active = patternHours.includes(hour);
-                            return (
-                              <button
-                                key={hour}
-                                type="button"
-                                className={`pattern-chip ${active ? "pattern-chip--active" : ""}`}
-                                onClick={() => togglePatternHour(hour)}
-                                aria-pressed={active}
-                              >
-                                {String(hour).padStart(2, "0")}:00
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="availability-pattern__row availability-pattern__row--inline">
-                        <label className="availability-pattern__weeks">
-                          За колко седмици напред
-                          <select
-                            value={patternWeeksAhead}
-                            onChange={(event) =>
-                              setPatternWeeksAhead(Number(event.target.value))
-                            }
-                          >
-                            {[1, 2, 4, 6, 8, 12].map((n) => (
-                              <option key={n} value={n}>
-                                {n} {n === 1 ? "седмица" : "седмици"}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <div className="availability-pattern__summary">
-                          <strong>
-                            {patternPreview.length} слота · {patternNewSlots.length} нови
-                          </strong>
-                          <p className="form-note">
-                            Само бъдещи часове. Дубликатите се пропускат автоматично.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="availability-pattern__actions">
-                        <button
-                          className="primary-button"
-                          type="button"
-                          onClick={() => addAvailabilitySlots(patternPreview)}
-                          disabled={!patternNewSlots.length}
-                        >
-                          Добави {patternNewSlots.length} нови слота
-                        </button>
-                        {consultantAvailability.length ? (
-                          <button
-                            className="ghost-button ghost-button--danger"
-                            type="button"
-                            onClick={clearAllAvailability}
-                          >
-                            Изчисти всички
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    </details>
-
-                    <details className="availability-single">
-                      <summary>Добави един час ръчно</summary>
-                      <div className="availability-composer__controls">
-                        <label>
-                          Дата
-                          <input
-                            type="date"
-                            value={availabilityDate}
-                            min={getRelativeDateInputValue(0)}
-                            onChange={(event) => setAvailabilityDate(event.target.value)}
-                          />
-                        </label>
-                        <label>
-                          Час
-                          <input
-                            type="time"
-                            value={availabilityTime}
-                            onChange={(event) => setAvailabilityTime(event.target.value)}
-                          />
-                        </label>
-                        <button
-                          className="ghost-button"
-                          type="button"
-                          onClick={addManualAvailabilitySlot}
-                        >
-                          Добави слот
-                        </button>
-                      </div>
-                      <div className="answer-suggestions">
-                        <span className="answer-suggestions__label">Бързи предложения</span>
-                        <div className="answer-suggestions__grid">
-                          {availabilityPresetOptions.map((option) => (
-                            <button
-                              className="suggestion-pill"
-                              key={option.value}
-                              type="button"
-                              onClick={() => addAvailabilitySlot(option.value)}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </details>
-
-                    {consultantAvailability.length ? (
-                      <div className="availability-saved">
-                        <div className="availability-saved__head">
-                          <strong>Запазени свободни часове</strong>
-                          <span>{consultantAvailability.length} общо</span>
-                        </div>
-                        <div className="availability-list availability-list--saved">
-                          {consultantAvailability.map((slot) => (
-                            <article className="availability-item" key={slot}>
-                              <div>
-                                <strong>{formatAvailabilityDayLabel(slot)}</strong>
-                                <p>{formatAvailabilityTimeLabel(slot)}</p>
-                              </div>
-                              <button
-                                className="text-button"
-                                type="button"
-                                onClick={() => removeAvailabilitySlot(slot)}
-                              >
-                                Премахни
-                              </button>
-                            </article>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="panel panel--subtle">
-                        <strong>Все още няма свободни часове.</strong>
-                        <p>
-                          Добави поне няколко слота за следващите дни, за да могат хората
-                          да изпращат заявки директно през профила ти.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  <ConsultantAvailabilityEditor
+                    availability={consultantAvailability}
+                    savedAvailability={consultantProfile?.availability || []}
+                    occupiedSlots={occupiedAvailability}
+                    sessionLengthMinutes={consultantProfile?.sessionLengthMinutes || 60}
+                    onChange={setConsultantAvailability}
+                    saving={consultantSaving}
+                    saveError={availabilitySaveError}
+                  />
                     </QuestionBlock>
                   </div>
                 </div>
@@ -5910,8 +5665,8 @@ export function DashboardPage() {
                 <p className="form-note">
                   Подреденият профил и свободните часове правят резервацията по-лесна.
                 </p>
-                <button className="primary-button" type="submit">
-                  Запази профила
+                <button className="primary-button" type="submit" disabled={consultantSaving}>
+                  {consultantSaving ? "Записваме…" : "Запази профила"}
                 </button>
               </div>
             </form>

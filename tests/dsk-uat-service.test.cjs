@@ -135,6 +135,17 @@ test("ambiguous registration or status outage stays unknown and cannot blindly r
   assert.ok(!JSON.stringify([...f.rows.values()]).includes("private gateway detail"));
 });
 
+test("existing created order without checkout URL is repaired by verified status read, never another registration", async () => {
+  const canonicalUrl = `https://uat.dskbank.bg/payment/merchants/multiecom/payment.html?mdOrder=${bankId}&language=bg`;
+  const f = fixture({ register: () => ({ status: "created", gatewayOrderId: bankId }), getStatus: () => ({ status: "created", gatewayOrderId: bankId, checkoutUrl: canonicalUrl, actionCode: -100, verifiedAt: "2026-10-01T12:00:00Z" }) });
+  assert.equal((await f.service.create("unit-admin", { checkoutId: id })).checkoutUrl, undefined);
+  assert.equal((await f.service.get("unit-admin", id)).checkoutUrl, canonicalUrl);
+  assert.equal((await f.service.create("unit-admin", { checkoutId: id })).checkoutUrl, canonicalUrl);
+  assert.equal(f.registrations(), 1);
+  assert.equal(f.statusReads(), 1);
+  assert.equal(f.rows.size, 2);
+});
+
 test("status recovery winning registration race preserves both latest status and bank URL", async () => {
   let release;
   const f = fixture({ register: () => new Promise(resolve => { release = resolve; }), getStatus: () => ({ status: "created", gatewayOrderId: bankId, actionCode: -100, verifiedAt: "2026-10-01T12:00:21Z" }) });

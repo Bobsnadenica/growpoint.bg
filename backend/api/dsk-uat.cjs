@@ -50,11 +50,18 @@ function returnAddress(value) {
 }
 
 function validateCheckoutUrl(value, orderId) {
+  gatewayId(orderId);
   let url;
   try { url = new URL(value); } catch { throw invalidReply(); }
+  // The current merchant's official register reply uses this shared form with
+  // a language parameter; older documented merchant forms use mdOrder alone.
+  const sharedForm = url.pathname === "/payment/merchants/multiecom/payment.html";
+  const allowedKeys = sharedForm ? ["mdOrder", "language"] : ["mdOrder"];
+  const keys = [...url.searchParams.keys()];
   if (url.origin !== UAT_ORIGIN || url.username || url.password || url.hash ||
-      !/^\/payment\/(?:payment\/)?merchants\/[A-Za-z0-9_-]+\/payment_(?:bg|en)\.html$/.test(url.pathname) ||
-      [...url.searchParams.keys()].length !== 1 || url.searchParams.get("mdOrder") !== orderId) throw invalidReply();
+      (!sharedForm && !/^\/payment\/(?:payment\/)?merchants\/[A-Za-z0-9_-]+\/payment_(?:bg|en)\.html$/.test(url.pathname)) ||
+      keys.length !== allowedKeys.length || !keys.every(key => allowedKeys.includes(key)) ||
+      url.searchParams.get("mdOrder") !== orderId || (sharedForm && !["bg", "en"].includes(url.searchParams.get("language")))) throw invalidReply();
   return url.href;
 }
 
@@ -160,7 +167,13 @@ function createDskUatAdapter(options = {}) {
             (has(amounts, "paymentState") && amounts.paymentState !== "DEPOSITED")) throw invalidReply();
       }
     }
-    return result(orderNumber, { status, gatewayOrderId: verifiedId, bankOrderStatus, actionCode, verifiedAt: now().toISOString() });
+    // Probe-confirmed canonical UAT form, never an arbitrary merchant path.
+    // Recover it only after the bank verifies reference, amount, currency and
+    // identity above, and only while the order is still awaiting first payment.
+    const checkoutUrl = bankOrderStatus === 0
+      ? validateCheckoutUrl(`${UAT_ORIGIN}/payment/merchants/multiecom/payment.html?mdOrder=${verifiedId}&language=bg`, verifiedId)
+      : undefined;
+    return result(orderNumber, { status, gatewayOrderId: verifiedId, bankOrderStatus, actionCode, verifiedAt: now().toISOString(), ...(checkoutUrl ? { checkoutUrl } : {}) });
   }
 
   async function recover(orderNumber) {

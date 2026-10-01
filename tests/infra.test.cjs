@@ -66,6 +66,24 @@ test("Lambda SES sending is identity- and sender-scoped, while account readiness
   assert.doesNotMatch(policy, /ses:SendRawEmail|ses:\*/);
 });
 
+test("Lambda guarded transactions have ConditionCheckItem permission on existing tables, never wildcard access", () => {
+  const source = readFileSync(join(__dirname, "../infra/terraform/main.tf"), "utf8");
+  const policy = source.split('resource "aws_iam_role_policy" "lambda"')[1].split('data "archive_file" "api"')[0];
+  const statement = policy.match(/\{\s*Effect\s*=\s*"Allow"\s+Action\s*=\s*\[([^\]]*"dynamodb:GetItem"[^\]]*)\]\s+Resource\s*=\s*\[([^\]]*)\]/);
+  assert.ok(statement, "Expected an explicit, resource-scoped DynamoDB statement");
+  // TransactWriteItems authorizes each component action. A ConditionCheck is
+  // not covered by GetItem, so mocked transaction success is not IAM evidence.
+  for (const action of ["GetItem", "PutItem", "UpdateItem", "DeleteItem", "TransactWriteItems", "ConditionCheckItem"]) {
+    assert.ok(statement[1].includes(`"dynamodb:${action}"`), `Missing transaction component permission: ${action}`);
+  }
+  assert.doesNotMatch(statement[1], /"dynamodb:\*"/);
+  assert.doesNotMatch(statement[2], /"\*"|arn:aws:dynamodb:[^\n]*table\/\*/);
+  for (const table of ["users", "consultants", "bookings"]) assert.ok(statement[2].includes(`aws_dynamodb_table.${table}.arn`), `Missing scoped ${table} resource`);
+  for (const filename of ["index.cjs", "dsk-uat-service.cjs"]) {
+    assert.match(readFileSync(join(__dirname, "../backend/api", filename), "utf8"), /ConditionCheck\s*:/, `${filename} must remain covered by this real IAM regression`);
+  }
+});
+
 test("DSK UAT defaults off, hides credentials when disabled, and protects all sandbox routes", () => {
   const source = readFileSync(join(__dirname, "../infra/terraform/main.tf"), "utf8");
   const variables = readFileSync(join(__dirname, "../infra/terraform/variables.tf"), "utf8");

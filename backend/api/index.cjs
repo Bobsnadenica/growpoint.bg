@@ -6,6 +6,7 @@ const { createAccountLifecycle } = require("./account-lifecycle.cjs");
 const { createDskUatAdapter } = require("./dsk-uat.cjs");
 const { createDskUatService } = require("./dsk-uat-service.cjs");
 const { createDskUatRecords } = require("./dsk-uat-records.cjs");
+const { monthOf, monthlyFreeMutation, monthlyFreeSummary, monthlyFreeAvailableMonths, withMonthlyQuota, spotlightSummary, createBenefitRequest, updateBenefitRequest } = require("./expert-benefits.cjs");
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DeleteCommand,
@@ -222,6 +223,18 @@ function assertNotRestricted(record) {
       new Error("Акаунтът е ограничен от администратор. Свържи се с нас за повече информация."),
       { statusCode: 403 }
     );
+  }
+}
+
+// Optional operator-owned revocation marker: DynamoDB Number, whole Unix
+// seconds. JWT signature/expiry checks alone do not honor Cognito sign-out.
+function assertAuthValidAfter(claims, account) {
+  if (!account || !Object.prototype.hasOwnProperty.call(account, "authValidAfter")) return;
+  const cutoff = account.authValidAfter;
+  const rawIssuedAt = claims?.iat;
+  const issuedAt = typeof rawIssuedAt === "number" || (typeof rawIssuedAt === "string" && /^\d+(?:\.\d+)?$/.test(rawIssuedAt)) ? Number(rawIssuedAt) : NaN;
+  if (!Number.isSafeInteger(cutoff) || cutoff < 0 || !Number.isFinite(issuedAt) || issuedAt < 0 || issuedAt > Number.MAX_SAFE_INTEGER || issuedAt <= cutoff) {
+    throw Object.assign(new Error("Сесията вече не е активна. Влез отново."), { statusCode: 401, code: "ACCOUNT_UNAVAILABLE" });
   }
 }
 
@@ -1767,11 +1780,15 @@ function getConsultantPackageRank(item) {
 function stripSensitiveConsultantFields(consultant) {
   if (!consultant) return consultant;
   const availability = getBookableAvailability(consultant);
-  const cleaned = { ...consultant, availability, nextAvailable: availability[0] || "" };
+  const cleaned = { ...consultant, availability, nextAvailable: availability[0] || "",
+    monthlyFreeSessionAvailableMonths: monthlyFreeAvailableMonths(consultant, availability, isVisibleConsultant(consultant)) };
   for (const key of PUBLIC_CONSULTANT_HIDDEN_FIELDS) {
     delete cleaned[key];
   }
   cleaned.packageTier = normalizeConsultantPackageTier(cleaned.packageTier);
+  cleaned.theme = expertBenefitsEligible(consultant) && cleaned.packageTier === "spotlight" ? normalizeConsultantTheme(consultant.theme) : "";
+  delete cleaned.monthlyFreeSessions;
+  delete cleaned.spotlightBenefitRequests;
   return cleaned;
 }
 
@@ -2996,7 +3013,69 @@ async function getMyConsultant(event) {
     }));
   }
 
-  return response(200, await decorateConsultantMedia(consultant));
+  return response(200, { ...await decorateConsultantMedia(consultant), benefits: expertBenefitsSummary(consultant) });
+}
+
+function expertBenefitsEligible(consultant) {
+  return consultantMembershipActive(consultant) && !consultant.identityDisabled && !consultant.identityDeleted && !consultant.deletionScheduledAt && !consultant.anonymizedAt;
+}
+
+function expertBenefitsSummary(consultant) {
+  const eligible = expertBenefitsEligible(consultant);
+  return { monthlyFreeSession: monthlyFreeSummary(consultant, eligible), spotlight: spotlightSummary(consultant, eligible && normalizeConsultantPackageTier(consultant.packageTier) === "spotlight") };
+}
+
+async function ownedExpertForBenefits(event) {
+  const claims = requireAuth(event);
+  const user = await getUserBySub(claims.sub);
+  assertNotRestricted(user);
+  if (!user || user.role !== "consultant") throw Object.assign(new Error("Само експерт може да управлява тези привилегии."), { statusCode: 403 });
+  const consultant = await getConsultantByOwner(claims.sub);
+  if (!consultant || consultant.ownerUserId !== claims.sub) throw Object.assign(new Error("Профилът не е намерен."), { statusCode: 404 });
+  return consultant;
+}
+
+async function getMyBenefitRequests(event) {
+  const consultant = await ownedExpertForBenefits(event);
+  return response(200, { benefits: expertBenefitsSummary(consultant), items: consultant.spotlightBenefitRequests || [] }, { "Cache-Control": "no-store" });
+}
+
+async function createMyBenefitRequest(event) {
+  const consultant = await ownedExpertForBenefits(event);
+  if (!expertBenefitsEligible(consultant) || normalizeConsultantPackageTier(consultant.packageTier) !== "spotlight") return forbidden("Заявките за подкаст, кампания и зала са за активен пакет Spotlight.");
+  const created = createBenefitRequest(consultant, parseBody(event));
+  const guard = recordSnapshot(consultant, [...CONSULTANT_ACCESS_FIELDS, "spotlightBenefitRequests"]);
+  await dynamo.send(new TransactWriteCommand({ TransactItems: [
+    { Update: fieldUpdate(env.consultantsTable, { consultantId: consultant.consultantId }, { spotlightBenefitRequests: created.requests, updatedAt: new Date().toISOString() }, {
+      condition: "attribute_exists(consultantId) AND " + guard.condition, names: guard.names, values: guard.values
+    }) },
+    { ConditionCheck: { TableName: env.usersTable, Key: { userId: consultant.ownerUserId },
+      ConditionExpression: USER_MUTATION_GUARD.condition + " AND #benefitRole = :benefitRole", ExpressionAttributeNames: { "#benefitRole": "role" },
+      ExpressionAttributeValues: { ...USER_MUTATION_GUARD.values, ":benefitRole": "consultant" } } }
+  ] }));
+  return response(201, { request: created.request, benefits: expertBenefitsSummary({ ...consultant, spotlightBenefitRequests: created.requests }) }, { "Cache-Control": "no-store" });
+}
+
+async function adminListBenefitRequests(event) {
+  requireAdmin(event);
+  const consultants = await scanAllItems(env.consultantsTable);
+  const items = consultants.filter(isConsultantRecord).flatMap(consultant => (consultant.spotlightBenefitRequests || []).map(request => ({ ...request, consultantId: consultant.consultantId, consultantName: consultant.name || "" })));
+  items.sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+  return response(200, { items }, { "Cache-Control": "no-store" });
+}
+
+async function adminUpdateBenefitRequest(event, requestId) {
+  requireAdmin(event);
+  const body = parseBody(event);
+  if (typeof body.consultantId !== "string" || !body.consultantId || body.consultantId.length > 200) return badRequest("consultantId is required.");
+  const { Item: consultant } = await dynamo.send(new GetCommand({ TableName: env.consultantsTable, Key: { consultantId: body.consultantId }, ConsistentRead: true }));
+  if (!consultant || consultant.identityDeleted || consultant.anonymizedAt || consultant.deletionScheduledAt) return notFound("Профилът не е намерен.");
+  const updated = updateBenefitRequest(consultant, requestId, body);
+  const guard = recordSnapshot(consultant, [...CONSULTANT_ACCESS_FIELDS, "spotlightBenefitRequests", "anonymizedAt"]);
+  await dynamo.send(new UpdateCommand(fieldUpdate(env.consultantsTable, { consultantId: consultant.consultantId }, { spotlightBenefitRequests: updated.requests, updatedAt: new Date().toISOString() }, {
+    condition: "attribute_exists(consultantId) AND " + guard.condition, names: guard.names, values: guard.values
+  })));
+  return response(200, { request: updated.request }, { "Cache-Control": "no-store" });
 }
 
 async function updateMyConsultant(event) {
@@ -3076,7 +3155,7 @@ async function updateMyConsultant(event) {
     restricted: baseConsultant.restricted === true,
     rating: baseConsultant.rating ?? 0,
     reviewCount: baseConsultant.reviewCount ?? 0,
-    theme: normalizePlanTier(user.plan, "free") === "pro" ? requestedTheme : "",
+    theme: expertBenefitsEligible(baseConsultant) && normalizeConsultantPackageTier(baseConsultant.packageTier) === "spotlight" ? requestedTheme : "",
     avatarUrl: normalizeText(body.avatarUrl, baseConsultant.avatarUrl ?? "", 2000),
     heroUrl: normalizeText(body.heroUrl, baseConsultant.heroUrl ?? "", 2000),
     avatarStorageKey: assertOwnedStorageKey(
@@ -3374,6 +3453,8 @@ async function createBooking(event) {
   // Redeem points for a free consultation (decided at booking time). The points
   // deduction is part of the booking transaction below, so it's all-or-nothing.
   const useFreePoints = body.useFreePoints === true;
+  const useMonthlyFreeSession = body.useMonthlyFreeSession === true;
+  if (useFreePoints && useMonthlyFreeSession) return badRequest("Избери само един вид безплатна сесия.");
   if (useFreePoints && (Number(user.points) || 0) < POINTS.freeConsultation) {
     return badRequest(
       `Нямаш достатъчно точки. Безплатна консултация струва ${POINTS.freeConsultation} точки.`
@@ -3390,11 +3471,12 @@ async function createBooking(event) {
     scheduledAt: normalizedScheduledAt,
     sessionLengthMinutes,
     status: "pending",
-    // Payment gate: "free" (redeemed with points) reveals the meeting link once
-    // the consultant adds it; "unpaid" stays gated until Stripe (or admin marks
-    // it paid). The link is only released to the client when free/paid.
-    paymentStatus: useFreePoints ? "free" : "unpaid",
+    // Legitimate free sources unlock the existing free-session gate, never paid
+    // status. Bank charging remains separate from these platform benefits.
+    paymentStatus: useFreePoints || useMonthlyFreeSession ? "free" : "unpaid",
     freeViaPoints: useFreePoints,
+    ...(useFreePoints ? { freeSessionSource: "points" } : {}),
+    ...(useMonthlyFreeSession ? { freeSessionSource: "monthly_offer", freeSessionMonth: monthOf(normalizedScheduledAt) } : {}),
     meetingLink: "",
     note: String(body.note || "").trim().slice(0, 1200),
     createdAt: new Date().toISOString()
@@ -3428,6 +3510,9 @@ async function createBooking(event) {
       }
     }
   ];
+  if (useMonthlyFreeSession) {
+    bookingTransactItems[0].Update = withMonthlyQuota(bookingTransactItems[0].Update, consultant, monthlyFreeMutation(consultant, booking, "claim"));
+  }
 
   if (useFreePoints) {
     bookingTransactItems.push({
@@ -3459,7 +3544,8 @@ async function createBooking(event) {
   try {
     await dynamo.send(new TransactWriteCommand({ TransactItems: bookingTransactItems }));
   } catch (error) {
-    if (error.name === "TransactionCanceledException") {
+    if (error.name === "TransactionCanceledException" && error.CancellationReasons?.some(reason => reason.Code === "ConditionalCheckFailed" || reason.Code === "TransactionConflict")) {
+      if (useMonthlyFreeSession) return response(409, { message: "Часът или месечната безплатна сесия вече са резервирани. Обнови и избери отново." });
       return badRequest(
         useFreePoints
           ? "Слотът вече е зает или точките ти не достигат. Опитай отново."
@@ -3894,13 +3980,13 @@ async function declineBooking({ claims, bookingId, reason }) {
       TransactItems: [
         { Update: declineUpdate },
         {
-          Update: {
+          Update: withMonthlyQuota({
             TableName: env.consultantsTable,
             Key: { consultantId: consultant.consultantId },
             UpdateExpression: "SET bookedSlots = :slots",
             ConditionExpression: bookedSlotsSnapshot(consultant).condition,
             ExpressionAttributeValues: { ":slots": nextBookedSlots, ...bookedSlotsSnapshot(consultant).values }
-          }
+          }, consultant, monthlyFreeMutation(consultant, booking, "release"))
         }
       ]
     })
@@ -3966,6 +4052,7 @@ async function rescheduleBooking(event) {
   if (booking.status !== "pending" && booking.status !== "confirmed") {
     return badRequest("Only pending or confirmed bookings can be rescheduled.");
   }
+  if (booking.freeSessionSource === "monthly_offer" && !isVisibleConsultant(consultant)) return forbidden("Експертът няма активен публичен профил за преместване на безплатната сесия.");
   const confirmation = getBookingSessionConfirmation(booking);
   if (Date.parse(booking.scheduledAt) <= Date.now() || confirmation.clientConfirmedAt || confirmation.consultantConfirmedAt || booking.review) {
     return badRequest("Започнала или проведена сесия не може да се премества. Направи нова резервация.");
@@ -4025,6 +4112,8 @@ async function rescheduleBooking(event) {
 
   const now = new Date().toISOString();
   const rescheduledBy = isConsultantOwner ? "consultant" : "client";
+  const monthlyMove = monthlyFreeMutation(consultant, booking, "move", normalizedNew);
+  const monthlyAccessGuard = monthlyMove ? recordSnapshot(consultant, CONSULTANT_ACCESS_FIELDS) : null;
 
   try {
     await dynamo.send(
@@ -4036,7 +4125,7 @@ async function rescheduleBooking(event) {
               Key: { bookingId },
               UpdateExpression:
                 "SET scheduledAt = :new, #s = :status, rescheduledAt = :now, rescheduledBy = :actor, " +
-                "rescheduleCount = if_not_exists(rescheduleCount, :zero) + :one REMOVE reminderSentAt, reminderAttempts, reminderRetryAfter, clientReminderEmailAcceptedAt, consultantReminderEmailAcceptedAt, clientReminderNotifiedAt, consultantReminderNotifiedAt",
+                "rescheduleCount = if_not_exists(rescheduleCount, :zero) + :one" + (monthlyMove ? ", freeSessionMonth = :freeMonth" : "") + " REMOVE reminderSentAt, reminderAttempts, reminderRetryAfter, clientReminderEmailAcceptedAt, consultantReminderEmailAcceptedAt, clientReminderNotifiedAt, consultantReminderNotifiedAt",
               ConditionExpression:
                 "(#s = :pending OR #s = :confirmed) AND scheduledAt = :oldAt",
               ExpressionAttributeNames: { "#s": "status" },
@@ -4049,24 +4138,27 @@ async function rescheduleBooking(event) {
                 ":now": now,
                 ":actor": rescheduledBy,
                 ":zero": 0,
-                ":one": 1
+                ":one": 1,
+                ...(monthlyMove ? { ":freeMonth": monthlyMove.month } : {})
               }
             }
           },
           {
-            Update: {
+            Update: withMonthlyQuota({
               TableName: env.consultantsTable,
               Key: { consultantId: consultant.consultantId },
               UpdateExpression: "SET bookedSlots = :slots",
-              ConditionExpression: "contains(availability, :newSlot) AND " + bookedSlotsSnapshot(consultant).condition,
-              ExpressionAttributeValues: { ":slots": nextBookedSlots, ":newSlot": normalizedNew, ...bookedSlotsSnapshot(consultant).values }
-            }
+              ConditionExpression: "contains(availability, :newSlot) AND " + bookedSlotsSnapshot(consultant).condition + (monthlyAccessGuard ? " AND " + monthlyAccessGuard.condition : ""),
+              ...(monthlyAccessGuard ? { ExpressionAttributeNames: monthlyAccessGuard.names } : {}),
+              ExpressionAttributeValues: { ":slots": nextBookedSlots, ":newSlot": normalizedNew, ...bookedSlotsSnapshot(consultant).values, ...monthlyAccessGuard?.values }
+            }, consultant, monthlyMove)
           }
         ]
       })
     );
   } catch (error) {
-    if (error.name === "TransactionCanceledException") {
+    if (error.name === "TransactionCanceledException" && error.CancellationReasons?.some(reason => reason.Code === "ConditionalCheckFailed" || reason.Code === "TransactionConflict")) {
+      if (monthlyMove) return response(409, { message: "Часът или месечната безплатна сесия са променени. Обнови резервацията." });
       return badRequest("Booking state changed; please refresh and try again.");
     }
     throw error;
@@ -4078,7 +4170,8 @@ async function rescheduleBooking(event) {
     status: nextStatus,
     rescheduledAt: now,
     rescheduledBy,
-    rescheduleCount: (Number(booking.rescheduleCount) || 0) + 1
+    rescheduleCount: (Number(booking.rescheduleCount) || 0) + 1,
+    ...(monthlyMove ? { freeSessionMonth: monthlyMove.month } : {})
   };
 
   try {
@@ -4197,13 +4290,13 @@ async function updateBookingStatus(event) {
 
   if (consultant) {
     transactItems.push({
-      Update: {
+      Update: withMonthlyQuota({
         TableName: env.consultantsTable,
         Key: { consultantId: booking.consultantId },
         UpdateExpression: "SET bookedSlots = :slots",
         ConditionExpression: bookedSlotsSnapshot(consultant).condition,
         ExpressionAttributeValues: { ":slots": nextBookedSlots, ...bookedSlotsSnapshot(consultant).values }
-      }
+      }, consultant, monthlyFreeMutation(consultant, booking, "release"))
     });
   }
 
@@ -4434,6 +4527,8 @@ async function submitReview(event) {
   const priorRating = Number(consultant.rating) || 0;
   const priorCount = Number(consultant.reviewCount) || 0;
   const legacySum = priorRating * priorCount;
+  const bookingGuard = recordSnapshot(booking, ["clientId", "scheduledAt", "sessionLengthMinutes", "sessionConfirmation"]);
+  const consultantGuard = recordSnapshot(consultant, ["ownerUserId", ...(Number(booking.sessionLengthMinutes) > 0 ? [] : ["sessionLengthMinutes"])]);
 
   try {
     await dynamo.send(
@@ -4444,9 +4539,10 @@ async function submitReview(event) {
               TableName: env.bookingsTable,
               Key: { bookingId },
               UpdateExpression: "SET #r = :review",
-              ConditionExpression: "attribute_not_exists(#r) AND #s = :confirmed",
-              ExpressionAttributeNames: { "#r": "review", "#s": "status" },
+              ConditionExpression: "attribute_not_exists(#r) AND #s = :confirmed AND " + bookingGuard.condition,
+              ExpressionAttributeNames: { ...bookingGuard.names, "#r": "review", "#s": "status" },
               ExpressionAttributeValues: {
+                ...bookingGuard.values,
                 ":review": review,
                 ":confirmed": "confirmed"
               }
@@ -4459,11 +4555,26 @@ async function submitReview(event) {
               UpdateExpression:
                 "SET ratingSum = if_not_exists(ratingSum, :legacySum) + :newRating, " +
                 "reviewCount = if_not_exists(reviewCount, :zero) + :one",
+              ConditionExpression: "attribute_exists(consultantId) AND attribute_not_exists(identityDeleted) AND attribute_not_exists(anonymizedAt) AND " + consultantGuard.condition,
+              ExpressionAttributeNames: consultantGuard.names,
               ExpressionAttributeValues: {
+                ...consultantGuard.values,
                 ":legacySum": legacySum,
                 ":newRating": rating,
                 ":zero": 0,
                 ":one": 1
+              }
+            }
+          },
+          {
+            Update: {
+              TableName: env.usersTable,
+              Key: { userId: booking.clientId },
+              UpdateExpression: "SET points = if_not_exists(points, :zero) + :amount, pointsHistory = list_append(if_not_exists(pointsHistory, :empty), :entry)",
+              ConditionExpression: USER_MUTATION_GUARD.condition,
+              ExpressionAttributeValues: {
+                ...USER_MUTATION_GUARD.values, ":zero": 0, ":amount": POINTS.review, ":empty": [],
+                ":entry": [pointsHistoryEntry(POINTS.review, "review", "Оставен отзив след консултация")]
               }
             }
           }
@@ -4471,15 +4582,14 @@ async function submitReview(event) {
       })
     );
   } catch (error) {
-    if (error.name === "TransactionCanceledException") {
+    if (error.name === "TransactionCanceledException" && error.CancellationReasons?.some(reason => reason.Code === "ConditionalCheckFailed")) {
       return badRequest("Booking is no longer eligible for review.");
     }
     throw error;
   }
 
-  // The transaction above writes the review exactly once (attribute_not_exists),
-  // so this awards the client review points exactly once.
-  await addPointsEntry(booking.clientId, POINTS.review, "review", "Оставен отзив след консултация");
+  // Review, rating aggregate and the once-only reward commit together. A
+  // transient failure leaves the review absent, so the same request can retry.
 
   await appendUserNotification(consultant.ownerUserId, {
     type: "review_received",
@@ -5582,6 +5692,22 @@ function adminDskUatConfig(event) {
   return response(200, { enabled: dskUatEnabled(), amountMinor: 100, currency: "EUR" }, { "Cache-Control": "no-store" });
 }
 
+// Log only a known IAM action, never AWS's raw denial (which includes private
+// principals/resources) or a provider response masquerading as an AWS error.
+function deniedAwsAction(error) {
+  if (!["AccessDeniedException", "AccessDenied", "UnauthorizedOperation"].includes(error?.name) || typeof error.message !== "string") return undefined;
+  const action = error.message.slice(0, 2048).match(/not authorized to perform:\s*([a-z][a-z0-9-]{1,30}:[A-Z][A-Za-z0-9]{0,79})(?=\s|$|[.,])/i)?.[1];
+  const knownActions = new Set([
+    ...["GetItem", "PutItem", "UpdateItem", "DeleteItem", "ConditionCheckItem", "Query", "Scan", "BatchGetItem", "BatchWriteItem", "TransactGetItems", "TransactWriteItems"].map(name => `dynamodb:${name}`),
+    ...["GetObject", "PutObject", "DeleteObject", "ListBucket"].map(name => `s3:${name}`),
+    ...["SendEmail", "GetAccount"].map(name => `ses:${name}`),
+    ...["AdminGetUser", "AdminListGroupsForUser", "ListUsers", "AdminDeleteUser", "AdminDisableUser", "AdminEnableUser"].map(name => `cognito-idp:${name}`),
+    ...["Decrypt", "Encrypt", "GenerateDataKey"].map(name => `kms:${name}`),
+    ...["CreateLogGroup", "CreateLogStream", "PutLogEvents"].map(name => `logs:${name}`), "sts:AssumeRole"
+  ]);
+  return knownActions.has(action) ? action : undefined;
+}
+
 async function adminDskUatCreate(event) {
   const claims = requireAdmin(event);
   return response(200, await sandboxPayments().create(claims.sub, parseBody(event)), { "Cache-Control": "no-store" });
@@ -5617,9 +5743,13 @@ exports.handler = async (event) => {
     // Suspension must apply to every authenticated mutation, including older
     // booking/review endpoints. Scheduled deletion must not be reset by bootstrap.
     const caller = getClaims(event);
-    if (caller?.sub) await identity.assertCallerActive(caller, { admin: path.startsWith("/admin/") });
+    let account;
+    if (caller?.sub) {
+      await identity.assertCallerActive(caller, { admin: path.startsWith("/admin/") });
+      account = await getUserBySub(caller.sub);
+      assertAuthValidAfter(caller, account);
+    }
     if (caller?.sub && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-      const account = await getUserBySub(caller.sub);
       assertNotRestricted(account);
       if (account?.deletionScheduledAt && !(method === "DELETE" && path === "/me")) {
         return forbidden("Профилът е насрочен за изтриване.");
@@ -5633,6 +5763,8 @@ exports.handler = async (event) => {
     if (method === "POST" && path === "/metrics/visit") return await recordVisit();
     if (method === "GET" && path === "/consultants") return await listConsultants(event);
     if (method === "GET" && path === "/consultants/me") return await getMyConsultant(event);
+    if (method === "GET" && path === "/consultants/me/benefit-requests") return await getMyBenefitRequests(event);
+    if (method === "POST" && path === "/consultants/me/benefit-requests") return await createMyBenefitRequest(event);
     if (method === "PUT" && path === "/consultants/me") return await updateMyConsultant(event);
     if (method === "GET" && /^\/consultants\/[^/]+$/.test(path)) return await getConsultant(event);
     if (method === "GET" && /^\/public\/users\/[^/]+$/.test(path)) return await getPublicUser(event);
@@ -5698,6 +5830,9 @@ exports.handler = async (event) => {
     }
 
     if (method === "GET" && path === "/admin/metrics") return await getAdminMetrics(event);
+    if (method === "GET" && path === "/admin/benefit-requests") return await adminListBenefitRequests(event);
+    const benefitRequestMatch = /^\/admin\/benefit-requests\/([^/]+)$/.exec(path);
+    if (method === "PATCH" && benefitRequestMatch) return await adminUpdateBenefitRequest(event, benefitRequestMatch[1]);
     if (method === "GET" && path === "/admin/payments/uat/config") return adminDskUatConfig(event);
     if (method === "POST" && path === "/admin/payments/uat/orders") return await adminDskUatCreate(event);
     const dskUatOrderMatch = /^\/admin\/payments\/uat\/orders\/([^/]+)$/.exec(path);
@@ -5765,14 +5900,15 @@ exports.handler = async (event) => {
     const statusCode = error.statusCode || (conflict ? 409 : 500);
     if (statusCode >= 500) {
       await monitoring.record("apiErrors");
-      console.error("[api] request failed", { requestId: event.requestContext?.requestId, error: error.name });
+      const errorAction = deniedAwsAction(error);
+      console.error("[api] request failed", { requestId: event.requestContext?.requestId, error: error.name, ...(errorAction ? { errorAction } : {}) });
     }
     return response(statusCode, {
       ...(error.code === "ACCOUNT_UNAVAILABLE" ? { code: error.code } : {}),
       message:
         statusCode >= 500
           ? "Unexpected server error."
-          : statusCode === 409 ? "Данните бяха променени. Обнови и опитай отново." : error.message || "Unexpected server error."
+          : statusCode === 409 && !error.statusCode ? "Данните бяха променени. Обнови и опитай отново." : error.message || "Unexpected server error."
     });
   } finally {
     activeRequestOrigin = "";

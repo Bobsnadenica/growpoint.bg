@@ -2,6 +2,7 @@ const { GetCommand, PutCommand, UpdateCommand, DeleteCommand } = require("@aws-s
 const { AdminGetUserCommand, AdminDeleteUserCommand, ListUsersCommand } = require("@aws-sdk/client-cognito-identity-provider");
 const { ListObjectsV2Command, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const { createDskUatRecords } = require("./dsk-uat-records.cjs");
+const { monthlyFreeMutation, withMonthlyQuota } = require("./expert-benefits.cjs");
 const uuid = (value) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(String(value || ""));
 
 function createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listConsultantsByOwner, queryAllItems, scanAllItems, refundFreePointsIfNeeded }) {
@@ -17,11 +18,11 @@ function createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listCo
       const index = Item?.bookedSlots?.indexOf(booking.scheduledAt) ?? -1;
       if (index < 0) return;
       try {
-        await dynamo.send(new UpdateCommand({ TableName: env.consultantsTable, Key,
+        await dynamo.send(new UpdateCommand(withMonthlyQuota({ TableName: env.consultantsTable, Key,
           UpdateExpression: `REMOVE bookedSlots[${index}]`,
           ConditionExpression: `bookedSlots[${index}] = :slot`,
           ExpressionAttributeValues: { ":slot": booking.scheduledAt }
-        }));
+        }, Item, monthlyFreeMutation(Item, booking, "release"))));
         return;
       } catch (error) { if (error.name !== "ConditionalCheckFailedException") throw error; }
     }
