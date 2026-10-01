@@ -46,17 +46,17 @@ node --check backend/api/index.cjs   # backend syntax
 - **CORS for local API testing:** temporarily add `http://localhost:5173` to `frontend_origins` in tfvars + apply; **always revert + re-verify** afterward.
 
 ## Business model (current)
-- All expert tiers are **paid** (Start 9.99 / Grow 29.99 / Spotlight 99.99 €/mo). **Clients are free.** Public DSK checkout remains a labelled preview. Two provider fake-card outcomes are verified, not complete website/live-payment certification. Admin UAT is disabled again pending credential rotation; automatic bank sandbox notices are authorized, but never send reports/messages yourself. The owner submits bank results.
+- All expert tiers are **paid** (Start 9.99 / Grow 29.99 / Spotlight 99.99 €/mo). **Clients are free.** Public DSK checkout remains a labelled preview. Five website fake-card flows pass bank/return verification; two earlier portal cases are separate. Sandbox is verified disabled with empty deployed credentials and no Terraform drift. This is not production approval. Automatic bank sandbox notices are authorized, but never send reports/messages yourself. The owner submits results.
 - Every active expert offers one free client session per scheduled Sofia calendar month; booking/quota/slot changes are atomic, not points or paid status. Grow/Spotlight rank first within filters; Spotlight owns banner/colors plus tracked request-based podcast/campaign/quarterly-room fulfillment. Existing manual/comped memberships are preserved; real monthly billing remains future integration work.
 - **No approval step.** A consultant is public when their account is *active* (`comped` via admin invite, or a `granted`/`purchased` package) and the profile passes a completeness bar. Gate logic: `consultantMembershipActive()` in the backend.
 - **Mentor onboarding is invite-only** until real payment integration: admin sends an email invite (`/admin`) → recipient signs up free (`comped`). Self-serve consultant signup is blocked with a notice.
 - **Admin** can invite, restrict/suspend (hides profile + disables Cognito login), message users, grant packages, feature profiles.
 
 ## Security rules
-- Secrets only in ignored owner-only backend settings (`*.tfvars`); state/plans are private too. Disabled UAT credentials are not deployed. `README.md`, `memory.md` and test reports are **public** — no secrets, tokens or private account/provider references.
+- Secrets only in ignored owner-only backend settings (`*.tfvars`); state/plans are private too. UAT credentials must be empty when testing is disabled; that deployed state is now verified. `README.md`, `memory.md` and test reports are **public** — no secrets, tokens or private account/provider references.
 - Auth comes from the API Gateway Cognito JWT authorizer; handlers call `requireAuth`/`requireAdmin`. No XSS sinks (no `innerHTML`/`dangerouslySetInnerHTML`).
 - Don't dump production Cognito user data into logs/output.
-- Historical shared QA credential exposure is confirmed. Do not reuse it or resume authenticated tests until owner rotation; session revocation/history rewriting need explicit approval. Current files/build are clean but cannot erase old Git copies. Exact incident locators remain private outside Git.
+- Historical shared QA credential exposure is confirmed. Owner-approved rotation and session revocation are verified on all four supplied accounts; old JWT/refresh access is rejected. Never reuse the retired credential. History rewriting is not approved; clean current files cannot erase old copies. Exact incident locators remain private outside Git.
 - DynamoDB transaction `ConditionCheck` requires scoped `dynamodb:ConditionCheckItem`, not just ordinary writes. Local mocks do not prove deployed IAM.
 - `--live-mutate` is retired: never fabricate paid packages/attendance or manually clean DynamoDB to claim lifecycle QA. Use the gated client-only identity script; report its S3/expert/email limitations.
 
