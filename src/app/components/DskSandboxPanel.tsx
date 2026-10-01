@@ -26,9 +26,13 @@ export function isDskUatCheckoutUrl(value: string) {
   try {
     const url = new URL(value);
     const keys = Array.from(url.searchParams.keys());
+    const sharedForm = url.pathname === "/payment/merchants/multiecom/payment.html";
+    const allowedKeys = sharedForm ? ["mdOrder", "language"] : ["mdOrder"];
     return url.origin === "https://uat.dskbank.bg" && !url.username && !url.password && !url.hash &&
-      /^\/payment\/(?:payment\/)?merchants\/[A-Za-z0-9_-]+\/payment_(?:bg|en)\.html$/.test(url.pathname) &&
-      keys.length === 1 && keys[0] === "mdOrder" && CHECKOUT_ID.test(url.searchParams.get("mdOrder") || "");
+      (sharedForm || /^\/payment\/(?:payment\/)?merchants\/[A-Za-z0-9_-]+\/payment_(?:bg|en)\.html$/.test(url.pathname)) &&
+      keys.length === allowedKeys.length && keys.every(key => allowedKeys.includes(key)) &&
+      CHECKOUT_ID.test(url.searchParams.get("mdOrder") || "") &&
+      (!sharedForm || ["bg", "en"].includes(url.searchParams.get("language") || ""));
   } catch {
     return false;
   }

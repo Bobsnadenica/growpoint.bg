@@ -160,6 +160,34 @@ test("bank URL validation rejects other hosts, credentials, unsafe paths and mis
   fixture.unmount();
 });
 
+test("observed shared bank form accepts only its UUID and explicit Bulgarian/English language", async () => {
+  const url = BANK_URL.replace("test/payment_bg.html", "multiecom/payment.html") + "&language=bg";
+  const fixture = mount({ api: { adminCreateDskUatOrder: async (_token, id) => order("created", { checkoutId: id, checkoutUrl: url }) } });
+  await fixture.flush();
+  for (const accepted of [url, url.replace("language=bg", "language=en"), url.replace(/\?mdOrder=([^&]+)&language=bg/, "?language=bg&mdOrder=$1")]) {
+    assert.equal(fixture.exports.isDskUatCheckoutUrl(accepted), true);
+    assert.equal(fixture.exports.validateDskUatOrder(order("created", { checkoutUrl: accepted }), FIRST).checkoutUrl, accepted);
+  }
+  for (const rejected of [
+    url.replace("multiecom", "other-merchant"), url.replace("payment.html", "finish.html"),
+    url.replace("/payment/merchants", "/payment/payment/merchants"), url.replace("https:", "http:"),
+    url.replace("uat.dskbank.bg", "uat.dskbank.bg.evil.invalid"), url.replace("uat.dskbank.bg", "private@uat.dskbank.bg"),
+    url.replace("uat.dskbank.bg", "uat.dskbank.bg:8443"), `${url}#unsafe`, `${url}&extra=value`,
+    `${url}&mdOrder=${FIRST}`, `${url}&language=en`, url.replace("&language=bg", ""),
+    url.replace("language=bg", "language=de"), url.replace(/mdOrder=[^&]+/, "mdOrder=not-a-uuid"),
+    url.replace(/mdOrder=[^&]+&/, ""), url.replace("mdOrder", "orderId")
+  ]) assert.equal(fixture.exports.isDskUatCheckoutUrl(rejected), false, "Unsafe shared bank form must be rejected");
+  fixture.click("Създай тестова поръчка"); await fixture.flush();
+  assert.equal(fixture.nodes().find(node => node.type === "a").props.href, url);
+  assert.ok(!fixture.nodes().some(node => node.props?.role === "alert"));
+  fixture.unmount();
+  const returned = mount({ search: `?paymentTest=${FIRST}`, api: { adminGetDskUatOrder: async () => order("created", { checkoutUrl: url }) } });
+  await returned.flush();
+  assert.equal(returned.nodes().find(node => node.type === "a").props.href, url);
+  assert.equal(returned.calls.filter(call => call[0] === "create").length, 0);
+  returned.unmount();
+});
+
 test("fresh authentication fetches config/status again and late previous-account responses cannot leak", async () => {
   let oldResult;
   const gets = [];
