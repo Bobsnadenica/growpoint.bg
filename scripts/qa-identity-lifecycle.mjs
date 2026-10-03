@@ -26,7 +26,11 @@ export function executionMode(args) {
 
 export function isOwnIdentity(record, expected) {
   const attributes = Object.fromEntries((record?.UserAttributes || record?.Attributes || []).map(item => [item.Name, item.Value]));
-  return record?.Username === expected.username && attributes.email === expected.email && attributes.name === expected.marker &&
+  // Email-username pools resolve the requested email to a generated sub UUID.
+  // Accept only that exact canonical subject, never an arbitrary alias match.
+  const usernameMatches = record?.Username === expected.username ||
+    (expected.username === expected.email && uuid(record?.Username) && record.Username === attributes.sub);
+  return usernameMatches && attributes.email === expected.email && attributes.name === expected.marker &&
     expected.email.endsWith("@example.invalid") && expected.marker.startsWith("GrowPoint disposable identity QA ") &&
     uuid(attributes.sub) && (!expected.sub || attributes.sub === expected.sub);
 }
@@ -88,6 +92,7 @@ export async function runIdentityLifecycle({ config, clients, fetchImpl = fetch,
   const getOwned = async () => {
     const record = await sendCognito("AdminGetUserCommand", { UserPoolId: config.userPoolId, Username: owned.username });
     if (!isOwnIdentity(record, owned)) throw failure("Ownership verification failed; identity changes refused.");
+    owned.username = record.Username;
     owned.sub = record.UserAttributes.find(item => item.Name === "sub").Value;
     return record;
   };

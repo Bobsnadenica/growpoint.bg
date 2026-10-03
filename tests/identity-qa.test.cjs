@@ -29,9 +29,13 @@ test("identity ownership requires every synthetic marker, username, email and su
   assert.equal(isOwnIdentity(record, expected), true);
   for (const field of ["username", "email", "marker", "sub"]) assert.equal(isOwnIdentity(record, { ...expected, [field]: "wrong" }), false);
   assert.equal(isOwnIdentity(record, { ...expected, email: "real@example.com" }), false);
+  const canonical = { ...record, Username: sub };
+  assert.equal(isOwnIdentity(canonical, expected), true);
+  assert.equal(isOwnIdentity({ ...canonical, Username: "11111111-2222-4333-8444-555555555555" }, expected), false);
+  assert.equal(isOwnIdentity(canonical, { ...expected, username: "different-alias@example.invalid" }), false);
 });
 
-function simulated({ lag = false, wrongMarker = false } = {}) {
+function simulated({ lag = false, wrongMarker = false, canonicalUsername = false } = {}) {
   let clock = 0, identity, row, referral, deleted = false, bootstrap = false;
   const commands = [], output = [];
   const config = { apiBaseUrl: "https://api.example.invalid", userPoolId: "pool", userPoolClientId: "app", usersTable: "growpoint-unit-users", pollSeconds: 5, timeoutSeconds: 30 };
@@ -44,7 +48,7 @@ function simulated({ lag = false, wrongMarker = false } = {}) {
     if (name === "AdminCreateUserCommand") {
       assert.equal(input.MessageAction, "SUPPRESS");
       assert.match(input.Username, /^qa-identity-.*@example\.invalid$/);
-      identity = { Username: input.Username, Enabled: true, UserAttributes: [...input.UserAttributes, { Name: "sub", Value: sub }] };
+      identity = { Username: canonicalUsername ? sub : input.Username, Enabled: true, UserAttributes: [...input.UserAttributes, { Name: "sub", Value: sub }] };
       return { User: identity };
     }
     if (name === "AdminGetUserCommand") {
@@ -113,4 +117,14 @@ test("lifecycle lag is inconclusive without manual cleanup; mismatched identity 
   const unrelated = simulated({ wrongMarker: true });
   await assert.rejects(runIdentityLifecycle(unrelated.options), /Ownership verification failed/);
   assert.ok(!unrelated.commands.some(command => ["AdminDisableUserCommand", "AdminEnableUserCommand", "AdminDeleteUserCommand"].includes(command.name)));
+});
+
+test("email-username pool binds its exact generated subject before further identity mutations", async () => {
+  const { runIdentityLifecycle } = await modulePromise;
+  const mock = simulated({ canonicalUsername: true });
+  const result = await runIdentityLifecycle(mock.options);
+  assert.equal(result.inconclusive, false);
+  assert.equal(mock.deleted(), true);
+  assert.ok(mock.commands.filter(command => ["AdminSetUserPasswordCommand", "AdminDisableUserCommand", "AdminEnableUserCommand", "AdminDeleteUserCommand"].includes(command.name)).every(command => command.input.Username === sub));
+  assert.ok(mock.output.every(line => !line.includes(sub) && !line.includes("@example.invalid")));
 });

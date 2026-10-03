@@ -1753,6 +1753,7 @@ const PUBLIC_CONSULTANT_HIDDEN_FIELDS = [
   "statusUpdatedByEmail",
   "statusSelfApproved",
   "deletionScheduledAt",
+  "deletionRestoreVisibility",
   "avatarStorageKey",
   "heroStorageKey",
   "priceBgn",
@@ -2271,6 +2272,15 @@ function createConsultantDraft({
   };
 }
 
+async function publicConsultantOwnerAvailable(ownerUserId) {
+  if (typeof ownerUserId !== "string" || !ownerUserId) return false;
+  const owner = await getUserBySub(ownerUserId);
+  if (owner?.restricted || owner?.identityDisabled || owner?.identityDeleted || owner?.deletionScheduledAt || owner?.deletionEffectiveAt) return false;
+  // Keep legacy expert identities with no initialized app row compatible;
+  // Cognito remains authoritative for their existence and enabled state.
+  return (await identity.publicAccountState(ownerUserId)).enabled;
+}
+
 async function listConsultants(event) {
   const query = String(event.queryStringParameters?.query || "")
     .trim()
@@ -2321,9 +2331,11 @@ async function listConsultants(event) {
     return String(left.name || "").localeCompare(String(right.name || ""), "bg");
   });
 
-  const activeItems = (await Promise.all(orderedItems.map(async (item) =>
-    (await identity.publicAccountState(item.ownerUserId)).enabled ? item : null
-  ))).filter(Boolean);
+  const ownerChecks = new Map();
+  const activeItems = (await Promise.all(orderedItems.map(async (item) => {
+    if (!ownerChecks.has(item.ownerUserId)) ownerChecks.set(item.ownerUserId, publicConsultantOwnerAvailable(item.ownerUserId));
+    return (await ownerChecks.get(item.ownerUserId)) ? item : null;
+  }))).filter(Boolean);
   const decoratedItems = await Promise.all(
     activeItems.map((item) => decorateConsultantMedia(item))
   );
@@ -2355,7 +2367,7 @@ async function getConsultant(event) {
   if (!isVisibleConsultant(consultant)) {
     return notFound("Consultant profile not found.");
   }
-  if (!(await identity.publicAccountState(consultant.ownerUserId)).enabled) return notFound("Consultant profile not found.");
+  if (!(await publicConsultantOwnerAvailable(consultant.ownerUserId))) return notFound("Consultant profile not found.");
 
   const [decorated, recentReviews] = await Promise.all([
     decorateConsultantMedia(consultant),
@@ -2680,12 +2692,23 @@ async function processScheduledDeletions() {
   let processed = 0;
   for (const item of items) {
     try {
+      // Cancellation and purge compete on this row, not a stale scan result.
+      // Claim before touching Cognito; failed purges retain the due row to retry.
+      await dynamo.send(new UpdateCommand({
+        TableName: env.usersTable, Key: { userId: item.userId },
+        UpdateExpression: "SET deletionPurgeStartedAt = if_not_exists(deletionPurgeStartedAt, :now)",
+        ConditionExpression: "attribute_exists(userId) AND deletionScheduledAt = :scheduled AND deletionEffectiveAt = :effective AND deletionEffectiveAt <= :now",
+        ExpressionAttributeValues: { ":scheduled": item.deletionScheduledAt, ":effective": item.deletionEffectiveAt, ":now": nowIso }
+      }));
       await purgeUserAccount(item.userId);
       processed += 1;
     } catch (error) {
+      if (error.name === "ConditionalCheckFailedException") continue;
+      const allowedErrors = new Set(["AccessDeniedException", "ThrottlingException", "ProvisionedThroughputExceededException", "TransactionCanceledException", "ResourceNotFoundException", "InternalServerError", "ServiceUnavailable", "TimeoutError", "NetworkingError", "UserNotFoundException"]);
+      const errorAction = deniedAwsAction(error);
       console.error("[deletion] scheduled purge failed", {
-        userId: item?.userId,
-        error: error?.message || error
+        error: allowedErrors.has(error?.name) ? error.name : "Error",
+        ...(errorAction ? { errorAction } : {})
       });
     }
   }
@@ -2693,75 +2716,104 @@ async function processScheduledDeletions() {
   return { processed };
 }
 
+async function deletionExperts(ownerUserId) {
+  const indexed = await listConsultantsByOwner(ownerUserId);
+  const current = await Promise.all(indexed.map(async expert => {
+    const { Item } = await dynamo.send(new GetCommand({ TableName: env.consultantsTable, Key: { consultantId: expert.consultantId }, ConsistentRead: true }));
+    return Item?.ownerUserId === ownerUserId && isConsultantRecord(Item) ? Item : null;
+  }));
+  const experts = current.filter(Boolean);
+  if (experts.length > 99) throw Object.assign(new Error("Твърде много експертни профили. Свържи се с нас."), { statusCode: 503 });
+  return experts;
+}
+
+function deletionExpertGuard(expert) {
+  const snapshot = recordSnapshot(expert, [...new Set([...CONSULTANT_ACCESS_FIELDS, "ownerUserId", "isPublic", "profileStatus", "deletionRestoreVisibility"])]);
+  return { ...snapshot, condition: "attribute_exists(consultantId) AND " + snapshot.condition };
+}
+
 async function deleteMyAccount(event) {
   const claims = requireAuth(event);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const user = await getUserBySub(claims.sub);
+    if (!user) return notFound("Profile not found.");
+    if (user.identityDeleted || user.deletionPurgeStartedAt) return response(409, { message: "Окончателното изтриване вече е започнало." });
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const alreadyScheduled = Boolean(user.deletionScheduledAt && user.deletionEffectiveAt);
+    const deletionScheduledAt = alreadyScheduled ? user.deletionScheduledAt : nowIso;
+    const deletionEffectiveAt = alreadyScheduled ? user.deletionEffectiveAt : new Date(now.getTime() + ACCOUNT_DELETION_DELAY_DAYS * 86400000).toISOString();
+    const experts = await deletionExperts(claims.sub);
+    const snapshot = recordSnapshot(user, ["deletionScheduledAt", "deletionEffectiveAt", "deletionPurgeStartedAt", "identityDeleted", "identityDisabled"]);
+    const guard = {
+      condition: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND attribute_not_exists(deletionPurgeStartedAt) AND (attribute_not_exists(identityDisabled) OR identityDisabled <> :restricted) AND (attribute_not_exists(restricted) OR restricted <> :restricted) AND " + snapshot.condition,
+      names: snapshot.names, values: { ...snapshot.values, ":restricted": true }
+    };
+    const transactions = [{ Update: fieldUpdate(env.usersTable, { userId: claims.sub }, { deletionScheduledAt, deletionEffectiveAt, updatedAt: nowIso }, guard) }];
+    for (const expert of experts) {
+      if (expert.deletionScheduledAt === deletionScheduledAt && expert.isPublic === false && expert.profileStatus === "rejected") continue;
+      const previous = expert.deletionRestoreVisibility || (expert.deletionScheduledAt ? null : {
+        ...(Object.prototype.hasOwnProperty.call(expert, "isPublic") ? { isPublic: expert.isPublic } : {}),
+        ...(Object.prototype.hasOwnProperty.call(expert, "profileStatus") ? { profileStatus: expert.profileStatus } : {}),
+        hiddenAt: nowIso
+      });
+      transactions.push({ Update: fieldUpdate(env.consultantsTable, { consultantId: expert.consultantId }, {
+        isPublic: false, profileStatus: "rejected", deletionScheduledAt,
+        ...(previous ? { deletionRestoreVisibility: previous } : {}), updatedAt: nowIso
+      }, deletionExpertGuard(expert)) });
+    }
+    try { await dynamo.send(new TransactWriteCommand({ TransactItems: transactions })); }
+    catch (error) {
+      if (error.name === "TransactionCanceledException" && attempt < 2) continue;
+      throw error;
+    }
+    return response(200, { deleted: false, deletionScheduledAt, deletionEffectiveAt,
+      publicProfileHidden: experts.length > 0, cognitoSubRetained: true,
+      note: alreadyScheduled ? "Изтриването вече е насрочено." : `Профилът е насрочен за автоматично изтриване след ${ACCOUNT_DELETION_DELAY_DAYS} дни.` });
+  }
+}
+
+async function cancelMyDeletion(event) {
+  const claims = requireAuth(event);
+  const body = parseBody(event);
+  if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length) return badRequest("Не са необходими допълнителни данни.");
   const user = await getUserBySub(claims.sub);
-
-  if (!user) {
-    return notFound("Profile not found.");
+  if (!user) return notFound("Profile not found.");
+  if (user.identityDeleted || user.deletionPurgeStartedAt || (user.deletionEffectiveAt && !(Date.parse(user.deletionEffectiveAt) > Date.now()))) {
+    return response(409, { message: "Срокът за отказ е изтекъл или окончателното изтриване вече е започнало." });
   }
-
-  const alreadyScheduledAt = user.deletionScheduledAt || "";
-  const alreadyEffectiveAt = user.deletionEffectiveAt || "";
-
-  if (alreadyScheduledAt && alreadyEffectiveAt) {
-    return response(200, {
-      deleted: false,
-      deletionScheduledAt: alreadyScheduledAt,
-      deletionEffectiveAt: alreadyEffectiveAt,
-      note: "Изтриването вече е насрочено."
-    });
-  }
-
-  const now = new Date();
-  const deletionScheduledAt = now.toISOString();
-  const deletionEffectiveAt = new Date(
-    now.getTime() + ACCOUNT_DELETION_DELAY_DAYS * 24 * 60 * 60 * 1000
-  ).toISOString();
-
-  await dynamo.send(
-    new UpdateCommand({
-      TableName: env.usersTable,
-      Key: { userId: claims.sub },
-      UpdateExpression:
-        "SET deletionScheduledAt = :scheduledAt, deletionEffectiveAt = :effectiveAt, " +
-        "updatedAt = :scheduledAt",
-      ExpressionAttributeValues: {
-        ":scheduledAt": deletionScheduledAt,
-        ":effectiveAt": deletionEffectiveAt
+  if (!user.deletionScheduledAt && !user.deletionEffectiveAt) return response(200, { cancelled: false, deletionScheduledAt: null, deletionEffectiveAt: null, note: "Няма насрочено изтриване." });
+  if (!user.deletionScheduledAt || !user.deletionEffectiveAt) return response(409, { message: "Невалидно състояние на изтриване. Свържи се с нас." });
+  const nowIso = new Date().toISOString();
+  const experts = await deletionExperts(claims.sub);
+  const snapshot = recordSnapshot(user, ["deletionScheduledAt", "deletionEffectiveAt"]);
+  const transactions = [{ Update: {
+    TableName: env.usersTable, Key: { userId: claims.sub },
+    UpdateExpression: "SET updatedAt = :now REMOVE deletionScheduledAt, deletionEffectiveAt",
+    ConditionExpression: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND attribute_not_exists(deletionPurgeStartedAt) AND (attribute_not_exists(identityDisabled) OR identityDisabled <> :restricted) AND (attribute_not_exists(restricted) OR restricted <> :restricted) AND deletionEffectiveAt > :now AND " + snapshot.condition,
+    ExpressionAttributeNames: snapshot.names, ExpressionAttributeValues: { ...snapshot.values, ":now": nowIso, ":restricted": true }
+  } }];
+  for (const expert of experts) {
+    if (expert.deletionScheduledAt !== user.deletionScheduledAt) continue;
+    const previous = expert.deletionRestoreVisibility;
+    const restore = previous && previous.hiddenAt === expert.updatedAt && expert.isPublic === false && expert.profileStatus === "rejected";
+    const update = fieldUpdate(env.consultantsTable, { consultantId: expert.consultantId }, {
+      ...(restore && Object.prototype.hasOwnProperty.call(previous, "isPublic") ? { isPublic: previous.isPublic } : {}),
+      ...(restore && Object.prototype.hasOwnProperty.call(previous, "profileStatus") ? { profileStatus: previous.profileStatus } : {}),
+      updatedAt: nowIso
+    }, deletionExpertGuard(expert));
+    const removals = ["deletionScheduledAt", "deletionRestoreVisibility"];
+    if (restore) for (const field of ["isPublic", "profileStatus"]) {
+      if (!Object.prototype.hasOwnProperty.call(previous, field)) {
+        update.ExpressionAttributeNames[`#remove${field}`] = field;
+        removals.push(`#remove${field}`);
       }
-    })
-  );
-
-  const consultant = await getConsultantByOwner(claims.sub);
-
-  if (consultant) {
-    await dynamo.send(
-      new UpdateCommand({
-        TableName: env.consultantsTable,
-        Key: { consultantId: consultant.consultantId },
-        UpdateExpression:
-          "SET isPublic = :false, profileStatus = :rejected, " +
-          "deletionScheduledAt = :scheduledAt, updatedAt = :scheduledAt",
-        ExpressionAttributeValues: {
-          ":false": false,
-          ":rejected": "rejected",
-          ":scheduledAt": deletionScheduledAt
-        }
-      })
-    );
+    }
+    update.UpdateExpression += " REMOVE " + removals.join(", ");
+    transactions.push({ Update: update });
   }
-
-  // The scheduled purge removes Cognito, private app data and S3 files after
-  // the grace window, preserving only anonymized counterpart booking history.
-  return response(200, {
-    deleted: false,
-    deletionScheduledAt,
-    deletionEffectiveAt,
-    publicProfileHidden: Boolean(consultant),
-    cognitoSubRetained: true,
-    note: `Профилът е насрочен за автоматично изтриване след ${ACCOUNT_DELETION_DELAY_DAYS} дни.`
-  });
+  await dynamo.send(new TransactWriteCommand({ TransactItems: transactions }));
+  return response(200, { cancelled: true, deletionScheduledAt: null, deletionEffectiveAt: null, note: "Насроченото изтриване е отменено." });
 }
 
 async function getMeProfile(event) {
@@ -2770,6 +2822,12 @@ async function getMeProfile(event) {
 
   if (!user) {
     return notFound("Profile not found. Call /auth/bootstrap first.");
+  }
+
+  // The grace-period screen needs its dates, not role/referral/reward repairs.
+  // Keep this read usable without mutating the pending account's private state.
+  if (user.deletionScheduledAt || user.deletionEffectiveAt || user.deletionPurgeStartedAt) {
+    return response(200, await decorateUserMedia(user), { "Cache-Control": "no-store" });
   }
 
   // Reconcile role on ordinary authenticated profile reads, not only signup.
@@ -5751,10 +5809,11 @@ exports.handler = async (event) => {
     }
     if (caller?.sub && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
       assertNotRestricted(account);
-      if (account?.deletionScheduledAt && !(method === "DELETE" && path === "/me")) {
+      const deletionAction = (method === "DELETE" && path === "/me") || (method === "POST" && path === "/me/deletion/cancel");
+      if (account?.deletionScheduledAt && !deletionAction) {
         return forbidden("Профилът е насрочен за изтриване.");
       }
-      if (account?.termsAcceptanceRequired === true && !["/auth/bootstrap", "/me/profile"].includes(path) && !(method === "DELETE" && path === "/me")) {
+      if (account?.termsAcceptanceRequired === true && !["/auth/bootstrap", "/me/profile"].includes(path) && !deletionAction) {
         return forbidden("Приеми условията и политиката за поверителност, преди да използваш платформата.");
       }
     }
@@ -5772,6 +5831,7 @@ exports.handler = async (event) => {
     if (method === "GET" && path === "/me/profile") return await getMeProfile(event);
     if (method === "GET" && path === "/me/data-export") return await exportMyData(event);
     if (method === "DELETE" && path === "/me") return await deleteMyAccount(event);
+    if (method === "POST" && path === "/me/deletion/cancel") return await cancelMyDeletion(event);
     if (method === "GET" && path === "/me/notifications") return await getMyNotifications(event);
     if (method === "POST" && path === "/me/notifications/mark-read") return await markMyNotificationsRead(event);
     if (method === "PUT" && path === "/me/profile") return await updateMeProfile(event);

@@ -120,8 +120,8 @@ test("pending onboarding is scoped to its account and documented flows match cod
   assert.equal(context.exports.readSocialOnboardingPending("new-social-user"), true);
   assert.equal(context.exports.readSocialOnboardingPending("established-user"), false);
   assert.equal(context.exports.CURRENT_TERMS_VERSION, CURRENT_TERMS_VERSION);
-  assert.match(source("src/app/layout/AppShell.tsx"), /awaitingTerms && privateRouteWithoutOnboarding/);
-  assert.match(source("src/app/layout/AppShell.tsx"), /profile\.termsAcceptanceRequired \? "\/dashboard"/);
+  assert.match(source("src/app/layout/AppShell.tsx"), /\(awaitingTerms \|\| awaitingDeletion\) && privateRouteWithoutOnboarding/);
+  assert.match(source("src/app/layout/AppShell.tsx"), /profile\.termsAcceptanceRequired \|\| hasPendingAccountDeletion\(profile\) \? "\/dashboard"/);
   const legacy = source("src/app/legacy/SiteAppLegacy.tsx");
   assert.match(legacy, /disabled=\{saving \|\| \(requiresTerms && !acceptedTerms\)\}/);
   assert.match(legacy, /termsAcceptanceRequired \|\| readSocialOnboardingPending\(nextProfile\.userId\)/);
@@ -143,6 +143,7 @@ test("required-agreement dashboard renders onboarding without protected reads, i
   assert.ok(loader);
   const calls = [];
   const context = { isAdmin: false, mounted: true, token: "fixture-token", navigate: path => calls.push(path), Promise,
+    hasPendingAccountDeletion: profile => Boolean(profile.deletionScheduledAt || profile.deletionEffectiveAt),
     api: { listBookings: async () => { calls.push("bookings"); return []; }, getMyConsultantProfile: async () => null, listConsultants: async () => [], listMyNotifications: async () => ({items:[],unreadCount:0}) } };
   const code = ts.transpileModule(`this.run = ${loader.getText(file)};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInNewContext(code, context);

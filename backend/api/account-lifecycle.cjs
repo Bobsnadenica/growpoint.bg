@@ -67,6 +67,7 @@ function createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listCo
       if (booking.review) { expression += ", review = :review"; values[":review"] = { rating: Number(booking.review.rating) || 0, createdAt: booking.review.createdAt || now }; }
       // A closed account's conversation is not retained as identifiable content.
       expression += " REMOVE messages, note, meetingLink";
+      if (clientDeleted) expression += ", clientSharedDocuments";
       await dynamo.send(new UpdateCommand({ TableName: env.bookingsTable, Key: { bookingId: booking.bookingId }, UpdateExpression: expression,
         ...(upcoming ? { ExpressionAttributeNames: { "#status": "status" } } : {}), ExpressionAttributeValues: values
       }));

@@ -212,6 +212,8 @@ export interface UserProfile {
   acceptedTermsVersion?: string;
   acceptedTermsAt?: string;
   termsAcceptanceRequired?: boolean;
+  deletionScheduledAt?: string | null;
+  deletionEffectiveAt?: string | null;
   avatarUrl?: string;
   avatarStorageKey?: string;
   city?: string;

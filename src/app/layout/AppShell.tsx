@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
+import { hasPendingAccountDeletion } from "../../lib/account-deletion";
 import { useAuth } from "../../lib/auth";
 import {
   clearPendingBootstrap,
@@ -11,7 +12,7 @@ import {
 import { config } from "../../lib/config";
 import { getNotificationCategory } from "../../lib/notifications";
 import { applyRouteSeo } from "../../lib/seo";
-import type { NotificationItem } from "../../lib/types";
+import type { NotificationItem, UserProfile } from "../../lib/types";
 import NotificationDetailModal from "../components/NotificationDetailModal";
 import AboutPage from "../pages/AboutPage";
 import AccountPage from "../pages/AccountPage";
@@ -21,7 +22,6 @@ import ContactPage from "../pages/ContactPage";
 import FaqPage from "../pages/FaqPage";
 import FilesPage from "../pages/FilesPage";
 import HomePage from "../pages/HomePage";
-import LegalPage from "../pages/LegalPage";
 import MemberProfilePage from "../pages/MemberProfilePage";
 import MessagesPage from "../pages/MessagesPage";
 import NotificationsPage from "../pages/NotificationsPage";
@@ -51,6 +51,10 @@ type ThemePreference = "light" | "dark";
 
 const THEME_STORAGE_KEY = "growpoint.theme";
 const NOTIFICATIONS_MARKED_READ_EVENT = "growpoint:notifications-marked-read";
+
+type SavedIdentity = { token: string; name: string } & Pick<UserProfile,
+  "termsAcceptanceRequired" | "deletionScheduledAt" | "deletionEffectiveAt">;
+type IdentityUpdate = { token: string } & Partial<Omit<SavedIdentity, "token">>;
 
 function readInitialTheme(): ThemePreference {
   if (typeof window === "undefined") return "light";
@@ -279,7 +283,7 @@ function RouteExperience() {
 
 export default function AppShell() {
   const { user, token, loading, logout, isAdmin } = useAuth();
-  const [savedIdentity, setSavedIdentity] = useState<{ token: string; name: string; termsAcceptanceRequired?: boolean } | null>(null);
+  const [savedIdentity, setSavedIdentity] = useState<SavedIdentity | null>(null);
   const displayName = savedIdentity?.token === token && savedIdentity.name ? savedIdentity.name : user?.name;
   useEffect(() => {
     setSavedIdentity(null);
@@ -287,16 +291,15 @@ export default function AppShell() {
     let active = true;
     let edited = false;
     const updated = (event: Event) => {
-      const detail = (event as CustomEvent<{ token: string; name: string; termsAcceptanceRequired?: boolean }>).detail;
+      const detail = (event as CustomEvent<IdentityUpdate>).detail;
       if (detail?.token !== token) return;
       edited = true;
-      setSavedIdentity({ token, name: detail.name, termsAcceptanceRequired: detail.termsAcceptanceRequired });
+      setSavedIdentity(current => ({ ...(current?.token === token ? current : {}), ...detail,
+        name: detail.name ?? (current?.token === token ? current.name : "") }));
     };
     window.addEventListener("growpoint:profile-name", updated);
     // One read per session, no polling; never let an older read overwrite a save.
-    void api.getMyProfile(token).then(profile => {
-      if (active && !edited) setSavedIdentity({ token, name: profile.name, termsAcceptanceRequired: profile.termsAcceptanceRequired });
-    }).catch(() => {
+    void api.getMyProfile(token).catch(() => {
       // Preserve the auth-name fallback while route-level error/retry UI loads.
       if (active && !edited) setSavedIdentity({ token, name: "" });
     });
@@ -305,6 +308,7 @@ export default function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const awaitingTerms = savedIdentity?.token === token && savedIdentity?.termsAcceptanceRequired === true;
+  const awaitingDeletion = savedIdentity?.token === token && hasPendingAccountDeletion(savedIdentity);
   const privateRouteWithoutOnboarding = ["/account", "/files", "/messages", "/notifications", "/admin"]
     .some(path => location.pathname === path || location.pathname.startsWith(`${path}/`));
   const currentYear = new Date().getFullYear();
@@ -427,7 +431,7 @@ export default function AppShell() {
 
         if (!cancelled) {
           completed = true;
-          navigate(profile.termsAcceptanceRequired ? "/dashboard" : intent.redirect || "/dashboard", { replace: true });
+          navigate(profile.termsAcceptanceRequired || hasPendingAccountDeletion(profile) ? "/dashboard" : intent.redirect || "/dashboard", { replace: true });
         }
       } catch {
         if (!cancelled) {
@@ -454,10 +458,11 @@ export default function AppShell() {
   }, [loading, location.key, navigate, token, user]);
 
   useEffect(() => {
-    if (loading || !user || !token || savedIdentity?.token !== token || awaitingTerms) {
+    if (loading || !user || !token || savedIdentity?.token !== token || awaitingTerms || awaitingDeletion) {
       setHeaderNotifications([]);
       setHeaderNotificationsError("");
       setSelectedNotification(null);
+      setActiveHeaderPanel(null);
       return;
     }
 
@@ -488,7 +493,7 @@ export default function AppShell() {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", loadHeaderNotifications);
     };
-  }, [awaitingTerms, isAdmin, loading, location.pathname, savedIdentity?.token, token, user]);
+  }, [awaitingDeletion, awaitingTerms, isAdmin, loading, location.pathname, savedIdentity?.token, token, user]);
 
   useEffect(() => {
     function handleNotificationsMarkedRead(event: Event) {
@@ -672,7 +677,7 @@ export default function AppShell() {
           <div className="site-header__actions">
             {user ? (
               <>
-                {isAdmin ? (
+                {isAdmin && !awaitingDeletion ? (
                   <Link
                     className="ghost-button user-chip"
                     to="/admin"
@@ -689,7 +694,7 @@ export default function AppShell() {
                     {displayName}
                   </Link>
                 )}
-                {!isAdmin ? (
+                {!isAdmin && !awaitingDeletion ? (
                   <div className="topbar-alert-group" ref={topbarPanelRef}>
                     <button
                       className="topbar-alert"
@@ -847,7 +852,7 @@ export default function AppShell() {
               {user ? (
                 <>
                   <span className="mobile-menu__user">{displayName}</span>
-                  {isAdmin ? (
+                  {isAdmin && !awaitingDeletion ? (
                     <Link
                       to="/admin"
                       className="mobile-menu__link"
@@ -861,10 +866,10 @@ export default function AppShell() {
                       className="mobile-menu__link"
                       onClick={() => setIsMenuOpen(false)}
                     >
-                      Моят профил
+                      {awaitingDeletion ? "Насрочено изтриване" : "Моят профил"}
                     </Link>
                   )}
-                  {!isAdmin ? (
+                  {!isAdmin && !awaitingDeletion ? (
                     <>
                       <Link
                         to="/notifications"
@@ -912,7 +917,7 @@ export default function AppShell() {
         <Suspense fallback={<div className="container panel" role="status">Зареждане…</div>}>
         {token && privateRouteWithoutOnboarding && savedIdentity?.token !== token
           ? <div className="container panel" role="status">Зареждане…</div>
-          : awaitingTerms && privateRouteWithoutOnboarding ? <Navigate to="/dashboard" replace /> : (
+          : (awaitingTerms || awaitingDeletion) && privateRouteWithoutOnboarding ? <Navigate to="/dashboard" replace /> : (
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/examples/:id" element={<Navigate to="/users" replace />} />

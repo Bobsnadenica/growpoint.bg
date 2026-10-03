@@ -51,6 +51,8 @@ import AvailabilityCalendar from "./AvailabilityCalendar";
 import HeroAnimation from "./HeroAnimation";
 import PaymentPlaceholder from "../components/PaymentPlaceholder";
 import ConsultantAvailabilityEditor from "../components/ConsultantAvailabilityEditor";
+import ScheduledDeletionPanel from "../components/ScheduledDeletionPanel";
+import { hasPendingAccountDeletion } from "../../lib/account-deletion";
 import SpotlightShowcase from "../components/SpotlightShowcase";
 import { ExpertBenefitsPanel } from "../components/ExpertBenefitsPanel";
 import { expertPackageRank, hasMonthlyFreeSession, sessionMonthInSofia } from "../../lib/expert-package-display";
@@ -3617,7 +3619,7 @@ export function DashboardPage() {
     setError("");
 
     api.getMyProfile(token).then(nextProfile => {
-      if (nextProfile.termsAcceptanceRequired) {
+      if (nextProfile.termsAcceptanceRequired || hasPendingAccountDeletion(nextProfile)) {
         return Promise.all([nextProfile, [] as Booking[], null, [] as ConsultantProfile[], { items: [] as NotificationItem[], unreadCount: 0 }]);
       }
       if (isAdmin && !nextProfile.termsAcceptanceRequired) {
@@ -3675,7 +3677,7 @@ export function DashboardPage() {
   }, [consultantProfile?.availability]);
 
   useEffect(() => {
-    if (!profile || !dashboardLocation.hash) {
+    if (!profile || hasPendingAccountDeletion(profile) || !dashboardLocation.hash) {
       return;
     }
 
@@ -3718,7 +3720,7 @@ export function DashboardPage() {
     );
   }
 
-  if (isAdmin) {
+  if (isAdmin && profile && !hasPendingAccountDeletion(profile) && !profile.termsAcceptanceRequired) {
     return <Navigate to="/admin" replace />;
   }
 
@@ -3758,6 +3760,25 @@ export function DashboardPage() {
         </div>
       </section>
     );
+  }
+
+  if (hasPendingAccountDeletion(profile)) {
+    return <ScheduledDeletionPanel
+      token={token}
+      profile={profile}
+      refreshing={dashboardLoading}
+      exporting={accountActionLoading === "export"}
+      exportError={error}
+      exportMessage={message}
+      onCancelled={() => {
+        setProfile(current => current ? { ...current, deletionScheduledAt: null, deletionEffectiveAt: null } : current);
+        setMessage("Изтриването е отменено. Зареждаме профила ти.");
+        setDashboardReloadKey(current => current + 1);
+      }}
+      onRefresh={() => setDashboardReloadKey(current => current + 1)}
+      onExport={exportMyDataAction}
+      onLogout={async () => { await logout(); navigate("/", { replace: true }); }}
+    />;
   }
 
   async function cancelBookingAction(bookingId: string, role: "consultant" | "client") {
@@ -6503,6 +6524,10 @@ function DeleteProfileModal({
           <p className="section-caption">
             Публичният профил се скрива веднага. Файловете и данните се изтриват
             автоматично след 7 дни.
+          </p>
+          <p className="section-caption">
+            След насрочване ще излезеш от акаунта. За да отмениш изтриването
+            в седемдневния срок, влез отново и избери „Отмени изтриването“ в таблото.
           </p>
         </header>
         <div className="delete-profile-modal__checks">

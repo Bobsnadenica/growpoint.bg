@@ -1,0 +1,13 @@
+.scheduled-deletion { display: grid; gap: 16px; max-width: 760px; margin-inline: auto; min-width: 0; color: var(--text); }
+.scheduled-deletion h1, .scheduled-deletion p { margin: 0; overflow-wrap: anywhere; }
+.scheduled-deletion h1 { font-size: clamp(1.6rem, 4vw, 2.3rem); line-height: 1.15; }
+.scheduled-deletion__deadline { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-alt); overflow-wrap: anywhere; }
+.scheduled-deletion__actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.scheduled-deletion__actions button { min-height: 44px; max-width: 100%; white-space: normal; }
+.scheduled-deletion .scheduled-deletion__error { color: var(--danger); }
+:root[data-theme="dark"] .scheduled-deletion { color: var(--text); }
+:root[data-theme="dark"] .scheduled-deletion__deadline { background: var(--surface-alt); border-color: var(--border); }
+@media (max-width: 640px) {
+  .scheduled-deletion.panel { padding: 20px; }
+  .scheduled-deletion__actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+}

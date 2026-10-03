@@ -26,6 +26,7 @@ function loadApi({ send = async () => ({}), environment = {}, presign, logError 
   vm.runInNewContext("Object.assign(exports.test, { getMyBenefitRequests, createMyBenefitRequest, adminListBenefitRequests, adminUpdateBenefitRequest, updateBookingStatus, expertBenefitsSummary });", context);
   vm.runInNewContext("exports.test.deniedAwsAction = deniedAwsAction;", context);
   vm.runInNewContext("exports.test.assertAuthValidAfter = assertAuthValidAfter;", context);
+  vm.runInNewContext("Object.assign(exports.test, { deleteMyAccount, cancelMyDeletion, processScheduledDeletions, publicConsultantOwnerAvailable, listConsultants, getConsultant });", context);
   return context.exports;
 }
 module.exports = { loadApi };

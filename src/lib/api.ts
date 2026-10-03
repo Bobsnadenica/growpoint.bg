@@ -191,6 +191,30 @@ export async function request<T>(path: string, options: RequestInit = {}, token?
 }
 
 const profileRepairs = new Map<string, Promise<UserProfile>>();
+let currentProfileGeneration = { token: "", generation: 0 };
+
+function profileGeneration(token: string) {
+  if (currentProfileGeneration.token !== token) currentProfileGeneration = { token, generation: currentProfileGeneration.generation + 1 };
+  return currentProfileGeneration.generation;
+}
+
+function beginProfileWrite(token: string) {
+  profileGeneration(token);
+  return ++currentProfileGeneration.generation;
+}
+
+function announceIdentity(token: string, generation: number, fields: Partial<Pick<UserProfile,
+  "name" | "termsAcceptanceRequired" | "deletionScheduledAt" | "deletionEffectiveAt">>) {
+  if (currentProfileGeneration.token !== token || currentProfileGeneration.generation !== generation) return;
+  window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, ...fields } }));
+}
+
+function announceProfile(token: string, profile: UserProfile, generation: number) {
+  announceIdentity(token, generation, {
+    name: profile.name, termsAcceptanceRequired: profile.termsAcceptanceRequired,
+    deletionScheduledAt: profile.deletionScheduledAt, deletionEffectiveAt: profile.deletionEffectiveAt
+  });
+}
 
 export const api = {
   async listConsultants(filters: { query?: string; city?: string } = {}): Promise<ConsultantProfile[]> {
@@ -225,6 +249,7 @@ export const api = {
   },
 
   async bootstrapUser(token: string, input: BootstrapInput) {
+    const generation = beginProfileWrite(token);
     // Attach a pending admin email-invite token (if any) so the server can
     // redeem it and grant a free comped consultant account. Single-use: clear
     // it once bootstrap succeeds.
@@ -237,13 +262,16 @@ export const api = {
     );
     if (inviteToken) clearInviteToken();
     if (ref) clearReferralCode();
-    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name, termsAcceptanceRequired: profile.termsAcceptanceRequired } }));
+    announceProfile(token, profile, generation);
     return profile;
   },
 
   async getMyProfile(token: string) {
+    const generation = profileGeneration(token);
     try {
-      return await request<UserProfile>("/me/profile", undefined, token);
+      const profile = await request<UserProfile>("/me/profile", undefined, token);
+      announceProfile(token, profile, generation);
+      return profile;
     } catch (error) {
       // A console-created Cognito account has no app profile until first use.
       // Repair only the explicit missing-profile response, never auth/network
@@ -273,12 +301,13 @@ export const api = {
   },
 
   async updateMyProfile(token: string, input: UpdateProfileInput) {
+    const generation = beginProfileWrite(token);
     const profile = await request<UserProfile>(
       "/me/profile",
       { method: "PUT", body: JSON.stringify(input) },
       token
     );
-    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name, termsAcceptanceRequired: profile.termsAcceptanceRequired } }));
+    announceProfile(token, profile, generation);
     return profile;
   },
 
@@ -287,12 +316,13 @@ export const api = {
   },
 
   async updateMyConsultantProfile(token: string, input: UpdateConsultantInput) {
+    const generation = beginProfileWrite(token);
     const profile = await request<ConsultantProfile>(
       "/consultants/me",
       { method: "PUT", body: JSON.stringify(input) },
       token
     );
-    window.dispatchEvent(new CustomEvent("growpoint:profile-name", { detail: { token, name: profile.name } }));
+    announceIdentity(token, generation, { name: profile.name });
     return profile;
   },
 
@@ -435,6 +465,20 @@ export const api = {
       { method: "DELETE" },
       token
     );
+  },
+
+  async cancelMyAccountDeletion(token: string) {
+    const generation = beginProfileWrite(token);
+    const result = await request<{
+      cancelled: boolean;
+      deletionScheduledAt: null;
+      deletionEffectiveAt: null;
+      note: string;
+    }>("/me/deletion/cancel", { method: "POST", body: JSON.stringify({}) }, token);
+    if (result.deletionScheduledAt === null && result.deletionEffectiveAt === null) {
+      announceIdentity(token, generation, { deletionScheduledAt: null, deletionEffectiveAt: null });
+    }
+    return result;
   },
 
   async getMyDocumentDownloadUrl(token: string, storageKey: string) {

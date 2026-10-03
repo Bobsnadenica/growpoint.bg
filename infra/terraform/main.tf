@@ -1139,6 +1139,14 @@ resource "aws_apigatewayv2_route" "me_delete" {
   authorization_type = "JWT"
 }
 
+resource "aws_apigatewayv2_route" "me_deletion_cancel" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /me/deletion/cancel"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
 resource "aws_apigatewayv2_route" "me_notifications_get" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "GET /me/notifications"
