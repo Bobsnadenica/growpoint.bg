@@ -6,7 +6,7 @@ Guide for AI/dev sessions on this repo. Keep it short; update it when something 
 **GrowPoint** (growpoint.bg) — a Bulgarian career-mentoring marketplace. Clients book sessions with consultants/mentors. React SPA + serverless AWS backend.
 
 ## Stack & where things live
-- **Frontend:** React + Vite SPA (`BrowserRouter`). Most UI is in `src/app/legacy/SiteAppLegacy.tsx` (large). Header/footer/nav in `src/app/layout/AppShell.tsx`. Thin route wrappers in `src/app/pages/*`. API client `src/lib/api.ts`, auth `src/lib/auth.tsx` + `src/lib/auth-flow.ts`, types `src/lib/types.ts`. Styles: one file `src/styles/global.css`.
+- **Frontend:** React + Vite SPA (`BrowserRouter`). Most UI is in `src/app/legacy/SiteAppLegacy.tsx` (large); homepage topics/guide in `src/app/components/HomeDiscovery.tsx`. Header/footer/nav in `src/app/layout/AppShell.tsx`. Thin route wrappers in `src/app/pages/*`. API client `src/lib/api.ts`, auth `src/lib/auth.tsx` + `src/lib/auth-flow.ts`, types `src/lib/types.ts`. Styles: `src/styles/global.css` plus component CSS.
 - **Backend:** one Lambda, `backend/api/index.cjs`. Routes are dispatched at the bottom of the file; **every new route also needs an `aws_apigatewayv2_route` in `infra/terraform/main.tf`.**
 - **Infra:** Terraform in `infra/terraform/`. Real values live in `infra/terraform/terraform.tfvars` (**gitignored — never commit**).
 - **Helper scripts:** `scripts/` (build, smoke test, data migrations, seed).
@@ -45,6 +45,7 @@ node --check backend/api/index.cjs   # backend syntax
 - **Routes:** dynamic SPA documents return HTTP 200 on CloudFront. Missing profiles/routes show client not-found/noindex state, not a native server 404. Consultant visibility still comes from the live API.
 - **CORS for local API testing:** temporarily add `http://localhost:5173` to `frontend_origins` in tfvars + apply; **always revert + re-verify** afterward.
 - **Account deletion:** `DELETE /me` atomically schedules the seven-day grace period and hides owned experts. `POST /me/deletion/cancel` cancels before the deadline; the pending dashboard exposes cancellation/export/logout. Purge claims the row conditionally before Cognito deletion. Do not alter deadlines or business records to manufacture timer evidence.
+- **Discovery:** query/city are drafts until Search/Enter; topic filters match profile keywords, not qualifications. Preserve AI/CV signals, reviewed-only 4.5+ filtering and tier priority within matching results. Public UI QA is in `docs/qa-2026-10-08.md`; it does not close the launch gates below.
 
 ## Business model (current)
 - All expert tiers are **paid** (Start 9.99 / Grow 29.99 / Spotlight 99.99 €/mo). **Clients are free.** Public DSK checkout remains a labelled preview. Five website fake-card flows pass bank/return verification; two earlier portal cases are separate. Sandbox is verified disabled with empty deployed credentials and no Terraform drift. This is not production approval. Automatic bank sandbox notices are authorized, but never send reports/messages yourself. The owner submits results.
