@@ -5756,6 +5756,10 @@ textarea {
   margin-top: 12px;
 }
 
+.consultant-detail-panel__text {
+  white-space: pre-line;
+}
+
 .consultant-detail-panel .feature-list {
   margin-top: 14px;
 }

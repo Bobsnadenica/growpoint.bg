@@ -1841,10 +1841,12 @@ export function ConsultantPage() {
   const visibleAvailability = getUpcomingAvailabilitySlots(consultant.availability, 12, 5);
   const themeStyle = getConsultantThemeStyle(consultant);
   const hasTheme = hasConsultantTheme(consultant);
-  const profileSummary =
+  const profileSummary = truncateText(
     consultant.bio ||
     consultant.experienceSummary ||
-    "Профилът все още няма описание на работата.";
+    "Профилът все още няма описание на работата.",
+    190
+  );
   const shareUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}${import.meta.env.BASE_URL}consultants/${consultant.slug}/`
@@ -2018,9 +2020,9 @@ export function ConsultantPage() {
                   </Link>
                 ) : null}
               </div>
-              {consultant.bio ? <p>{consultant.bio}</p> : null}
+              {consultant.bio ? <p className="consultant-detail-panel__text">{consultant.bio}</p> : null}
               {consultant.experienceSummary ? (
-                <p>{consultant.experienceSummary}</p>
+                <p className="consultant-detail-panel__text">{consultant.experienceSummary}</p>
               ) : null}
               {(consultant.experienceHighlights || []).length ? (
                 <ul className="feature-list">
@@ -2104,6 +2106,20 @@ export function ConsultantPage() {
                 </section>
               ) : null}
             </article>
+
+            {consultant.workApproach?.trim() ? (
+              <article className="panel consultant-detail-panel consultant-detail-panel--wide">
+                <div className="section-edit-head">
+                  <h2>Как протича консултацията</h2>
+                  {isOwnProfile ? (
+                    <Link className="text-button" to="/dashboard#consultant-profile">
+                      Редактирай
+                    </Link>
+                  ) : null}
+                </div>
+                <p className="consultant-detail-panel__text">{consultant.workApproach}</p>
+              </article>
+            ) : null}
 
             <HowItWorksCard />
 
