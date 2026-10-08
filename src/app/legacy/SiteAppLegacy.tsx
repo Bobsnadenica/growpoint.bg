@@ -52,6 +52,7 @@ import HeroAnimation from "./HeroAnimation";
 import PaymentPlaceholder from "../components/PaymentPlaceholder";
 import ConsultantAvailabilityEditor from "../components/ConsultantAvailabilityEditor";
 import ScheduledDeletionPanel from "../components/ScheduledDeletionPanel";
+import { HomeGuide, HomeTopics } from "../components/HomeDiscovery";
 import { hasPendingAccountDeletion } from "../../lib/account-deletion";
 import SpotlightShowcase from "../components/SpotlightShowcase";
 import { ExpertBenefitsPanel } from "../components/ExpertBenefitsPanel";
@@ -140,23 +141,6 @@ type MatchInsight = {
 
 type SuggestedFillMode = "replace" | "append-list" | "append-lines" | "append-text";
 type QuestionSuggestionOption = string | { label: string; value: string };
-
-const homeRoleChoices = [
-  {
-    step: "01",
-    title: "Търся насока",
-    text: "Открий правилния човек за своето развитие – независимо дали става дума за кариера, бизнес, умения, здраве или личностно израстване.",
-    ctaLabel: "Намери GrowPoint човек",
-    ctaTo: "/users"
-  },
-  {
-    step: "02",
-    title: "Аз съм правилният човек",
-    text: "Създай публичен профил и превърни своя опит и знания в реална стойност за хората, които ги търсят.",
-    ctaLabel: "Стани част от GrowPoint",
-    ctaTo: "/auth?tab=register&role=consultant"
-  }
-] as const;
 
 // Expert visibility packages (Стр. 6 of the designer doc). Payments go through
 // DKS integration is pending — until then previews cannot charge and admins can
@@ -373,21 +357,18 @@ function buildDirectoryFilterLabels({
   query,
   city,
   kind,
-  topOnly,
   recommendedOnly
 }: {
   query: string;
   city: string;
   kind: string;
-  topOnly: boolean;
   recommendedOnly: boolean;
 }) {
   return [
     query ? `Търсене: ${query}` : "",
     city ? `Град: ${city}` : "",
     getDirectoryKindLabel(kind),
-    topOnly ? "Водещи профили" : "",
-    recommendedOnly ? "Препоръчани профили (4.5+)" : ""
+    recommendedOnly ? "С оценка 4.5+" : ""
   ].filter(Boolean);
 }
 
@@ -559,7 +540,7 @@ function tokenizeText(value: string) {
     .toLowerCase()
     .split(/[^a-z0-9а-я]+/gi)
     .map((token) => token.trim())
-    .filter((token) => token.length > 2 && !MATCH_STOP_WORDS.has(token));
+    .filter((token) => (token.length > 2 || token === "ai" || token === "cv") && !MATCH_STOP_WORDS.has(token));
 }
 
 function formatSignalLabel(value: string) {
@@ -853,8 +834,8 @@ function getConsultantSignalTokens(consultant: ConsultantProfile) {
         consultant.headline,
         consultant.bio,
         consultant.experienceSummary,
-        ...consultant.specializations,
-        ...consultant.tags,
+        ...(consultant.specializations || []),
+        ...(consultant.tags || []),
         ...(consultant.experienceHighlights || []),
         ...(consultant.educationHighlights || []),
         ...getConsultantIdealFor(consultant),
@@ -991,6 +972,7 @@ function renderPersonaIcon(icon: PersonaIcon) {
 }
 
 function getPersonaMatch(persona: PersonaPreset | null, consultant: ConsultantProfile) {
+  // ponytail: keyword topics, not a taxonomy; add explicit expertise categories when needed.
   if (!persona) {
     return null;
   }
@@ -999,7 +981,8 @@ function getPersonaMatch(persona: PersonaPreset | null, consultant: ConsultantPr
     return null;
   }
 
-  const personaTokens = new Set(tokenizeText(persona.tags.join(" ")));
+  const personaTokens = new Set(tokenizeText(persona.tags.join(" "))
+    .filter((token) => token !== "умения" && token !== "skills"));
 
   if (!personaTokens.size) {
     return null;
@@ -1017,8 +1000,8 @@ function getPersonaMatch(persona: PersonaPreset | null, consultant: ConsultantPr
 
   return {
     score,
-    label: score >= 72 ? "Силно съвпадение" : "Подходящ профил",
-    note: `Подходящ по ${reasons.join(", ")}.`
+    label: "Сходни теми",
+    note: `Общи теми: ${reasons.join(", ")}.`
   } satisfies MatchInsight;
 }
 
@@ -1275,24 +1258,18 @@ export function HomePage() {
       <section className="hero">
         <div className="container home-hero">
           <div className="hero__copy">
-            <p className="eyebrow">Понякога една среща променя живота</p>
+            <p className="eyebrow">Насока за следващата ти стъпка</p>
             <h1>Растежът започва от правилния човек.</h1>
             <p className="hero__lede">
-              GrowPoint е платформа, която свързва хора с ментори, обучители,
-              консултанти и експерти от различни сфери. Разгледай профили, избери
-              подходящия специалист и резервирай среща според твоите цели.
+              Намери ментор или консултант за това, което искаш да постигнеш.
+              Разгледай опита, темите и свободните часове — и избери с кого да поговориш.
             </p>
 
-            <div className="hero-choice-grid" aria-label="Избери как искаш да използваш GrowPoint">
-              {homeRoleChoices.map((choice) => (
-                <Link className="hero-choice-card" key={choice.step} to={choice.ctaTo}>
-                  <span>{choice.step}</span>
-                  <strong>{choice.title}</strong>
-                  <p>{choice.text}</p>
-                  <em>{choice.ctaLabel}</em>
-                </Link>
-              ))}
+            <div className="hero-actions">
+              <Link className="primary-button" to="/users">Разгледай експертите <span aria-hidden="true">→</span></Link>
+              <a className="ghost-button" href="#how-it-works">Как работи?</a>
             </div>
+            <p className="home-hero__note">Разглеждай свободно. Клиентският профил е без членска такса.</p>
           </div>
 
           <aside className="home-hero__visual" aria-hidden="true">
@@ -1301,17 +1278,18 @@ export function HomePage() {
         </div>
       </section>
 
+      <HomeTopics />
       <SpotlightShowcase profiles={homeConsultants} />
 
       <section className="section">
         <div className="container">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Подбрани профили</p>
-              <h2>Силните профили, готови за бърз избор.</h2>
+              <p className="eyebrow">Хората зад профилите</p>
+              <h2>Запознай се с експертите.</h2>
             </div>
             <Link className="ghost-button" to="/users">
-              Виж всички профили
+              Виж всички експерти
             </Link>
           </div>
 
@@ -1326,9 +1304,10 @@ export function HomePage() {
               Все още няма активни публични експерти. Новите профили ще се появят тук, когато са готови.
             </div>
           ) : null}
-          {homeError ? <div className="panel panel--error">{homeError}</div> : null}
+          {homeError ? <div className="panel panel--error" role="alert">{homeError} <Link to="/users">Опитай от каталога →</Link></div> : null}
         </div>
       </section>
+      <HomeGuide />
     </>
   );
 }
@@ -1339,14 +1318,31 @@ export function UsersPage() {
   const query = searchParams.get("q") || "";
   const city = searchParams.get("city") || "";
   const kind = searchParams.get("kind") || "all";
-  const topOnly = searchParams.get("top") === "1";
   const recommendedOnly = searchParams.get("recommended") === "1";
+  const [queryDraft, setQueryDraft] = useState(query);
+  const [cityDraft, setCityDraft] = useState(city);
   const persona = getPersonaById(searchParams.get("persona"));
   const { user } = useAuth();
   const { profile } = useViewerProfile();
   const [consultants, setConsultants] = useState<ConsultantProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setQueryDraft(query);
+    setCityDraft(city);
+  }, [query, city]);
+
+  useEffect(() => {
+    if (!persona) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById("directory-results")?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start"
+      });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [persona?.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -1385,8 +1381,7 @@ export function UsersPage() {
         const matchesType =
           kind === "all" ||
           getConsultantProfileType(consultant) === kind;
-        // "Препоръчани профили": only profiles rated above 4.5 (per the doc).
-        const matchesRecommended = !recommendedOnly || consultant.rating >= 4.5;
+        const matchesRecommended = !recommendedOnly || (consultant.reviewCount > 0 && consultant.rating >= 4.5);
         return matchesType && matchesRecommended;
       })
       .map((consultant) => ({
@@ -1395,6 +1390,7 @@ export function UsersPage() {
           ? getPersonaMatch(persona, consultant)
           : getConsultantMatch(profile, consultant)
       }))
+      .filter((item) => !persona || item.match !== null)
       .sort((left, right) => {
         // Apply the advertised visibility benefit within the user's filters.
         const packageDiff = getConsultantPackageRank(right.consultant) - getConsultantPackageRank(left.consultant);
@@ -1413,17 +1409,17 @@ export function UsersPage() {
 
         return right.consultant.rating - left.consultant.rating;
       });
-  }, [consultants, kind, persona, profile, recommendedOnly, topOnly]);
+  }, [consultants, kind, persona, profile, recommendedOnly]);
   const visibleConsultants = rankedConsultants;
   const hasActiveFilters = Boolean(
-    query || city || kind !== "all" || topOnly || recommendedOnly || persona
+    query || city || kind !== "all" || recommendedOnly || persona
   );
   const activeFilterLabels = persona
     ? [
         `Област: ${persona.name}`,
-        ...buildDirectoryFilterLabels({ query, city, kind, topOnly, recommendedOnly })
+        ...buildDirectoryFilterLabels({ query, city, kind, recommendedOnly })
       ]
-    : buildDirectoryFilterLabels({ query, city, kind, topOnly, recommendedOnly });
+    : buildDirectoryFilterLabels({ query, city, kind, recommendedOnly });
   const profileCtaTo = user ? "/dashboard" : "/auth?tab=register";
   const isConsultantViewer = profile?.role === "consultant";
 
@@ -1431,14 +1427,12 @@ export function UsersPage() {
     query?: string;
     city?: string;
     kind?: string;
-    topOnly?: boolean;
     recommendedOnly?: boolean;
     persona?: string | null;
   }) {
     const nextQuery = nextFilters.query ?? query;
     const nextCity = nextFilters.city ?? city;
     const nextKind = nextFilters.kind ?? kind;
-    const nextTopOnly = nextFilters.topOnly ?? topOnly;
     const nextRecommended = nextFilters.recommendedOnly ?? recommendedOnly;
     const nextPersona = nextFilters.persona !== undefined ? nextFilters.persona : persona?.id ?? null;
 
@@ -1446,21 +1440,20 @@ export function UsersPage() {
     if (nextQuery) params.q = nextQuery;
     if (nextCity) params.city = nextCity;
     if (nextKind !== "all") params.kind = nextKind;
-    if (nextTopOnly) params.top = "1";
     if (nextRecommended) params.recommended = "1";
     if (nextPersona) params.persona = nextPersona;
     return params;
   }
 
-  function applyPresetQuery(nextQuery: string) {
-    setSearchParams(buildSearchParams({ query: nextQuery }));
+  function handleDirectorySearch(event: FormEvent) {
+    event.preventDefault();
+    applyDirectoryFilters({ query: queryDraft.trim(), city: cityDraft.trim() });
   }
 
   function applyDirectoryFilters(nextFilters: {
     query?: string;
     city?: string;
     kind?: string;
-    topOnly?: boolean;
     recommendedOnly?: boolean;
     persona?: string | null;
   }) {
@@ -1473,14 +1466,6 @@ export function UsersPage() {
       return;
     }
     applyDirectoryFilters({ persona: next.id, kind: next.type || "all" });
-    // Per the designer doc: selecting an област scrolls straight to the results.
-    if (typeof window !== "undefined") {
-      window.setTimeout(() => {
-        document
-          .getElementById("directory-results")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 60);
-    }
   }
 
   return (
@@ -1489,13 +1474,13 @@ export function UsersPage() {
         <div className="container">
           <div className="hero__copy">
             <p className="eyebrow">За хората, които търсят</p>
-            <h1>Намери правилния човек за това, което искаш да постигнеш.</h1>
+            <h1>Кой ще ти помогне с твоята следваща стъпка?</h1>
             <p className="hero__lede">
               {isConsultantViewer
                 ? "Това е потребителският изглед на GrowPoint. Подходящите професионалисти за теб се подреждат в профила и таблото ти."
                 : persona
-                  ? `Каталогът показва профили за „${persona.name}".`
-                  : "Избери област и разгледай специалистите, които могат да ти помогнат с конкретна цел, умение или предизвикателство. В какво искаш да се развиваш?"}
+                  ? `Съвпадения по теми за „${persona.name}“. Разгледай опита и условията в профилите.`
+                  : "Започни с тема или потърси конкретно умение. Разглеждането не изисква регистрация."}
             </p>
           </div>
         </div>
@@ -1543,28 +1528,26 @@ export function UsersPage() {
       <section className="section" id="directory-results">
         <div className="container">
           <div className="directory-controls">
-            <div className="filter-bar directory-filter-bar">
+            <form className="filter-bar directory-filter-bar" onSubmit={handleDirectorySearch} role="search" aria-label="Търсене на експерти">
               <label>
                 Какво търсиш?
                 <input
-                  value={query}
-                  onChange={(event) =>
-                    applyPresetQuery(event.target.value)
-                  }
-                  placeholder="AI, интервю, фитнес, инвестиции, лидерство…"
+                  value={queryDraft}
+                  onChange={(event) => setQueryDraft(event.target.value)}
+                  type="search"
+                  placeholder="AI, интервю, бизнес, лидерство…"
                 />
               </label>
               <label>
                 Град
                 <input
-                  value={city}
-                  onChange={(event) =>
-                    applyDirectoryFilters({ city: event.target.value })
-                  }
-                  placeholder="София, Берлин, Лондон, Виена"
+                  value={cityDraft}
+                  onChange={(event) => setCityDraft(event.target.value)}
+                  placeholder="Град (по желание)"
                 />
               </label>
-            </div>
+              <button className="primary-button" type="submit">Търси</button>
+            </form>
 
             <div className="search-shortcuts directory-switches">
               <span className="search-shortcuts__label">Търся</span>
@@ -1580,6 +1563,7 @@ export function UsersPage() {
                     className={`shortcut-chip ${kind === option.value ? "shortcut-chip--active" : ""}`}
                     key={option.value}
                     type="button"
+                    aria-pressed={kind === option.value}
                     onClick={() =>
                       applyDirectoryFilters({ kind: option.value, persona: null })
                     }
@@ -1590,18 +1574,12 @@ export function UsersPage() {
                 <button
                   className={`shortcut-chip ${recommendedOnly ? "shortcut-chip--active" : ""}`}
                   type="button"
+                  aria-pressed={recommendedOnly}
                   onClick={() =>
                     applyDirectoryFilters({ recommendedOnly: !recommendedOnly })
                   }
                 >
-                  Препоръчани профили
-                </button>
-                <button
-                  className={`shortcut-chip ${topOnly ? "shortcut-chip--active" : ""}`}
-                  type="button"
-                  onClick={() => applyDirectoryFilters({ topOnly: !topOnly })}
-                >
-                  Водещи профили
+                  С оценка 4.5+
                 </button>
               </div>
             </div>
@@ -1619,7 +1597,7 @@ export function UsersPage() {
                   <button
                     className="ghost-button"
                     type="button"
-                    onClick={() => applyDirectoryFilters({ query: "", city: "", kind: "all", topOnly: false, recommendedOnly: false, persona: null })}
+                    onClick={() => applyDirectoryFilters({ query: "", city: "", kind: "all", recommendedOnly: false, persona: null })}
                     disabled={!hasActiveFilters}
                   >
                     Изчисти филтрите
@@ -1638,6 +1616,11 @@ export function UsersPage() {
             </div>
           ) : null}
 
+          <div className="directory-results-heading">
+            <h2>{persona ? persona.name : "Разгледай профилите"}</h2>
+            {!error ? <p role="status" aria-live="polite">{loading ? "Зареждаме профилите…" : `${visibleConsultants.length} ${visibleConsultants.length === 1 ? "профил" : "профила"}`}</p> : null}
+          </div>
+          {!loading && !error && visibleConsultants.length > 0 ? <p className="directory-results-note">Позиционирането отчита пакета на експерта, сходните теми и отзивите.</p> : null}
           {loading ? (
             <div className="consultant-grid consultant-grid--directory consultant-grid--loading">
               {[0, 1, 2, 3].map((item) => (
@@ -1645,15 +1628,16 @@ export function UsersPage() {
               ))}
             </div>
           ) : null}
-          {error ? <div className="panel panel--error">{error}</div> : null}
+          {error ? <div className="panel panel--error" role="alert">{error}</div> : null}
 
           {!loading && !error && visibleConsultants.length === 0 ? (
             <DirectoryFeedbackState
               tone="empty"
-              title="Няма експерти за избраните филтри"
-              message="Разшири търсенето или изчисти филтрите."
-              actionLabel="Изчисти филтрите"
-              onAction={() => applyDirectoryFilters({ query: "", city: "", kind: "all", topOnly: false, recommendedOnly: false, persona: null })}
+              title={hasActiveFilters ? "Все още няма съвпадения за това търсене." : "Новите експертни профили предстоят."}
+              message={hasActiveFilters ? "Опитай друга тема или разгледай всички експерти." : "Публичните профили ще се появят, когато са готови. Свържи се с нас, ако имаш въпрос."}
+              actionLabel={hasActiveFilters ? "Виж всички експерти" : "Свържи се с нас"}
+              actionTo={hasActiveFilters ? undefined : "/contact"}
+              onAction={hasActiveFilters ? () => applyDirectoryFilters({ query: "", city: "", kind: "all", recommendedOnly: false, persona: null }) : undefined}
             />
           ) : null}
 
@@ -7156,7 +7140,7 @@ function ConsultantCard({
             {formatConsultantTypeLabel(getConsultantProfileType(consultant))}
           </span>
           {consultant.featured ? <span className="status-badge">Подбран</span> : null}
-          {match ? <span className="plan-pill">{match.score}%</span> : null}
+          {match ? <span className="plan-pill">{match.label}</span> : null}
         </div>
 
         <div className="consultant-card__identity">
