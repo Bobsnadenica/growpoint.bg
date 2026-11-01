@@ -2,6 +2,13 @@
 
 Last reviewed: 2026-11-01. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
+## Mobile dashboard review — 2026-11-01 (latest)
+
+- Client/expert profile editor now precedes points, ads, recommended profiles and package promotions; compact two-column mobile dashboard navigation and four visible profile-step buttons reduce scrolling without reducing targets below 44px. Expert hours section opens on the availability editor first. Admin clients no longer see self-matching recommendations/points.
+- Fixed next-session summary selecting past/cancelled bookings; session history is labelled “Моите сесии”. Regression covers past, cancelled and future selection. Suite 283/283, build, theme/TypeScript, secret guard and diff checks pass.
+- Local same-origin QA proxy with approved client/expert test accounts: 320/390/1440 layouts, no horizontal overflow, profile tabs and unsaved draft retention; expert availability draft add/remove without saving; expert files and notifications views load. Live independent authenticated client/expert/admin profile/bookings/notifications reads all 200, expert profile and admin metrics 200. Production smoke19/19. Newly created refresh sessions revoked; no messages, bookings, file shares, payments or account data changed deliberately.
+- Live SES read shows production access false, sending enabled: real general-recipient email remains blocked. Full new live booking/accept/reschedule/chat/file-sharing workflows, actual inbox delivery, production payments and legal/operator approvals remain unverified or pending; this review does not certify launch readiness. Existing SNS subscription drift is held.
+
 ## Dimitar weekend hours and full profile — 2026-11-01 (latest)
 
 - Owner asked for every Saturday/Sunday availability and 100% completion. Through his signed-in admin editor, selected Saturday/Sunday only and one-hour starts 09:00–16:00 (ends 17:00), Europe/Sofia, for the editor's maximum 12-week batch. Saved 184 slots, 7 November 2026 through 23 January 2027; anonymous API verifies only weekend dates and those eight start times. This is finite date generation, not an ongoing recurrence rule. No booking, price, payment or attendance was changed.

@@ -435,8 +435,10 @@ function getNextBooking(bookings: Booking[]) {
   );
 
   return (
-    sortedBookings.find((booking) => new Date(booking.scheduledAt).getTime() >= now) ||
-    sortedBookings[0] ||
+    sortedBookings.find((booking) =>
+      (booking.status === "confirmed" || booking.status === "pending") &&
+      new Date(booking.scheduledAt).getTime() >= now
+    ) ||
     null
   );
 }
@@ -4460,7 +4462,7 @@ export function DashboardPage() {
               </button>
             ) : null}
             <button type="button" onClick={() => setSessionsOpen(true)}>
-              Предстоящи сесии
+              Моите сесии
             </button>
             <button type="button" onClick={() => scrollToDashboardSection("privacy")}>
               Поверителност
@@ -4477,30 +4479,6 @@ export function DashboardPage() {
           <div role="alert" aria-live="assertive">
             {error ? <div className="panel panel--error">{error}</div> : null}
           </div>
-
-          {profile.role === "client" ? (
-            <PointsCard
-              profile={profile}
-              onEditProfile={() => scrollToDashboardSection("profile-basics")}
-            />
-          ) : null}
-
-          <Link className="dashboard-ad" to="/contact" aria-label="Рекламно пространство">
-            <span className="dashboard-ad__tag">Реклама</span>
-            {dashboardAdAsset.endsWith(".mp4") ? (
-              <video
-                src={resolvePublicUrl(dashboardAdAsset)}
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                aria-hidden="true"
-              />
-            ) : (
-              <img src={resolvePublicUrl(dashboardAdAsset)} alt="" loading="lazy" />
-            )}
-          </Link>
 
           {(profile.role === "consultant" || isAdmin) && consultantProfile ? (
             <ConsultantStatusBanner consultant={consultantProfile} />
@@ -4537,7 +4515,7 @@ export function DashboardPage() {
                   type="button"
                   onClick={() => setSessionsOpen(true)}
                 >
-                  Предстоящи сесии{bookings.length ? ` (${bookings.length})` : ""}
+                  Моите сесии{bookings.length ? ` (${bookings.length})` : ""}
                 </button>
                 <button
                   className="ghost-button"
@@ -4644,154 +4622,6 @@ export function DashboardPage() {
               )}
             </div>
           </section>
-
-          {(profile.role === "consultant" || isAdmin) ? (
-            <section
-              className="panel upgrade-preview-card upgrade-preview-card--consultant"
-              id="upgrade"
-              aria-label="Развий своя GrowPoint профил"
-            >
-              <p className="eyebrow">Пакети за експерти</p>
-              <h2>Развий своя GrowPoint профил</h2>
-              <p className="section-caption">
-                Покажи експертизата си пред повече хора и отключи допълнителни
-                възможности за представяне и позициониране.
-              </p>
-              <div className="package-plans">
-                {PACKAGE_PLANS.map((plan) => {
-                  const isCurrent =
-                    (consultantProfile?.packageTier || "start") === plan.tier;
-                  return (
-                    <article
-                      className={`package-plan package-plan--${plan.tier} ${
-                        isCurrent ? "package-plan--current" : ""
-                      }`}
-                      key={plan.tier}
-                    >
-                      <header className="package-plan__head">
-                        <p className="eyebrow">{plan.level}</p>
-                        <h3>{plan.name}</h3>
-                        <p className="form-note">{plan.tagline}</p>
-                      </header>
-                      <p>{plan.description}</p>
-                      <ul className="package-plan__features">
-                        {plan.features.map((feature) => (
-                          <li key={feature}>{feature}</li>
-                        ))}
-                      </ul>
-                      <div className="package-plan__footer">
-                        <strong>{plan.price}</strong>
-                        {isCurrent ? (
-                          <span className="status-badge status-badge--success">
-                            Текущ пакет
-                          </span>
-                        ) : (
-                          <PaymentPlaceholder description={`Пакет ${plan.name}`} amount={plan.price} />
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-              <p className="form-note">
-                Онлайн плащането се подготвя. За активиране на пакет междувременно —{" "}
-                <Link to="/contact">свържи се с нас</Link>.
-              </p>
-            </section>
-          ) : profile.plan !== "pro" ? (
-            <section
-              className="panel upgrade-preview-card upgrade-preview-card--client"
-              id="upgrade"
-              aria-label="Надграждане до GrowPoint Pro"
-            >
-              <span className="coming-soon-tape" aria-hidden="true">
-                <span>Скоро</span>
-              </span>
-              <p className="eyebrow">Скоро · GrowPoint Pro</p>
-              <h2>Надгради до GrowPoint Pro</h2>
-              <p className="section-caption">
-                Pro акаунтът ще ти даде повече инструменти, за да намериш правилния
-                консултант по-бързо.
-              </p>
-              <div className="upgrade-preview-card__benefits">
-                {[
-                  "Запазени и приоритетни консултанти",
-                  "Разширена история на сесиите",
-                  "По-бърза връзка с консултанти",
-                  "Ранен достъп до нови функции"
-                ].map((benefit) => (
-                  <span className="chip chip--soft" key={benefit}>
-                    {benefit}
-                  </span>
-                ))}
-              </div>
-              <div className="upgrade-preview-card__footer">
-                <Link className="ghost-button" to="/contact">
-                  Заяви интерес
-                </Link>
-              </div>
-            </section>
-          ) : null}
-
-          {(profile.role === "consultant" || isAdmin) ? <ExpertBenefitsPanel key={profile.userId} token={token} /> : null}
-
-          {profile.role === "client" && profileCompletion >= 100 ? (
-            <section className="panel" id="matches">
-              <p className="eyebrow">Подходящи консултанти</p>
-              <h2>Профили с най-добро съвпадение и видими свободни часове</h2>
-              {dashboardMatchedConsultants.length ? (
-                <div className="info-grid info-grid--match">
-                  {dashboardMatchedConsultants.map(({ consultant, match }) => (
-                    <article className="info-card match-card" key={consultant.consultantId}>
-                      <div className="match-card__header">
-                        <AvatarMedia
-                          src={consultant.avatarUrl}
-                          name={consultant.name}
-                          className="match-card__avatar"
-                        />
-                        <div className="match-card__content">
-                          <span
-                            className={match ? "status-badge status-badge--success" : "plan-pill"}
-                          >
-                            {match ? `${match.score}% съвпадение` : "Профил"}
-                          </span>
-                          <h3>{consultant.name}</h3>
-                          <p>{consultant.headline}</p>
-                        </div>
-                      </div>
-                      <p>{match?.note || "Подходящ консултант според профила ти."}</p>
-                      <div className="match-card__meta">
-                        <span>{getConsultantLocationLabel(consultant)}</span>
-                        <span>{getSessionLengthLabel(consultant)}</span>
-                        <span>{consultant.sessionModes[0] || "Онлайн"}</span>
-                      </div>
-                      <div className="match-card__slots">
-                        {getUpcomingAvailabilitySlots(consultant.availability, 3).length ? (
-                          getUpcomingAvailabilitySlots(consultant.availability, 3).map((slot) => (
-                            <span className="chip chip--soft" key={slot}>
-                              {formatAvailabilityShortLabel(slot)}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="chip chip--soft">Часовете ще се покажат скоро</span>
-                        )}
-                      </div>
-                      <div className="match-card__actions">
-                        <Link className="primary-button" to={`/consultants/${consultant.slug}`}>
-                          Виж профила
-                        </Link>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="panel empty-state">
-                  Все още няма активни публични консултанти, които да бъдат предложени според
-                  профила ти.
-                </div>
-              )}
-            </section>
-          ) : null}
 
           {(profile.role !== "consultant" && !isAdmin) ? (
           <form className="panel form-stack" id="profile-basics" noValidate onSubmit={saveProfile}>
@@ -5617,6 +5447,15 @@ export function DashboardPage() {
                   title="Как и кога могат да те резервират?"
                   hint="Езици, формат и свободни часове."
                 >
+                  <ConsultantAvailabilityEditor
+                    availability={consultantAvailability}
+                    savedAvailability={consultantProfile?.availability || []}
+                    occupiedSlots={occupiedAvailability}
+                    sessionLengthMinutes={consultantProfile?.sessionLengthMinutes || 60}
+                    onChange={setConsultantAvailability}
+                    saving={consultantSaving}
+                    saveError={availabilitySaveError}
+                  />
                   <div className="two-column">
                     <label>
                       Езици
@@ -5662,15 +5501,6 @@ export function DashboardPage() {
                     value={consultantAvailability.join("\n")}
                     readOnly
                   />
-                  <ConsultantAvailabilityEditor
-                    availability={consultantAvailability}
-                    savedAvailability={consultantProfile?.availability || []}
-                    occupiedSlots={occupiedAvailability}
-                    sessionLengthMinutes={consultantProfile?.sessionLengthMinutes || 60}
-                    onChange={setConsultantAvailability}
-                    saving={consultantSaving}
-                    saveError={availabilitySaveError}
-                  />
                     </QuestionBlock>
                   </div>
                 </div>
@@ -5704,6 +5534,178 @@ export function DashboardPage() {
                 </button>
               </div>
             </form>
+          ) : null}
+
+          {profile.role === "client" && !isAdmin ? (
+            <PointsCard
+              profile={profile}
+              onEditProfile={() => scrollToDashboardSection("profile-basics")}
+            />
+          ) : null}
+
+          <Link className="dashboard-ad" to="/contact" aria-label="Рекламно пространство">
+            <span className="dashboard-ad__tag">Реклама</span>
+            {dashboardAdAsset.endsWith(".mp4") ? (
+              <video
+                src={resolvePublicUrl(dashboardAdAsset)}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                aria-hidden="true"
+              />
+            ) : (
+              <img src={resolvePublicUrl(dashboardAdAsset)} alt="" loading="lazy" />
+            )}
+          </Link>
+
+          {(profile.role === "consultant" || isAdmin) ? (
+            <section
+              className="panel upgrade-preview-card upgrade-preview-card--consultant"
+              id="upgrade"
+              aria-label="Развий своя GrowPoint профил"
+            >
+              <p className="eyebrow">Пакети за експерти</p>
+              <h2>Развий своя GrowPoint профил</h2>
+              <p className="section-caption">
+                Покажи експертизата си пред повече хора и отключи допълнителни
+                възможности за представяне и позициониране.
+              </p>
+              <div className="package-plans">
+                {PACKAGE_PLANS.map((plan) => {
+                  const isCurrent =
+                    (consultantProfile?.packageTier || "start") === plan.tier;
+                  return (
+                    <article
+                      className={`package-plan package-plan--${plan.tier} ${
+                        isCurrent ? "package-plan--current" : ""
+                      }`}
+                      key={plan.tier}
+                    >
+                      <header className="package-plan__head">
+                        <p className="eyebrow">{plan.level}</p>
+                        <h3>{plan.name}</h3>
+                        <p className="form-note">{plan.tagline}</p>
+                      </header>
+                      <p>{plan.description}</p>
+                      <ul className="package-plan__features">
+                        {plan.features.map((feature) => (
+                          <li key={feature}>{feature}</li>
+                        ))}
+                      </ul>
+                      <div className="package-plan__footer">
+                        <strong>{plan.price}</strong>
+                        {isCurrent ? (
+                          <span className="status-badge status-badge--success">
+                            Текущ пакет
+                          </span>
+                        ) : (
+                          <PaymentPlaceholder description={`Пакет ${plan.name}`} amount={plan.price} />
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+              <p className="form-note">
+                Онлайн плащането се подготвя. За активиране на пакет междувременно —{" "}
+                <Link to="/contact">свържи се с нас</Link>.
+              </p>
+            </section>
+          ) : profile.plan !== "pro" ? (
+            <section
+              className="panel upgrade-preview-card upgrade-preview-card--client"
+              id="upgrade"
+              aria-label="Надграждане до GrowPoint Pro"
+            >
+              <span className="coming-soon-tape" aria-hidden="true">
+                <span>Скоро</span>
+              </span>
+              <p className="eyebrow">Скоро · GrowPoint Pro</p>
+              <h2>Надгради до GrowPoint Pro</h2>
+              <p className="section-caption">
+                Pro акаунтът ще ти даде повече инструменти, за да намериш правилния
+                консултант по-бързо.
+              </p>
+              <div className="upgrade-preview-card__benefits">
+                {[
+                  "Запазени и приоритетни консултанти",
+                  "Разширена история на сесиите",
+                  "По-бърза връзка с консултанти",
+                  "Ранен достъп до нови функции"
+                ].map((benefit) => (
+                  <span className="chip chip--soft" key={benefit}>
+                    {benefit}
+                  </span>
+                ))}
+              </div>
+              <div className="upgrade-preview-card__footer">
+                <Link className="ghost-button" to="/contact">
+                  Заяви интерес
+                </Link>
+              </div>
+            </section>
+          ) : null}
+
+          {(profile.role === "consultant" || isAdmin) ? <ExpertBenefitsPanel key={profile.userId} token={token} /> : null}
+
+          {profile.role === "client" && !isAdmin && profileCompletion >= 100 ? (
+            <section className="panel" id="matches">
+              <p className="eyebrow">Подходящи консултанти</p>
+              <h2>Профили с най-добро съвпадение и видими свободни часове</h2>
+              {dashboardMatchedConsultants.length ? (
+                <div className="info-grid info-grid--match">
+                  {dashboardMatchedConsultants.map(({ consultant, match }) => (
+                    <article className="info-card match-card" key={consultant.consultantId}>
+                      <div className="match-card__header">
+                        <AvatarMedia
+                          src={consultant.avatarUrl}
+                          name={consultant.name}
+                          className="match-card__avatar"
+                        />
+                        <div className="match-card__content">
+                          <span
+                            className={match ? "status-badge status-badge--success" : "plan-pill"}
+                          >
+                            {match ? `${match.score}% съвпадение` : "Профил"}
+                          </span>
+                          <h3>{consultant.name}</h3>
+                          <p>{consultant.headline}</p>
+                        </div>
+                      </div>
+                      <p>{match?.note || "Подходящ консултант според профила ти."}</p>
+                      <div className="match-card__meta">
+                        <span>{getConsultantLocationLabel(consultant)}</span>
+                        <span>{getSessionLengthLabel(consultant)}</span>
+                        <span>{consultant.sessionModes[0] || "Онлайн"}</span>
+                      </div>
+                      <div className="match-card__slots">
+                        {getUpcomingAvailabilitySlots(consultant.availability, 3).length ? (
+                          getUpcomingAvailabilitySlots(consultant.availability, 3).map((slot) => (
+                            <span className="chip chip--soft" key={slot}>
+                              {formatAvailabilityShortLabel(slot)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="chip chip--soft">Часовете ще се покажат скоро</span>
+                        )}
+                      </div>
+                      <div className="match-card__actions">
+                        <Link className="primary-button" to={`/consultants/${consultant.slug}`}>
+                          Виж профила
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="panel empty-state">
+                  Все още няма активни публични консултанти, които да бъдат предложени според
+                  профила ти.
+                </div>
+              )}
+            </section>
           ) : null}
 
           {(() => {
@@ -6007,7 +6009,7 @@ export function DashboardPage() {
                 className="modal-backdrop"
                 role="dialog"
                 aria-modal="true"
-                aria-label="Предстоящи сесии"
+                aria-label="Моите сесии"
                 onClick={(event) => {
                   if (event.target === event.currentTarget) setSessionsOpen(false);
                 }}
@@ -6016,7 +6018,7 @@ export function DashboardPage() {
                   {error ? <p className="form-note form-note--error" role="alert">{error}</p> : null}
                   <header className="dashboard-bookings__head">
                     <div>
-                      <h2>Предстоящи сесии</h2>
+                      <h2>Моите сесии</h2>
                       <p className="section-caption">
                         Всички заявки и потвърдени срещи са събрани тук.
                       </p>
