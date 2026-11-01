@@ -4,6 +4,12 @@ Last reviewed: 2026-11-01. This is the canonical project memory. The historical 
 
 ## Company mentor replaces demonstration — 2026-11-01 (latest)
 
+### Optional admin expert profiles — 2026-11-01
+
+- Admin role is a Cognito group capability, separate from the stored client/consultant role. `/admin` remains the normal landing page; its personal-profile link opens `/dashboard?profile=1` using the existing expert editor. Admin permissions/account role remain unchanged.
+- Existing authenticated self-profile endpoints allow admins to create private drafts and save only their own expert data. Admin drafts default hidden and complimentary. Boolean `publicProfileEnabled` controls shown/hidden on save; non-admin clients cannot use this to create expert profiles. No new routes, resources or recurring service. Admin expert booking reads and benefit ownership also accept the separate admin capability.
+- Regression suite 281/281 passes, including backend show/hide/client denial/role preservation and admin editor loading. Build/theme/TypeScript and secret checks pass. Deployment/live verification is recorded in the task handoff; the unrelated SNS subscription drift remains held.
+
 - Owner's signed-in Apple account was edited through Safari: public name The Privileged Company, mentor type, slug `the-privileged-company`, Bulgarian company biography, expertise, target clients, practical session approach, languages and discovery tags. Branding uses the existing company logo uploaded through the normal profile form. Content follows the company's published services; no invented qualifications or testimonials.
 - Existing authenticated admin APIs granted a promotional Spotlight package, explicitly shown visibility and featured placement to this company profile. This is an admin grant, not a payment. The former `growpoint-demo-consultant` was hidden using the visibility API; its account/history remains intact. No identity deletion or booking mutation. Fresh anonymous company API returns 200 and former demo API returns 404.
 - Public browser confirms company logo loads, full text renders, and company appears in homepage Spotlight and featured expert card without the fictional example. Completion is 85%: education/certifications and future availability remain empty. No appointments were invented; booking remains unavailable until real slots are supplied. All new admin refresh sessions revoked. No frontend/backend deployment was necessary for these saved data changes.

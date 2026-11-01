@@ -117,6 +117,7 @@ type UpdateConsultantInput = Partial<
   sessionModes?: string[];
   tags?: string[];
   availability?: string[];
+  publicProfileEnabled?: boolean;
 };
 
 function requireBackend() {

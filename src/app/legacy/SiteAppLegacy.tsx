@@ -3538,6 +3538,7 @@ export function DashboardPage() {
   const { user, token, loading, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const dashboardLocation = useLocation();
+  const adminProfileView = new URLSearchParams(dashboardLocation.search).get("profile") === "1";
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [consultantProfile, setConsultantProfile] = useState<ConsultantProfile | null>(null);
   const [directoryConsultants, setDirectoryConsultants] = useState<ConsultantProfile[]>([]);
@@ -3622,7 +3623,7 @@ export function DashboardPage() {
       if (nextProfile.termsAcceptanceRequired || hasPendingAccountDeletion(nextProfile)) {
         return Promise.all([nextProfile, [] as Booking[], null, [] as ConsultantProfile[], { items: [] as NotificationItem[], unreadCount: 0 }]);
       }
-      if (isAdmin && !nextProfile.termsAcceptanceRequired) {
+      if (isAdmin && !adminProfileView && !nextProfile.termsAcceptanceRequired) {
         if (mounted) navigate("/admin", { replace: true });
         return null;
       }
@@ -3670,7 +3671,7 @@ export function DashboardPage() {
     return () => {
       mounted = false;
     };
-  }, [dashboardReloadKey, isAdmin, navigate, token]);
+  }, [dashboardReloadKey, isAdmin, adminProfileView, navigate, token]);
 
   useEffect(() => {
     setConsultantAvailability(getUpcomingAvailabilitySlots(consultantProfile?.availability || []));
@@ -3720,7 +3721,7 @@ export function DashboardPage() {
     );
   }
 
-  if (isAdmin && profile && !hasPendingAccountDeletion(profile) && !profile.termsAcceptanceRequired) {
+  if (isAdmin && !adminProfileView && profile && !hasPendingAccountDeletion(profile) && !profile.termsAcceptanceRequired) {
     return <Navigate to="/admin" replace />;
   }
 
@@ -4141,6 +4142,7 @@ export function DashboardPage() {
       }
 
       const updated = await api.updateMyConsultantProfile(token, {
+        ...(isAdmin ? { publicProfileEnabled: formData.get("publicProfileEnabled") === "on" } : {}),
         slug: resolvedSlug,
         name: displayName,
         profileType: String(
@@ -4219,13 +4221,13 @@ export function DashboardPage() {
   }
 
   const membershipNote =
-    profile.role === "consultant"
+    (profile.role === "consultant" || isAdmin)
       ? "Публичният ти профил, свободните слотове и съвпаденията с професионалисти се управляват оттук."
       : "Профилът, документите и достъпът до кариерни консултанти се управляват оттук.";
-  const profileCompletion = getProfileCompletion(profile, consultantProfile);
+  const profileCompletion = getProfileCompletion(isAdmin ? { ...profile, role: "consultant" } : profile, consultantProfile);
   const nextBooking = getNextBooking(bookings);
   const consultantNextAvailable =
-    profile.role === "consultant"
+    (profile.role === "consultant" || isAdmin)
       ? getUpcomingAvailabilitySlots(consultantAvailability, 1)[0] || ""
       : "";
   const dashboardMatchedConsultants =
@@ -4242,7 +4244,7 @@ export function DashboardPage() {
   const consultantPublicSlug =
     consultantProfile?.slug || slugifyValue(consultantProfile?.name || profile.name);
   const consultantPublicUrl =
-    profile.role === "consultant" && consultantPublicSlug
+    (profile.role === "consultant" || isAdmin) && consultantPublicSlug
       ? typeof window !== "undefined"
         ? `${window.location.origin}${import.meta.env.BASE_URL}consultants/${consultantPublicSlug}/`
         : `/consultants/${consultantPublicSlug}`
@@ -4398,7 +4400,7 @@ export function DashboardPage() {
               <strong>{profile.name}</strong>
               <span>
                 {profile.headline ||
-                  (profile.role === "consultant"
+                  ((profile.role === "consultant" || isAdmin)
                     ? "Добави headline за публичния си профил"
                     : "Добави headline за по-силно присъствие")}
               </span>
@@ -4413,7 +4415,7 @@ export function DashboardPage() {
                 <ProfileCompletionMeter value={profileCompletion} compact />
               </dd>
             </div>
-            {profile.role === "consultant" ? (
+            {(profile.role === "consultant" || isAdmin) ? (
               <div>
                 <dt>
                   <button
@@ -4441,7 +4443,7 @@ export function DashboardPage() {
               Преглед
             </button>
             <Link to="/notifications">Известия</Link>
-            {profile.role === "consultant" ? (
+            {(profile.role === "consultant" || isAdmin) ? (
               <button type="button" onClick={() => scrollToDashboardSection("consultant-profile")}>
                 Публичен профил
               </button>
@@ -4451,7 +4453,7 @@ export function DashboardPage() {
               </button>
             )}
             <Link to="/files">Файлове</Link>
-            {profile.role !== "consultant" ? (
+            {(profile.role !== "consultant" && !isAdmin) ? (
               <button type="button" onClick={() => scrollToDashboardSection("matches")}>
                 Подходящи консултанти
               </button>
@@ -4499,7 +4501,7 @@ export function DashboardPage() {
             )}
           </Link>
 
-          {profile.role === "consultant" && consultantProfile ? (
+          {(profile.role === "consultant" || isAdmin) && consultantProfile ? (
             <ConsultantStatusBanner consultant={consultantProfile} />
           ) : null}
 
@@ -4520,7 +4522,7 @@ export function DashboardPage() {
                 <Link className="ghost-button" to="/files">
                   Файлове
                 </Link>
-                {profile.role === "consultant" ? (
+                {(profile.role === "consultant" || isAdmin) ? (
                   <button
                     className="ghost-button"
                     type="button"
@@ -4541,7 +4543,7 @@ export function DashboardPage() {
                   type="button"
                   onClick={() => {
                     const publicPath =
-                      profile.role === "consultant" && consultantProfile
+                      (profile.role === "consultant" || isAdmin) && consultantProfile
                         ? `/consultants/${consultantProfile.slug}`
                         : `/u/${profile.userId}`;
                     const url =
@@ -4563,12 +4565,12 @@ export function DashboardPage() {
                 <Link
                   className="primary-button"
                   to={
-                    profile.role === "consultant" && consultantProfile
+                    (profile.role === "consultant" || isAdmin) && consultantProfile
                       ? `/consultants/${consultantProfile.slug}`
                       : `/u/${profile.userId}`
                   }
                   state={
-                    profile.role === "consultant" && consultantProfile
+                    (profile.role === "consultant" || isAdmin) && consultantProfile
                       ? undefined
                       : {
                           // Seed the member page so it renders instantly from the
@@ -4594,7 +4596,7 @@ export function DashboardPage() {
                         }
                   }
                 >
-                  {profile.role === "consultant" && consultantProfile
+                  {(profile.role === "consultant" || isAdmin) && consultantProfile
                     ? "Виж публичната страница"
                     : "Виж публичния си профил"}
                 </Link>
@@ -4612,7 +4614,7 @@ export function DashboardPage() {
                     : "Подреди няколко детайла."}
                 </p>
               </article>
-              {profile.role === "consultant" ? (
+              {(profile.role === "consultant" || isAdmin) ? (
                 <button
                   className="summary-card summary-card--button"
                   type="button"
@@ -4642,7 +4644,7 @@ export function DashboardPage() {
             </div>
           </section>
 
-          {profile.role === "consultant" ? (
+          {(profile.role === "consultant" || isAdmin) ? (
             <section
               className="panel upgrade-preview-card upgrade-preview-card--consultant"
               id="upgrade"
@@ -4730,7 +4732,7 @@ export function DashboardPage() {
             </section>
           ) : null}
 
-          {profile.role === "consultant" ? <ExpertBenefitsPanel key={profile.userId} token={token} /> : null}
+          {(profile.role === "consultant" || isAdmin) ? <ExpertBenefitsPanel key={profile.userId} token={token} /> : null}
 
           {profile.role === "client" && profileCompletion >= 100 ? (
             <section className="panel" id="matches">
@@ -4790,7 +4792,7 @@ export function DashboardPage() {
             </section>
           ) : null}
 
-          {profile.role !== "consultant" ? (
+          {(profile.role !== "consultant" && !isAdmin) ? (
           <form className="panel form-stack" id="profile-basics" noValidate onSubmit={saveProfile}>
             <header className="dashboard-form-head">
               <p className="eyebrow">Основен профил</p>
@@ -5194,7 +5196,7 @@ export function DashboardPage() {
           </form>
           ) : null}
 
-          {profile.role === "consultant" ? (
+          {(profile.role === "consultant" || isAdmin) ? (
             <form
               className={`panel form-stack${activeConsultantSection === "booking" ? " consultant-hours-form" : ""}`}
               id="consultant-profile"
@@ -5205,6 +5207,11 @@ export function DashboardPage() {
               <header className="dashboard-form-head">
                 <p className="eyebrow">Публичен профил</p>
                 <h2>Подготви страницата, която хората ще намират и резервират.</h2>
+                {isAdmin ? <label>
+                  <input type="checkbox" name="publicProfileEnabled" defaultChecked={consultantProfile?.visibilityMode === "shown" || consultantProfile?.isPublic === true} />
+                  Показвай моя профил публично
+                  <span className="form-note">Запази профила, за да приложиш промяната. Изключването го скрива от каталога и публичната страница; админ достъпът ти остава активен.</span>
+                </label> : null}
               </header>
               <div className="profile-setup-shell">
                 <div className="profile-setup-shell__header">
@@ -5694,7 +5701,7 @@ export function DashboardPage() {
           ) : null}
 
           {(() => {
-            const consultantView = profile.role === "consultant";
+            const consultantView = (profile.role === "consultant" || isAdmin);
             const now = Date.now();
             const sortedAsc = [...bookings].sort(
               (left, right) =>

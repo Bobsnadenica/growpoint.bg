@@ -142,7 +142,7 @@ test("required-agreement dashboard renders onboarding without protected reads, i
   visit(file);
   assert.ok(loader);
   const calls = [];
-  const context = { isAdmin: false, mounted: true, token: "fixture-token", navigate: path => calls.push(path), Promise,
+  const context = { isAdmin: false, adminProfileView: false, mounted: true, token: "fixture-token", navigate: path => calls.push(path), Promise,
     hasPendingAccountDeletion: profile => Boolean(profile.deletionScheduledAt || profile.deletionEffectiveAt),
     api: { listBookings: async () => { calls.push("bookings"); return []; }, getMyConsultantProfile: async () => null, listConsultants: async () => [], listMyNotifications: async () => ({items:[],unreadCount:0}) } };
   const code = ts.transpileModule(`this.run = ${loader.getText(file)};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -157,6 +157,11 @@ test("required-agreement dashboard renders onboarding without protected reads, i
   assert.equal(calls.length, 0);
   await context.run({userId:"established-admin"});
   assert.deepEqual(calls, ["/admin"]);
+  calls.length = 0;
+  context.adminProfileView = true;
+  await context.run({ userId: "established-admin" });
+  assert.deepEqual(calls, ["bookings"]);
+  context.adminProfileView = false;
   context.isAdmin = false;
   calls.length = 0;
   await context.run({userId:"established-client"});

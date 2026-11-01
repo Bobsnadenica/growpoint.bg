@@ -111,7 +111,7 @@ test("consultant save blocks duplicate submits and refreshes occupied metadata w
   let reject;
   const pending = new Promise((_, fail) => { reject = fail; });
   const context = {
-    FormData: class { get() { return null; } }, File: class {}, token: "fixture-token", consultantProfile: saved, consultantAvailability: [FIRST, SECOND], consultantSaveBusy: { current: false },
+    FormData: class { get() { return null; } }, File: class {}, isAdmin: false, token: "fixture-token", consultantProfile: saved, consultantAvailability: [FIRST, SECOND], consultantSaveBusy: { current: false },
     setConsultantSaving: value => { saving = value; }, setAvailabilitySaveError: value => { error = value; }, setError() {}, setMessage() {}, setProfile() {},
     setConsultantAvailability() { draftUpdates++; }, setConsultantProfile: updater => { saved = typeof updater === "function" ? updater(saved) : updater; },
     getUpcomingAvailabilitySlots: dates.getUpcomingAvailabilitySlots, slugifyValue: () => "fixture-expert", parseListValue: () => [],

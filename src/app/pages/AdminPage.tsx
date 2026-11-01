@@ -409,6 +409,7 @@ export default function AdminPage() {
           <div className="page-intro">
             <p className="eyebrow">Админ</p>
             <h1>Управление на GrowPoint</h1>
+            <Link className="secondary-button" to="/dashboard?profile=1">Моят публичен профил</Link>
             <p className="hero__lede">
               Кани нови експерти, следи активните профили и ограничавай акаунти при
               нужда. Одобрение вече не е необходимо — експертните профили са платени

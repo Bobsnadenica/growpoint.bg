@@ -3060,15 +3060,15 @@ async function getMyConsultant(event) {
 
   if (!consultant) {
     const user = await getUserBySub(claims.sub);
-    if (!user || user.role !== "consultant") return notFound("Consultant profile not found.");
+    if (!user || (user.role !== "consultant" && !isAdmin(claims))) return notFound("Consultant profile not found.");
     assertNotRestricted(user);
     // Console-created experts need an editable draft after role reconciliation.
     // A draft is private and grants no membership or payment entitlement.
-    consultant = await putConsultantDraftWithUniqueSlug(createConsultantDraft({
+    consultant = await putConsultantDraftWithUniqueSlug({ ...createConsultantDraft({
       userId: claims.sub, name: user.name, email: user.email, plan: user.plan,
       city: user.city, headline: user.headline, avatarUrl: user.avatarUrl,
-      comped: user.compedConsultant === true
-    }));
+      comped: user.compedConsultant === true || isAdmin(claims)
+    }), ...(isAdmin(claims) ? { visibilityMode: "hidden" } : {}) });
   }
 
   return response(200, { ...await decorateConsultantMedia(consultant), benefits: expertBenefitsSummary(consultant) });
@@ -3087,7 +3087,7 @@ async function ownedExpertForBenefits(event) {
   const claims = requireAuth(event);
   const user = await getUserBySub(claims.sub);
   assertNotRestricted(user);
-  if (!user || user.role !== "consultant") throw Object.assign(new Error("Само експерт може да управлява тези привилегии."), { statusCode: 403 });
+  if (!user || (user.role !== "consultant" && !isAdmin(claims))) throw Object.assign(new Error("Само експерт може да управлява тези привилегии."), { statusCode: 403 });
   const consultant = await getConsultantByOwner(claims.sub);
   if (!consultant || consultant.ownerUserId !== claims.sub) throw Object.assign(new Error("Профилът не е намерен."), { statusCode: 404 });
   return consultant;
@@ -3109,7 +3109,7 @@ async function createMyBenefitRequest(event) {
     }) },
     { ConditionCheck: { TableName: env.usersTable, Key: { userId: consultant.ownerUserId },
       ConditionExpression: USER_MUTATION_GUARD.condition + " AND #benefitRole = :benefitRole", ExpressionAttributeNames: { "#benefitRole": "role" },
-      ExpressionAttributeValues: { ...USER_MUTATION_GUARD.values, ":benefitRole": "consultant" } } }
+      ExpressionAttributeValues: { ...USER_MUTATION_GUARD.values, ":benefitRole": (await getUserBySub(consultant.ownerUserId))?.role || "consultant" } } }
   ] }));
   return response(201, { request: created.request, benefits: expertBenefitsSummary({ ...consultant, spotlightBenefitRequests: created.requests }) }, { "Cache-Control": "no-store" });
 }
@@ -3142,7 +3142,7 @@ async function updateMyConsultant(event) {
   const user = await getUserBySub(claims.sub);
   assertNotRestricted(user);
 
-  if (!user || user.role !== "consultant") {
+  if (!user || (user.role !== "consultant" && !isAdmin(claims))) {
     return forbidden("Only consultant accounts can manage consultant profiles.");
   }
 
@@ -3209,7 +3209,7 @@ async function updateMyConsultant(event) {
     featured: baseConsultant.featured ?? false,
     // Active membership flows from an admin invite (comped) — preserve it, and
     // pick it up from the owner's user record for a freshly-created draft.
-    comped: baseConsultant.comped === true || user.compedConsultant === true,
+    comped: baseConsultant.comped === true || user.compedConsultant === true || isAdmin(claims),
     restricted: baseConsultant.restricted === true,
     rating: baseConsultant.rating ?? 0,
     reviewCount: baseConsultant.reviewCount ?? 0,
@@ -3277,6 +3277,14 @@ async function updateMyConsultant(event) {
   // Auto-publish: an ACTIVE (paid or admin-invited/comped) consultant whose
   // profile is complete becomes public automatically — no admin approval step.
   // Inactive accounts never go public; they must be invited or pay first.
+  if (isAdmin(claims) && typeof body.publicProfileEnabled !== "undefined") {
+    if (typeof body.publicProfileEnabled !== "boolean") return badRequest("publicProfileEnabled must be a boolean.");
+    nextConsultant.visibilityMode = body.publicProfileEnabled ? "shown" : "hidden";
+    nextConsultant.isPublic = body.publicProfileEnabled;
+  } else if (isAdmin(claims) && !current) {
+    nextConsultant.visibilityMode = "hidden";
+    nextConsultant.isPublic = false;
+  }
   Object.assign(nextConsultant, applyAutomaticVisibility(nextConsultant));
 
   try {
@@ -4728,7 +4736,7 @@ async function listBookings(event) {
     return notFound("Profile not found.");
   }
 
-  if (user.role === "consultant") {
+  if (user.role === "consultant" || isAdmin(claims)) {
     const consultant = await getConsultantByOwner(claims.sub);
 
     if (!consultant) {

@@ -2,6 +2,8 @@
 
 The live featured mentor is now [The Privileged Company](https://www.growpoint.bg/consultants/the-privileged-company). Its company description and logo replace the earlier fictional demonstration profile, which is hidden from public discovery. Its promotional package is admin-granted. Real appointment times are still to be supplied; no example availability or qualifications have been invented.
 
+Admins can also maintain an optional mentor/consultant profile: **Admin panel → Моят публичен профил**. New admin profiles start hidden. The editor's **Показвай моя профил публично** checkbox is applied when saving; disabling it hides the directory entry and public page without affecting admin access. Admin-owned expert profiles receive complimentary access; no payment is recorded.
+
 GrowPoint is a Bulgarian career-consulting marketplace. It helps clients discover consultants and mentors, request sessions, manage documents, and continue the conversation around a confirmed session.
 
 The project is a React single-page app with a small serverless AWS backend. Its public interface is Bulgarian; the code and operational documentation are English.
