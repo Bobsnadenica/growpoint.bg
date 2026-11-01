@@ -11,13 +11,14 @@ test('admin self-profile can be shown and hidden without changing account role; 
     writes.push(command.input);
     return {};
   }}).test;
-  const request = (enabled, admin = true) => ({ body: JSON.stringify({name: 'Owner', publicProfileEnabled: enabled}), requestContext: {authorizer: {jwt: {claims: {sub: 'owner', 'cognito:groups': admin ? ['admin'] : []}}}} });
+  const request = (enabled, admin = true) => ({ body: JSON.stringify({name: 'Owner', publicProfileEnabled: enabled, spotlightBannerEnabled: enabled}), requestContext: {authorizer: {jwt: {claims: {sub: 'owner', 'cognito:groups': admin ? ['admin'] : []}}}} });
   for (const enabled of [true, false]) {
     const response = await api.updateMyConsultant(request(enabled));
     assert.equal(response.statusCode, 200);
     const profile = JSON.parse(response.body);
     assert.equal(profile.visibilityMode, enabled ? 'shown' : 'hidden');
     assert.equal(profile.isPublic, enabled);
+    assert.equal(profile.spotlightBannerEnabled, enabled);
     assert.equal(profile.comped, true);
     assert.equal(user.role, 'client');
   }

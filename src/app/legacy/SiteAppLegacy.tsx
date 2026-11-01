@@ -1230,6 +1230,7 @@ export function HomePage() {
   const featured = useMemo(
     () =>
       [...homeConsultants]
+        .filter(profile => profile.packageTier !== "spotlight" || profile.spotlightBannerEnabled === false)
         .sort((left, right) => {
           // Стр. 1.1: the home showcase belongs to SPOTLIGHT-package profiles
           // first (then Grow), before the admin-featured and top-rated ones.
@@ -4142,7 +4143,7 @@ export function DashboardPage() {
       }
 
       const updated = await api.updateMyConsultantProfile(token, {
-        ...(isAdmin ? { publicProfileEnabled: formData.get("publicProfileEnabled") === "on" } : {}),
+        ...(isAdmin ? { publicProfileEnabled: formData.get("publicProfileEnabled") === "on", spotlightBannerEnabled: formData.get("spotlightBannerEnabled") === "on" } : {}),
         slug: resolvedSlug,
         name: displayName,
         profileType: String(
@@ -5211,6 +5212,11 @@ export function DashboardPage() {
                   <input type="checkbox" name="publicProfileEnabled" defaultChecked={consultantProfile?.visibilityMode === "shown" || consultantProfile?.isPublic === true} />
                   Показвай моя профил публично
                   <span className="form-note">Запази профила, за да приложиш промяната. Изключването го скрива от каталога и публичната страница; админ достъпът ти остава активен.</span>
+                </label> : null}
+                {isAdmin ? <label>
+                  <input type="checkbox" name="spotlightBannerEnabled" defaultChecked={consultantProfile?.spotlightBannerEnabled !== false} />
+                  Показвай Spotlight банер на началната страница
+                  <span className="form-note">За пакет Spotlight. При изключен банер профилът запазва значката „GrowPoint суперзвезди“ и може да се показва сред експертите.</span>
                 </label> : null}
               </header>
               <div className="profile-setup-shell">

@@ -158,6 +158,7 @@ export interface UploadedDocument {
 }
 
 export interface ConsultantProfile {
+  spotlightBannerEnabled?: boolean;
   visibilityMode?: "auto" | "shown" | "hidden";
   consultantId: string;
   ownerUserId: string;

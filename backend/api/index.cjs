@@ -3285,6 +3285,10 @@ async function updateMyConsultant(event) {
     nextConsultant.visibilityMode = "hidden";
     nextConsultant.isPublic = false;
   }
+  if (isAdmin(claims) && typeof body.spotlightBannerEnabled !== "undefined") {
+    if (typeof body.spotlightBannerEnabled !== "boolean") return badRequest("spotlightBannerEnabled must be a boolean.");
+    nextConsultant.spotlightBannerEnabled = body.spotlightBannerEnabled;
+  }
   Object.assign(nextConsultant, applyAutomaticVisibility(nextConsultant));
 
   try {

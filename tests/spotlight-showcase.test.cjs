@@ -62,6 +62,11 @@ test("Spotlight portrait is visible without an optional cover", () => {
   assert.equal(fixture.nodes().some(node => node.props?.className === "spotlight-showcase__initials"), false);
 });
 
+test("an expert can keep Superstar tier without a Spotlight banner", () => {
+  const view = mount([profile({ spotlightBannerEnabled: false })]);
+  assert.equal(view.text(), "");
+});
+
 test("optional cover complements rather than replaces the portrait", () => {
   const expert = profile({ heroUrl: "https://media.example.invalid/cover.jpg" });
   const fixture = mount([expert]);

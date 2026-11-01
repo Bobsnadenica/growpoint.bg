@@ -4,7 +4,7 @@ import type { ConsultantProfile } from "../../lib/types";
 import { resolvePublicUrl } from "../../lib/url";
 
 export default function SpotlightShowcase({ profiles }: { profiles: ConsultantProfile[] }) {
-  const spotlight = profiles.filter(profile => profile.packageTier === "spotlight");
+  const spotlight = profiles.filter(profile => profile.packageTier === "spotlight" && profile.spotlightBannerEnabled !== false);
   if (!spotlight.length) return null;
   return <section className="section section--tight" aria-label="Spotlight експерти">
     <div className="container spotlight-showcase">

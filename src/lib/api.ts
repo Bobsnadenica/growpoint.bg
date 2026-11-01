@@ -118,6 +118,7 @@ type UpdateConsultantInput = Partial<
   tags?: string[];
   availability?: string[];
   publicProfileEnabled?: boolean;
+  spotlightBannerEnabled?: boolean;
 };
 
 function requireBackend() {
