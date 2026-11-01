@@ -72,9 +72,30 @@ function mount(extra = {}) {
     nodes, text, button, get props() { return props; },
     change(type, value) { nodes().find(node => node.type === "input" && node.props.type === type).props.onChange({ target: { value } }); render(); },
     click(label) { assert.ok(button(label), label); button(label).props.onClick(); render(); },
+    choose(id) { const control = nodes().find(node => node.type === "button" && node.props["aria-controls"] === id); assert.ok(control); control.props.onClick(); render(); },
     update(extra) { props = { ...props, ...extra }; render(); }
   };
 }
+
+test("availability starts compact and switching editors preserves the draft", () => {
+  const fixture = mount();
+  const section = id => fixture.nodes().find(node => node.props?.id === id);
+  assert.equal(section("availability-day-editor").props.hidden, true);
+  assert.equal(section("availability-weekly-editor").props.hidden, true);
+  fixture.choose("availability-day-editor");
+  assert.equal(section("availability-day-editor").props.hidden, false);
+  fixture.change("date", "2030-10-01"); fixture.change("time", "08:30"); fixture.click("Добави час");
+  assert.equal(fixture.button("Запази профила и часовете").props.type, "submit");
+  fixture.choose("availability-weekly-editor");
+  assert.equal(section("availability-day-editor").props.hidden, true);
+  assert.equal(section("availability-weekly-editor").props.hidden, false);
+  fixture.click("Уикенд");
+  assert.equal(fixture.button("Съб").props["aria-pressed"], true);
+  assert.equal(fixture.button("Пон").props["aria-pressed"], false);
+  fixture.choose("availability-day-editor");
+  assert.equal(fixture.props.availability.length, 2);
+  assert.equal(section("availability-day-editor").props.hidden, false);
+});
 
 test("editor gives duplicate feedback, supports custom minutes and removes without saving", () => {
   const fixture = mount(); fixture.change("date", "2030-10-01"); fixture.change("time", "09:00"); fixture.click("Добави час");

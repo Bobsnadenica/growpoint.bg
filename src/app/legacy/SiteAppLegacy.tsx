@@ -4649,6 +4649,15 @@ export function DashboardPage() {
                 </span>
               </div>
 
+              <div className="profile-setup-progress" role="progressbar" aria-label="Стъпка от основния профил" aria-valuemin={1} aria-valuemax={profileSetupSections.length} aria-valuenow={activeProfileSectionIndex + 1}>
+                <span style={{ width: `${((activeProfileSectionIndex + 1) / profileSetupSections.length) * 100}%` }} />
+              </div>
+              <p className="profile-setup-guidance">{[
+                "Започни с името и контекста, който искаш експертът да знае.",
+                "Опиши една конкретна цел — можеш да я промениш по всяко време.",
+                "Избери най-важното от опита си; не е нужно да пишеш цялото си CV.",
+                "Добави няколко теми, по които искаш подкрепа."
+              ][activeProfileSectionIndex]}</p>
               <div
                 className="profile-setup-nav"
                 aria-label="Секции в основния профил"
@@ -5069,6 +5078,15 @@ export function DashboardPage() {
                   </span>
                 </div>
 
+                <div className="profile-setup-progress" role="progressbar" aria-label="Стъпка от публичния профил" aria-valuemin={1} aria-valuemax={consultantSetupSections.length} aria-valuenow={activeConsultantSectionIndex + 1}>
+                  <span style={{ width: `${((activeConsultantSectionIndex + 1) / consultantSetupSections.length) * 100}%` }} />
+                </div>
+                <p className="profile-setup-guidance">{[
+                  "Представи се с ясна роля и снимка, която искаш хората да виждат.",
+                  "Избери конкретни теми и хората, на които можеш да помогнеш.",
+                  "Сподели реален опит и обясни как протича работата с теб.",
+                  "Добави само часове, в които действително можеш да проведеш среща."
+                ][activeConsultantSectionIndex]}</p>
                 <div
                   className="profile-setup-nav"
                   aria-label="Секции в публичния профил"

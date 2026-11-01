@@ -101,6 +101,8 @@ export default function AvailabilityCalendar(props: AvailabilityCalendarProps) {
 
   function changeMonth(delta: number) {
     setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+    setSelectedDayKey("");
+    if (mode === "book") props.onSelectSlot("");
   }
 
   return (
@@ -161,10 +163,13 @@ export default function AvailabilityCalendar(props: AvailabilityCalendarProps) {
               ]
                 .filter(Boolean)
                 .join(" ")}
-              onClick={() => setSelectedDayKey(dayKey)}
+              onClick={() => {
+                if (mode === "book" && dayKey !== selectedDayKey) props.onSelectSlot("");
+                setSelectedDayKey(dayKey);
+              }}
               disabled={!selectable}
               aria-pressed={isSelected}
-              aria-label={`${DAY_FORMAT.format(date)}${count ? `, ${count} свободни часа` : ""}`}
+              aria-label={`${DAY_FORMAT.format(date)}${count ? `, ${count} ${count === 1 ? "свободен час" : "свободни часа"}` : ""}`}
             >
               <span className="cal__day-number">{date.getDate()}</span>
               {hasSlots ? <span className="cal__day-count">{count}</span> : null}
@@ -176,7 +181,7 @@ export default function AvailabilityCalendar(props: AvailabilityCalendarProps) {
       {selectedDayKey ? (
         <div className="cal__hours" aria-label="Часове за избрания ден">
           <span className="cal__hours-label">
-            {DAY_FORMAT.format(new Date(`${selectedDayKey}T00:00:00`))}
+            {mode === "book" ? "Избери час · " : ""}{DAY_FORMAT.format(new Date(`${selectedDayKey}T00:00:00`))}
           </span>
           <div className="cal__hours-grid">
             {mode === "book"

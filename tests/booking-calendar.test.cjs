@@ -1,6 +1,36 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+
+function load(path, imports = {}) {
+  const exports = {};
+  const source = readFileSync(path, "utf8");
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  vm.runInNewContext(code, { exports, Date, Intl, Map, console, require: name => imports[name] });
+  return exports;
+}
+
+test("changing the booking day or month clears the previously selected slot", () => {
+  const dates = load("src/app/legacy/availability.ts");
+  const now = new Date(); const first = new Date(now.getFullYear(), now.getMonth() + 1, 3, 10);
+  const second = new Date(first); second.setDate(second.getDate() + 1);
+  let cursor = 0, state = [], selection = first.toISOString(), tree;
+  const react = { useMemo: fn => fn(), useState(initial) { const i = cursor++; if (!(i in state)) state[i] = typeof initial === "function" ? initial() : initial; return [state[i], value => { state[i] = typeof value === "function" ? value(state[i]) : value; }]; } };
+  const jsx = (type, props) => ({ type, props });
+  const component = load("src/app/legacy/AvailabilityCalendar.tsx", { react, "react/jsx-runtime": { jsx, jsxs: jsx }, "./availability": dates }).default;
+  const render = () => { cursor = 0; tree = component({ mode: "book", availability: [first.toISOString(), second.toISOString()], selectedSlot: selection, onSelectSlot: value => { selection = value; } }); };
+  const walk = node => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(walk) : [node, ...walk(node.props?.children)];
+  render();
+  const days = walk(tree).filter(node => node.type === "button" && node.props.className?.includes("cal__day--has-slots"));
+  assert.equal(days.length, 2);
+  days[1].props.onClick(); render(); assert.equal(selection, "");
+  selection = second.toISOString(); render();
+  walk(tree).find(node => node.props?.["aria-label"] === "Следващ месец").props.onClick(); render();
+  assert.equal(selection, "");
+  assert.equal(walk(tree).some(node => node.props?.className === "cal__hours"), false);
+});
 
 test("public booking calendar exposes hour buttons without a nested height limit", () => {
   const css = readFileSync("src/styles/global.css", "utf8");

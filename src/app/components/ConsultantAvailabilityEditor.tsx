@@ -26,13 +26,15 @@ export default function ConsultantAvailabilityEditor({ availability, savedAvaila
   const [weeks, setWeeks] = useState(4);
   const [feedback, setFeedback] = useState("");
   const [invalid, setInvalid] = useState(false);
+  const [editor, setEditor] = useState<"day" | "weekly" | null>(null);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const changed = availabilityDraftChanged(availability, savedAvailability);
   const groups = groupAvailabilityByDay(availability);
   const dayHours = Array.from(new Set([...HOURS, ...availability.filter(slot => getAvailabilityDayKey(slot) === date).map(formatAvailabilityTimeLabel), ...occupiedSlots.filter(slot => getAvailabilityDayKey(slot) === date).map(formatAvailabilityTimeLabel)])).sort();
   const pattern = useMemo(() => generateAvailabilityPattern({ weekdays, hours, weeksAhead: weeks }), [weekdays, hours, weeks]);
   const patternResult = mergeEditorSlots(availability, pattern, occupiedSlots, sessionLengthMinutes);
-  const freeCount = availability.filter(slot => !overlapsOccupiedSlot(slot, occupiedSlots, sessionLengthMinutes)).length;
+  const freeSlots = availability.filter(slot => new Date(slot).getTime() > Date.now() && !overlapsOccupiedSlot(slot, occupiedSlots, sessionLengthMinutes)).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  const freeCount = freeSlots.length;
 
   function announce(message: string, error = false) { setFeedback(message); setInvalid(error); }
   function add(slots: string[]) {
@@ -61,12 +63,21 @@ export default function ConsultantAvailabilityEditor({ availability, savedAvaila
 
   return <section className="availability-editor" aria-label="Редактор на свободни часове" aria-busy={saving}>
     <header className="availability-editor__header">
-      <div><strong>Свободни часове</strong><p>Избери дата, после натисни час. Повторно натискане го премахва.</p></div>
-      <span className="plan-pill">{freeCount} свободни</span>
+      <div><strong>Твоето време, твоят график</strong><p>Добави отделен ден или няколко седмици наведнъж.</p></div>
     </header>
-    <p className="availability-editor__timezone">Местно време на устройството: <strong>{timezone}</strong>.</p>
+    <div className="availability-editor__overview">
+      <div className="availability-editor__overview-head"><span>Следваща възможност</span><span>{freeCount} свободни</span></div>
+      <strong>{freeSlots.length ? `${formatAvailabilityDayLabel(freeSlots[0])} · ${formatAvailabilityTimeLabel(freeSlots[0])}` : "Все още няма свободни часове"}</strong>
+      <small>Часова зона: {timezone}</small>
+    </div>
+    <div className="availability-editor__choices" aria-label="Начин за добавяне на часове">
+      <button type="button" className={editor === "day" ? "availability-editor__choice availability-editor__choice--active" : "availability-editor__choice"} aria-expanded={editor === "day"} aria-controls="availability-day-editor" onClick={() => setEditor(editor === "day" ? null : "day")}><span aria-hidden="true">＋</span><strong>Отделен ден</strong><small>Избери дата и часове</small></button>
+      <button type="button" className={editor === "weekly" ? "availability-editor__choice availability-editor__choice--active" : "availability-editor__choice"} aria-expanded={editor === "weekly"} aria-controls="availability-weekly-editor" onClick={() => setEditor(editor === "weekly" ? null : "weekly")}><span aria-hidden="true">↻</span><strong>Седмичен график</strong><small>Повтарящи се часове</small></button>
+    </div>
     <fieldset disabled={saving} className="availability-editor__controls">
       <legend className="sr-only">Добавяне на свободни часове</legend>
+      <div id="availability-day-editor" className="availability-editor__section" hidden={editor !== "day"}>
+      <p className="availability-editor__section-note">1. Избери дата · 2. Натисни свободните часове</p>
       <label>Дата<input type="date" value={date} min={getRelativeDateInputValue()} onChange={event => { setDate(event.target.value); setFeedback(""); }} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} /></label>
       <div className="availability-editor__hours" aria-label="Часове за избраната дата">
         {dayHours.map(hour => {
@@ -83,22 +94,25 @@ export default function ConsultantAvailabilityEditor({ availability, savedAvaila
         <label>Друг час<input type="time" value={time} onChange={event => setTime(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addManual(); } }} /></label>
         <button type="button" className="ghost-button" onClick={addManual}>Добави час</button>
       </div>
-      <details className="availability-editor__pattern">
-        <summary>Добави седмичен график</summary>
+      </div>
+      <div id="availability-weekly-editor" className="availability-editor__section" hidden={editor !== "weekly"}>
         <div className="availability-editor__pattern-body">
+          <p className="availability-editor__section-note">Избери дни и начални часове. Ще видиш броя преди добавяне.</p>
           <span>Дни от седмицата</span>
+          <div className="availability-editor__presets"><button type="button" onClick={() => setWeekdays([1, 2, 3, 4, 5])}>Работни дни</button><button type="button" onClick={() => setWeekdays([6, 0])}>Уикенд</button></div>
           <div className="availability-editor__chips">{WEEKDAYS.map(day => <button type="button" className={`pattern-chip${weekdays.includes(day.value) ? " pattern-chip--active" : ""}`} key={day.value} aria-pressed={weekdays.includes(day.value)} onClick={() => setWeekdays(toggle(weekdays, day.value))}>{day.label}</button>)}</div>
           <span>Начални часове</span>
           <div className="availability-editor__chips">{HOURS.map(hour => <button type="button" className={`pattern-chip${hours.includes(Number(hour.slice(0, 2))) ? " pattern-chip--active" : ""}`} key={hour} aria-pressed={hours.includes(Number(hour.slice(0, 2)))} onClick={() => setHours(toggle(hours, Number(hour.slice(0, 2))))}>{hour}</button>)}</div>
           <label>Период<select value={weeks} onChange={event => setWeeks(Number(event.target.value))}>{[1, 2, 4, 6, 8, 12].map(value => <option value={value} key={value}>{value} {value === 1 ? "седмица" : "седмици"}</option>)}</select></label>
-          <p className="form-note">{patternResult.added} нови · {patternResult.duplicates} повторени · {patternResult.unavailable} заети/минали</p>
+          <p className="form-note">Следващите {weeks} {weeks === 1 ? "седмица" : "седмици"}: {patternResult.added} нови · {patternResult.duplicates} повторени · {patternResult.unavailable} заети/минали</p>
           {patternResult.overLimit && <p className="form-note">Лимит: {AVAILABILITY_LIMIT} часа. Намали периода или избраните часове.</p>}
           <button type="button" className="ghost-button" disabled={!patternResult.added || patternResult.overLimit} onClick={() => add(pattern)}>Добави {patternResult.added} часа</button>
         </div>
-      </details>
+      </div>
     </fieldset>
     {feedback && <p className={`availability-editor__feedback${invalid ? " availability-editor__feedback--error" : ""}`} role={invalid ? "alert" : "status"}>{feedback}</p>}
     <p className="availability-editor__save-state" role="status">{saving ? "Записваме профила…" : changed ? "Има незаписани промени в часовете." : "Няма незаписани промени в часовете."}</p>
+    {changed && <button type="submit" className="primary-button availability-editor__save" disabled={saving}>Запази профила и часовете</button>}
     {saveError && <p className="availability-editor__feedback availability-editor__feedback--error" role="alert">{saveError} Черновата е запазена тук. Провери заетите часове и опитай пак.</p>}
     <details className="availability-editor__schedule">
       <summary>Всички добавени часове · {availability.length}</summary>

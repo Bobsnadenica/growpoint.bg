@@ -2,6 +2,11 @@
 
 Last reviewed: 2026-11-02. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
+## Profile and availability guidance — 2026-11-02 (latest)
+
+- Profile setup now has contextual step guidance, a step-position indicator and reduced-motion-aware transitions. The consultant availability editor begins with a compact summary and reveals the separate single-day or weekly editor on demand. Weekly weekday/weekend presets only select days; a count preview appears before adding slots, and profile changes still require an explicit save. Drafts and occupied-slot protection remain in place. A new save button within the editor submits the entire profile, with the same existing save handler.
+- The public booking calendar clears its selected time when the visitor changes the day or month, preventing the previous day from being submitted accidentally. Local browser previews with synthetic data cover 320/390/1440px, dark mode, weekday/weekend selection, draft retention and mobile booking-day selection. These are not a physical-device or authenticated live-save test. Guidance is rule-based and local; no AI provider, external processing or recurring cost was added.
+
 ## Live chat, sharing and SES review — 2026-11-02 (latest)
 
 - Using the supplied client and expert, authenticated production API tests passed request/acceptance, two-way chat, both in-app notifications, unrelated-user chat denial, synthetic document upload/share, expert download with matching bytes, unrelated-user document denial, revocation of new links and cancellation. Cancelled chats remain readable but reject new sends. The temporary expert slot and synthetic document were removed, the example expert was returned to hidden and new refresh sessions revoked. Repeated email retests left additional labelled, cancelled/unpaid QA bookings. No membership, points or paid state was manufactured. This is real API-to-storage evidence, not a fresh browser/device walkthrough; already issued document links may remain valid for up to 15 minutes.
