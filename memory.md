@@ -1,6 +1,13 @@
 # GrowPoint working memory
 
-Last reviewed: 2026-10-08. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+Last reviewed: 2026-11-01. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+
+## Company mentor replaces demonstration — 2026-11-01 (latest)
+
+- Owner's signed-in Apple account was edited through Safari: public name The Privileged Company, mentor type, slug `the-privileged-company`, Bulgarian company biography, expertise, target clients, practical session approach, languages and discovery tags. Branding uses the existing company logo uploaded through the normal profile form. Content follows the company's published services; no invented qualifications or testimonials.
+- Existing authenticated admin APIs granted a promotional Spotlight package, explicitly shown visibility and featured placement to this company profile. This is an admin grant, not a payment. The former `growpoint-demo-consultant` was hidden using the visibility API; its account/history remains intact. No identity deletion or booking mutation. Fresh anonymous company API returns 200 and former demo API returns 404.
+- Public browser confirms company logo loads, full text renders, and company appears in homepage Spotlight and featured expert card without the fictional example. Completion is 85%: education/certifications and future availability remain empty. No appointments were invented; booking remains unavailable until real slots are supplied. All new admin refresh sessions revoked. No frontend/backend deployment was necessary for these saved data changes.
+- Earlier demonstration-profile instructions below are historical and superseded by this replacement.
 
 ## Professional demonstration profile — 2026-10-08 (latest)
 
