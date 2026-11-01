@@ -1,6 +1,12 @@
 # GrowPoint working memory
 
-Last reviewed: 2026-11-01. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+Last reviewed: 2026-11-02. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+
+## Live chat, sharing and SES review — 2026-11-02 (latest)
+
+- Using the supplied client and expert, authenticated production API tests passed request/acceptance, two-way chat, both in-app notifications, unrelated-user chat denial, synthetic document upload/share, expert download with matching bytes, unrelated-user document denial, revocation of new links and cancellation. Cancelled chats remain readable but reject new sends. The temporary expert slot and synthetic document were removed, the example expert was returned to hidden and new refresh sessions revoked. Repeated email retests left additional labelled, cancelled/unpaid QA bookings. No membership, points or paid state was manufactured. This is real API-to-storage evidence, not a fresh browser/device walkthrough; already issued document links may remain valid for up to 15 minutes.
+- App booking mail initially failed with SES AccessDenied on recipient identity. A reviewed, targeted IAM apply permits SES identity checks within the existing account/region while still requiring the exact configured From address; IAM simulation denies a different From address. After propagation, the latest three app attempts reached SES and were rejected as unverified sandbox recipients. Lambda logs now classify authorization failures without recording addresses or message bodies. Narrow policy/Lambda applies made no resource additions or deletions; existing unrelated SNS subscription drift remains held.
+- SES production access is still disabled, sending enabled, domain verified and DKIM successful. The mailbox simulator and one direct test to the site's contact address were accepted by SES. A search of the open owner mailbox did not find the test; forwarding/inbox delivery remains unverified. The existing production-access request contains obsolete site/business details; the owner must correct them with AWS and obtain approval. No support request was submitted. Real customer delivery, signup delivery and bounce/complaint operations remain launch gates.
 
 ## Mobile dashboard review — 2026-11-01 (latest)
 

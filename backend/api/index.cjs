@@ -1029,7 +1029,16 @@ async function sendEmail({ to, subject, text, html }) {
     return { status: "accepted" };
   } catch (error) {
     await monitoring.record("emailFailed");
-    console.error("[email] send failed", { error: error.name });
+    const detail = String(error.message || "");
+    const deniedAction = /\bses:[A-Za-z]+\b/i.exec(detail)?.[0];
+    const deniedResource = detail.includes(`identity/${env.sesFromEmail}`) ? "sender-address"
+      : detail.includes(`identity/${env.sesFromEmail.split("@")[1]}`) ? "sender-domain"
+      : detail.includes(`identity/${to}`) ? "recipient-address"
+      : /identity\//i.test(detail) ? "other-identity"
+      : undefined;
+    const hints = ["not authorized", "explicit deny", "identity-based policy", "resource-based policy", "not verified", "sandbox"]
+      .filter((hint) => detail.toLowerCase().includes(hint));
+    console.error("[email] send failed", { error: error.name, deniedAction, deniedResource, hints });
     return { status: "failed" };
   }
 }

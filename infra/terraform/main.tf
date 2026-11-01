@@ -884,9 +884,11 @@ resource "aws_iam_role_policy" "lambda" {
         Resource = "${aws_s3_bucket.cv_documents.arn}/*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["ses:SendEmail"]
-        Resource = var.ses_domain_identity != "" ? aws_ses_domain_identity.platform[0].arn : "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.ses_from_email}"
+        Effect = "Allow"
+        Action = ["ses:SendEmail"]
+        # SES may authorize both sender and recipient identities in the sandbox.
+        # The condition still restricts every send to the configured From address.
+        Resource = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/*"
         Condition = {
           StringEquals = {
             "ses:FromAddress" = var.ses_from_email

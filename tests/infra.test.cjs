@@ -57,8 +57,8 @@ test("Private CV and frontend buckets reject non-HTTPS clients without denying A
 test("Lambda SES sending is identity- and sender-scoped, while account readiness remains read-only", () => {
   const source = readFileSync(join(__dirname, "../infra/terraform/main.tf"), "utf8");
   const policy = source.split('resource "aws_iam_role_policy" "lambda"')[1].split('data "archive_file" "api"')[0];
-  const sending = policy.split('Action   = ["ses:SendEmail"]')[1].split('Action   = ["ses:GetAccount"]')[0];
-  assert.match(sending, /Resource\s*=\s*var\.ses_domain_identity != "" \? aws_ses_domain_identity\.platform\[0\]\.arn : "arn:aws:ses:/);
+  const sending = policy.split(/Action\s*=\s*\["ses:SendEmail"\]/)[1].split(/Action\s*=\s*\["ses:GetAccount"\]/)[0];
+  assert.ok(sending.includes('arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/*'), "Allow SES identity checks only in this account and region");
   assert.doesNotMatch(sending, /Resource\s*=\s*"\*"/);
   assert.match(sending, /StringEquals\s*=\s*\{\s*"ses:FromAddress"\s*=\s*var\.ses_from_email/);
   const account = policy.split('Action   = ["ses:GetAccount"]')[1].split("      },")[0];
