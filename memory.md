@@ -2,6 +2,14 @@
 
 Last reviewed: 2026-11-01. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
+## Dimitar Google-admin mentor and homepage split — 2026-11-01
+
+- Owner's signed-in Google admin saved his own profile through Safari `/dashboard?profile=1`: Dimitar Todorov, mentor, `dimitar-todorov`, Cloud Architect / SRE / AIOps Engineer, owner-supplied 10 years of experience. Added Bulgarian biography, cloud/SRE/AIOps expertise, intended clients, practical approach, languages and tags. No invented employers, certifications, reviews, prices or calendar slots. Completion is 85%; education and availability remain empty. Admin access/account role preserved.
+- Google image was only an initial placeholder. Generated an illustrated avatar with built-in image generation, uploaded it through the actual profile form, and disclosed it in the biography as an AI illustration rather than a photograph. Source/provenance is in `docs/dimitar-avatar.md`; no private provider identifiers or authentication material belong there.
+- Independent admin-owned `spotlightBannerEnabled` boolean defaults to enabled for legacy profiles. Admin form saves it through the existing self-profile endpoint; clients cannot use it to grant privileges. Spotlight banner selection excludes explicit opt-outs; homepage expert cards exclude profiles already shown as banners. No hardcoded person/company IDs in layout logic.
+- Dimitar received an admin-granted Spotlight tier and featured placement; banner explicitly off. Company retains banner on. Anonymous browser readback proves banner = company only and expert card = Dimitar only; mentor portrait loads. Demo was found shown again at the beginning of this task and explicitly hidden again. Its records are retained privately in admin, not deleted.
+- Fixed self-publication status to match admin visibility publication, so showing a profile also makes it eligible for the admin featured control. Tests 282/282, build/theme/TypeScript/secrets pass. Lambda-only reviewed applies add/destroy no resources; existing SNS drift stays held. Live smoke19/19 and domains4/4 passed. New admin QA refresh sessions revoked; owner's Safari session remains signed in.
+
 ## Company mentor replaces demonstration — 2026-11-01 (latest)
 
 ### Optional admin expert profiles — 2026-11-01

@@ -3281,6 +3281,7 @@ async function updateMyConsultant(event) {
     if (typeof body.publicProfileEnabled !== "boolean") return badRequest("publicProfileEnabled must be a boolean.");
     nextConsultant.visibilityMode = body.publicProfileEnabled ? "shown" : "hidden";
     nextConsultant.isPublic = body.publicProfileEnabled;
+    if (body.publicProfileEnabled) nextConsultant.profileStatus = "approved";
   } else if (isAdmin(claims) && !current) {
     nextConsultant.visibilityMode = "hidden";
     nextConsultant.isPublic = false;

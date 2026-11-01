@@ -19,6 +19,7 @@ test('admin self-profile can be shown and hidden without changing account role; 
     assert.equal(profile.visibilityMode, enabled ? 'shown' : 'hidden');
     assert.equal(profile.isPublic, enabled);
     assert.equal(profile.spotlightBannerEnabled, enabled);
+    if (enabled) assert.equal(profile.profileStatus, 'approved');
     assert.equal(profile.comped, true);
     assert.equal(user.role, 'client');
   }
