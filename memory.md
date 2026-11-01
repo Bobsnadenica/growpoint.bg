@@ -2,6 +2,12 @@
 
 Last reviewed: 2026-11-01. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
+## Dimitar weekend hours and full profile — 2026-11-01 (latest)
+
+- Owner asked for every Saturday/Sunday availability and 100% completion. Through his signed-in admin editor, selected Saturday/Sunday only and one-hour starts 09:00–16:00 (ends 17:00), Europe/Sofia, for the editor's maximum 12-week batch. Saved 184 slots, 7 November 2026 through 23 January 2027; anonymous API verifies only weekend dates and those eight start times. This is finite date generation, not an ongoing recurrence rule. No booking, price, payment or attendance was changed.
+- Completion now displays 100%. Education entry describes professional focus and explicitly says no particular diplomas/certificates have been published. It must not be interpreted as credential verification.
+- Owner rejected illustrated avatar. New photorealistic fictional AI headshot is `public/assets/mentors/dimitar-photoreal-portrait.png`; biography disclosure remains. Earlier illustrated asset is historical, not the current portrait. Source prompt/provenance is in `docs/dimitar-avatar.md`.
+
 ## Dimitar Google-admin mentor and homepage split — 2026-11-01
 
 - Owner's signed-in Google admin saved his own profile through Safari `/dashboard?profile=1`: Dimitar Todorov, mentor, `dimitar-todorov`, Cloud Architect / SRE / AIOps Engineer, owner-supplied 10 years of experience. Added Bulgarian biography, cloud/SRE/AIOps expertise, intended clients, practical approach, languages and tags. No invented employers, certifications, reviews, prices or calendar slots. Completion is 85%; education and availability remain empty. Admin access/account role preserved.
