@@ -4090,6 +4090,12 @@ export function DashboardPage() {
 
     try {
       const formData = new FormData(event.currentTarget);
+      const rawPrice = formData.get("consultantPriceEur");
+      const priceEur = rawPrice === null ? null : Number(rawPrice);
+      if (priceEur !== null && (!Number.isFinite(priceEur) || priceEur < 0 || priceEur > 2500 || priceEur % 50 !== 0)) {
+        setError("Цената трябва да е между 0 и 2500 € на стъпки от 50 €.");
+        return;
+      }
       const avatarLink = String(formData.get("avatarUrl") || "").trim();
       const heroLink = String(formData.get("heroUrl") || "").trim();
       const avatarFile = formData.get("avatarFile");
@@ -4165,6 +4171,7 @@ export function DashboardPage() {
         experienceYears: Number(
           formData.get("experienceYears") || consultantProfile?.experienceYears || 0
         ),
+        ...(priceEur === null ? {} : { priceEur }),
         languages: String(formData.get("languages") || "")
           .split(",")
           .map((item) => item.trim())
@@ -5513,6 +5520,11 @@ export function DashboardPage() {
                       />
                     </label>
                   </div>
+                  <label>
+                    Цена за една сесия (€)
+                    <input name="consultantPriceEur" type="number" min="0" max="2500" step="50" defaultValue={consultantProfile?.priceEur || 0} />
+                    <span className="form-note">0 означава цена при запитване. Избирай сума на стъпки от 50 €.</span>
+                  </label>
                   <input
                     name="availability"
                     type="hidden"
@@ -6641,7 +6653,7 @@ function ProfileSnapshotCard({ consultant }: { consultant: ConsultantProfile }) 
             <span className="form-note"> · {consultant.reviewCount} отзива</span>
           </span>
         ) : (
-          <span className="plan-pill">Нов профил</span>
+          <span className="plan-pill">Все още няма отзиви</span>
         )}
       </header>
 
@@ -7196,12 +7208,12 @@ function ConsultantCard({
           <h3>{consultant.name}</h3>
           <p>{consultant.headline}</p>
           <div className="consultant-card__review-row">
-            <span className="rating-pill">
-              {consultant.reviewCount ? consultant.rating.toFixed(1) : "Нов"}
-            </span>
-            <span className="review-count-pill">
-              {consultant.reviewCount ? `${consultant.reviewCount} мнения` : "нов профил"}
-            </span>
+            {consultant.reviewCount ? (
+              <>
+                <span className="rating-pill">{consultant.rating.toFixed(1)}</span>
+                <span className="review-count-pill">{consultant.reviewCount} {consultant.reviewCount === 1 ? "мнение" : "мнения"}</span>
+              </>
+            ) : <span className="review-count-pill">Все още няма отзиви</span>}
           </div>
         </div>
 

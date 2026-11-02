@@ -150,6 +150,23 @@ test("consultant save blocks duplicate submits and refreshes occupied metadata w
   assert.match(legacy, /occupiedSlots=\{occupiedAvailability\}/);
 });
 
+test("consultant price save accepts the chosen price and rejects unsupported increments", async () => {
+  const legacy = source("src/app/legacy/SiteAppLegacy.tsx");
+  const handler = legacy.slice(legacy.indexOf("  async function saveConsultantProfile("), legacy.indexOf("  const membershipNote =", legacy.indexOf("  async function saveConsultantProfile(")));
+  let value = "100", writes = [], error = "";
+  const current = { name: "Fixture", slug: "fixture-expert", availability: [], bookedSlots: [] };
+  const context = {
+    FormData: class { get(key) { return key === "consultantPriceEur" ? value : null; } }, File: class {}, isAdmin: false, token: "fixture", consultantProfile: current, consultantAvailability: [], consultantSaveBusy: { current: false },
+    setConsultantSaving() {}, setAvailabilitySaveError() {}, setError(next) { error = next; }, setMessage() {}, setProfile() {}, setConsultantAvailability() {}, setConsultantProfile() {},
+    getUpcomingAvailabilitySlots: dates.getUpcomingAvailabilitySlots, slugifyValue: () => "fixture-expert", parseListValue: () => [],
+    api: { updateMyConsultantProfile: async (_, payload) => { writes.push(payload); return current; } }
+  };
+  vm.runInNewContext(compile(`${handler}\nexports.save = saveConsultantProfile;`), { ...context, exports: context, Error });
+  const event = { preventDefault() {}, currentTarget: {} };
+  await context.save(event); assert.equal(writes.length, 1); assert.equal(writes[0].priceEur, 100);
+  value = "75"; await context.save(event); assert.equal(writes.length, 1); assert.match(error, /стъпки от 50/);
+});
+
 test("owner editor is scoped, touch-sized, theme-token based and leaves public calendar unchanged", () => {
   const css = source("src/styles/global.css");
   assert.match(css, /\.availability-editor__hour\s*\{[^}]*min-height:\s*64px/);

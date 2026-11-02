@@ -5,7 +5,7 @@ import {
 } from "../legacy/availability";
 import { AVAILABILITY_LIMIT, availabilityDraftChanged, buildEditorSlot, mergeEditorSlots, overlapsOccupiedSlot } from "../legacy/availability-editor";
 
-const HOURS = Array.from({ length: 13 }, (_, index) => `${String(index + 8).padStart(2, "0")}:00`);
+const HOURS = Array.from({ length: 16 }, (_, index) => `${String(index + 8).padStart(2, "0")}:00`);
 const WEEKDAYS = [{ value: 1, label: "Пон" }, { value: 2, label: "Вто" }, { value: 3, label: "Сря" }, { value: 4, label: "Чет" }, { value: 5, label: "Пет" }, { value: 6, label: "Съб" }, { value: 0, label: "Нед" }];
 
 interface Props {
@@ -103,8 +103,9 @@ export default function ConsultantAvailabilityEditor({ availability, savedAvaila
           <div className="availability-editor__chips">{WEEKDAYS.map(day => <button type="button" className={`pattern-chip${weekdays.includes(day.value) ? " pattern-chip--active" : ""}`} key={day.value} aria-pressed={weekdays.includes(day.value)} onClick={() => setWeekdays(toggle(weekdays, day.value))}>{day.label}</button>)}</div>
           <span>Начални часове</span>
           <div className="availability-editor__chips">{HOURS.map(hour => <button type="button" className={`pattern-chip${hours.includes(Number(hour.slice(0, 2))) ? " pattern-chip--active" : ""}`} key={hour} aria-pressed={hours.includes(Number(hour.slice(0, 2)))} onClick={() => setHours(toggle(hours, Number(hour.slice(0, 2))))}>{hour}</button>)}</div>
-          <label>Период<select value={weeks} onChange={event => setWeeks(Number(event.target.value))}>{[1, 2, 4, 6, 8, 12].map(value => <option value={value} key={value}>{value} {value === 1 ? "седмица" : "седмици"}</option>)}</select></label>
+          <label>Период<select value={weeks} onChange={event => setWeeks(Number(event.target.value))}>{[1, 2, 4, 6, 8, 12, 14].map(value => <option value={value} key={value}>{value} {value === 1 ? "седмица" : "седмици"}</option>)}</select></label>
           <p className="form-note">Следващите {weeks} {weeks === 1 ? "седмица" : "седмици"}: {patternResult.added} нови · {patternResult.duplicates} повторени · {patternResult.unavailable} заети/минали</p>
+          <p className="form-note">Часовете се добавят само за избрания период и не се удължават автоматично.</p>
           {patternResult.overLimit && <p className="form-note">Лимит: {AVAILABILITY_LIMIT} часа. Намали периода или избраните часове.</p>}
           <button type="button" className="ghost-button" disabled={!patternResult.added || patternResult.overLimit} onClick={() => add(pattern)}>Добави {patternResult.added} часа</button>
         </div>
