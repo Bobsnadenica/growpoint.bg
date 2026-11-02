@@ -2,6 +2,12 @@
 
 Last reviewed: 2026-11-02. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
+## DSK production preparation — 2026-11-02 (in progress)
+
+- The owner successfully opened the merchant portal in live mode. Its webhook settings show dynamic GET notifications enabled for Approved, with Deposited and Refunded not selected; no changes were made. The merchant payment-token screen says no token has been generated. Portal login is distinct from API authentication; live API credentials and permissions remain unverified. Never place credentials, merchant identifiers or tokens in this public repository.
+- Added **unwired, undeployed** production-gateway and order-ledger preparation with server-owned tier prices, ownership and restricted-account checks, one unresolved order lock, reference idempotence, HTTPS bank URL validation and conservative bank-response checks. Mock-only tests cover failures, mismatches, concurrent starts and refunds; the complete suite is 298/298. These modules cannot accept customer payments and must not be wired up until settlement/entitlement transactions, lock recovery, expiry, refunds, reconciliation, secure credentials, policies and real bank evidence are completed and reviewed.
+- Live customer checkout is still disabled. The owner was asked which products to charge for, manual versus automatic renewal, API credential status, and operator/legal/refund details; do not assume pending answers or manufacture missing policies. No bank settings, AWS infrastructure, real payments or external messages were changed in this pass. The existing untracked production-integration document predates this work and remains untouched.
+
 ## Company profile and review labels — 2026-11-02 (latest)
 
 - Owner confirmed company qualifications as AWS Cloud Architect and Microsoft Azure Cloud Architect; saved these without asserting specific credential levels. The company's public expert profile now shows 100% completion, 100 EUR per 60-minute session, and 392 slots on Saturdays and Sundays 10:00–23:00 starts, Europe/Sofia, from 7 November 2026 through 7 February 2027. Independent public API readback confirmed all 28 weekend dates, 14 starts per date, the price and qualifications. Existing bookings and membership were not altered.
