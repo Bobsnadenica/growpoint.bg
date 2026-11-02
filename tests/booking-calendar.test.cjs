@@ -12,6 +12,17 @@ function load(path, imports = {}) {
   return exports;
 }
 
+test("public booking offers every upcoming slot, not just the first day", () => {
+  const dates = load("src/app/legacy/availability.ts");
+  const source = readFileSync("src/app/legacy/SiteAppLegacy.tsx", "utf8");
+  const expression = source.match(/const visibleAvailability = ([^;]+);/)?.[1];
+  assert.ok(expression);
+  const slots = Array.from({ length: 30 }, (_, index) => new Date(Date.now() + (index + 1) * 3600000).toISOString());
+  const visible = vm.runInNewContext(expression, { consultant: { availability: slots }, getUpcomingAvailabilitySlots: dates.getUpcomingAvailabilitySlots, Number });
+  assert.equal(visible.length, 30);
+  assert.equal(visible[29], slots[29]);
+});
+
 test("changing the booking day or month clears the previously selected slot", () => {
   const dates = load("src/app/legacy/availability.ts");
   const now = new Date(); const first = new Date(now.getFullYear(), now.getMonth() + 1, 3, 10);

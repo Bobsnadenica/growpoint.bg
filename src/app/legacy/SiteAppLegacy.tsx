@@ -1841,7 +1841,7 @@ export function ConsultantPage() {
         (ownConsultant && consultant.consultantId === ownConsultant.consultantId))
   );
   const bookingCtaTo = user ? "/dashboard" : "/auth?tab=register";
-  const visibleAvailability = getUpcomingAvailabilitySlots(consultant.availability, 12, 5);
+  const visibleAvailability = getUpcomingAvailabilitySlots(consultant.availability, Number.POSITIVE_INFINITY, 5);
   const themeStyle = getConsultantThemeStyle(consultant);
   const hasTheme = hasConsultantTheme(consultant);
   const profileSummary = truncateText(
