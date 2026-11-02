@@ -8,6 +8,7 @@ Last reviewed: 2026-11-02. This is the canonical project memory. The historical 
 - The existing weekly editor produces finite date batches, not a perpetual recurring rule. Fourteen weeks is the largest available batch under the 400-slot limit for this pattern; it must be renewed before the last date. The UI explicitly says slots do not extend automatically. The editor supports 21:00–23:00 and a per-session EUR price in 50 EUR increments, matching the backend's existing price tiers. This does not enable real payments.
 - Fixed the public booking page silently limiting its calendar to the first 12 available starts. It now passes every upcoming bookable slot to the calendar while preserving the five-minute lead time. This is necessary for later weekends and late hours to be selectable.
 - Unreviewed directory/profile cards use one accurate no-reviews label instead of repeating a potentially misleading new-profile label; rated profiles retain their numeric rating and review count.
+- Release `cc9b809f` pushed and deployed; CI/Pages and CloudFront invalidation passed. Live directory shows a single no-review message and 100 EUR per session; the public calendar shows 14 starts on both weekend days, including 23:00. The complete 392-slot/date/price/qualification check was performed against the public API, without submitting a booking. Tests 287/287, smoke19/19 and domains4/4 pass. Source HTML and four referenced entry assets match production bytes.
 
 ## Profile and availability guidance — 2026-11-02 (latest)
 
