@@ -2,6 +2,12 @@
 
 Last reviewed: 2026-11-02. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
+## Company profile and review labels — 2026-11-02 (latest)
+
+- Owner confirmed company qualifications as AWS Cloud Architect and Microsoft Azure Cloud Architect; saved these without asserting specific credential levels. The company's public expert profile now shows 100% completion, 100 EUR per 60-minute session, and 392 slots on Saturdays and Sundays 10:00–23:00 starts, Europe/Sofia, from 7 November 2026 through 7 February 2027. Independent public API readback confirmed all 28 weekend dates, 14 starts per date, the price and qualifications. Existing bookings and membership were not altered.
+- The existing weekly editor produces finite date batches, not a perpetual recurring rule. Fourteen weeks is the largest available batch under the 400-slot limit for this pattern; it must be renewed before the last date. The UI explicitly says slots do not extend automatically. The editor supports 21:00–23:00 and a per-session EUR price in 50 EUR increments, matching the backend's existing price tiers. This does not enable real payments.
+- Unreviewed directory/profile cards use one accurate no-reviews label instead of repeating a potentially misleading new-profile label; rated profiles retain their numeric rating and review count.
+
 ## Profile and availability guidance — 2026-11-02 (latest)
 
 - Profile setup now has contextual step guidance, a step-position indicator and reduced-motion-aware transitions. The consultant availability editor begins with a compact summary and reveals the separate single-day or weekly editor on demand. Weekly weekday/weekend presets only select days; a count preview appears before adding slots, and profile changes still require an explicit save. Drafts and occupied-slot protection remain in place. A new save button within the editor submits the entire profile, with the same existing save handler.

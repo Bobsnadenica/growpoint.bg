@@ -634,7 +634,7 @@ function formatEuroPrice(value: number) {
 
 function getConsultantPriceLabel(consultant: ConsultantProfile) {
   const price = getConsultantPriceEur(consultant);
-  return price > 0 ? `от ${formatEuroPrice(price)}` : "Цена при запитване";
+  return price > 0 ? `${formatEuroPrice(price)} / сесия` : "Цена при запитване";
 }
 
 function getNameInitials(name: string) {
@@ -6638,7 +6638,7 @@ function ProfileSnapshotCard({ consultant }: { consultant: ConsultantProfile }) 
   }
   const priceEur = getConsultantPriceEur(consultant);
   if (priceEur > 0) {
-    stats.push({ label: "Цена", value: `от ${formatEuroPrice(priceEur)}` });
+    stats.push({ label: "Цена", value: `${formatEuroPrice(priceEur)} / сесия` });
   }
   if (sessionModes.length) {
     stats.push({ label: "Формат", value: sessionModes.join(" · ") });
