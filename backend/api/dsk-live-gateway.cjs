@@ -72,6 +72,9 @@ function accepted(reply) {
   if (code !== undefined && code > 99) throw invalid();
   if (own(reply, "success")) {
     if (typeof reply.success !== "boolean") throw invalid();
+    // Never let a success flag override a bank error code, or vice versa.
+    // Conflicting signals require reconciliation rather than a payment grant.
+    if (code !== undefined && reply.success !== (code === 0)) throw invalid();
     return reply.success;
   }
   return code === undefined || code === 0;

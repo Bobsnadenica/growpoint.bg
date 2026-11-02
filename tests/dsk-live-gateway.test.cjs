@@ -56,6 +56,15 @@ test("only a verified captured order can be treated as successful", async () => 
   }
 });
 
+test("contradictory bank success flags and error codes fail closed", async () => {
+  for (const flags of [{ success: true, errorCode: 1 }, { success: false, errorCode: 0 }]) {
+    const registration = fixture([response({ orderId: id, formUrl: checkoutUrl, ...flags })]);
+    await assert.rejects(registration.gateway.register({ orderNumber: reference, checkoutId, amountMinor: 999 }), { code: "DSK_LIVE_INVALID_REPLY", ambiguous: true });
+    const settlement = fixture([response(status(flags))]);
+    await assert.rejects(settlement.gateway.getStatus({ orderNumber: reference, amountMinor: 999 }), { code: "DSK_LIVE_INVALID_REPLY", ambiguous: true });
+  }
+});
+
 test("authorization, refunds and ambiguous failures never become captured payment", async () => {
   for (const [patch, expected] of [[{ orderStatus: 1, actionCode: 0 }, "authorized"], [{ orderStatus: 4, actionCode: 0 }, "refunded"], [{ paymentAmountInfo: { depositedAmount: 999, refundedAmount: 20, paymentState: "DEPOSITED" } }, "partially_refunded"]]) {
     const { gateway } = fixture([response(status(patch))]);
