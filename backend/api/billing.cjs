@@ -118,6 +118,7 @@ function createBilling({ dynamo, usersTable, consultantsTable, gateway, now = ()
     const previous = await subscription(owner);
     if (previous && (previous.activeOrderId || previous.autoRenew || (previous.status !== "revoked" && Date.parse(previous.paidThroughAt) > now().getTime()))) throw fail("Вече има активен абонамент или неприключило плащане.");
     if(previous?.status === "revoked" && previous.attention) throw fail("Първо е необходим преглед на оспореното или частично възстановено плащане.");
+    if(previous?.bindingId) throw fail("Предишният абонамент приключва. Изчакай няколко минути и обнови историята, преди да избереш нов пакет.");
     if (!activeAccount(expert) || expert.ownerUserId !== owner) throw fail("Нямаш достъп до този профил.", 403);
     if (expert.comped || expert.packageSource === "granted") throw fail("Пакетът ти е предоставен от екипа; не е необходимо плащане.");
     const startedAt = now().toISOString(), subscriptionId = randomUUID();

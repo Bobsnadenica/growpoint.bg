@@ -197,8 +197,9 @@ test("cancelled zero-charge setup cannot take the first fee",async t=>{
 });
 test("expired cancelled subscriptions remove their bank binding without restarting charges",async t=>{
   const f=await fixture(t),row=await f.create();await f.pay(row);await f.service.cancel("owner");
-  f.setTime("2027-03-01T00:00:00Z");await f.service.sweep({budgetMs:27000});
+  f.setTime("2027-03-01T00:00:00Z");await assert.rejects(f.create(),e=>e.statusCode===409);await f.service.sweep({budgetMs:27000});
   assert.equal((await f.service.subscription("owner")).bindingId,undefined);assert.equal(f.calls.charge,0);
+  assert.equal((await f.create()).status,"created");
 });
 test("zero-charge setup defers its first fee when Lambda time is short and resumes once",async t=>{
   const f=await fixture(t),row=await f.create();
@@ -210,7 +211,7 @@ test("zero-charge setup defers its first fee when Lambda time is short and resum
 });
 test("historical refund reconciliation cannot cancel or revoke a replacement subscription",async t=>{
   const f=await fixture(t),first=await f.create();await f.pay(first);await f.service.cancel("owner");
-  f.setTime("2027-03-01T00:00:00Z");const replacement=await f.create({tier:"spotlight"});await f.pay(replacement);
+  f.setTime("2027-03-01T00:00:00Z");await f.service.sweep({budgetMs:27000});const replacement=await f.create({tier:"spotlight"});await f.pay(replacement);
   const before=await f.service.subscription("owner");
   for(const [reference,value] of f.bank)if(reference!==[...f.bank.keys()].at(-1))value.status="refunded";
   assert.equal((await f.service.reconcile("owner",first.checkoutId)).status,"refunded");
