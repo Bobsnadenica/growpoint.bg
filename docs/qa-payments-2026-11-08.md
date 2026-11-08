@@ -1,0 +1,30 @@
+# Payment integration checks — 8 November 2026
+
+**Live customer payments remain disabled.** This review does not certify a working production subscription system. Only expert packages with automatic monthly renewal are in scope; session payments are excluded.
+
+| Check | Expected | Actual / outcome |
+| --- | --- | --- |
+| DSK operator portal | Authenticated production portal | **Passed:** Live mode is visible. No merchant API token has been generated. No portal setting or credential was changed. |
+| Deployed API configuration | Dedicated, protected production credentials before activation | **Blocked:** no production-payment flag or live credential configuration is present. Previously exposed API credentials were not reused. Portal credentials cannot substitute for API credentials. |
+| Initial sandbox payment through the new adapter | Bank-hosted fake-card payment; independent capture and matching price/currency | **Passed:** 9.99 EUR; authenticated bank lookup confirms status 2, action 0, matching deposited amount and zero refunded amount. No production membership or customer payment changed. This is provider-adapter proof, not a complete website checkout test. |
+| Common saved credential | Credential tied to the synthetic test customer | **Passed:** the bank returned the matching credential after consent on its hosted form. |
+| Recurring debit with a common credential | Bank rejects a non-recurring credential | **Passed negative control:** `Binding not recurrent`. A separate diagnostic request confirmed the reason. The existing debit was not automatically retried. |
+| Correct recurring-initial registration | Recurrent credential can be initialized for subsequent monthly payments | **Blocked:** bank returns code 11, `Recurrent initialize payments are prohibited`. A diagnostic registration confirmed the same refusal. The adapter now sends documented recurring frequency/expiry attributes; the sandbox merchant still prohibits initialization. Production permission is owner-reported, not independently verified with rotated live credentials. |
+| Sandbox cleanup | No reusable test credential remains active | **Passed:** disable returned code 0; active credentials changed from one to zero. No scheduled recurring bank task was created. The synthetic first payment remains in bank test history; no refund test was performed. |
+| Purchased membership access | Paid access expires; grants remain intact | **Passed locally:** purchased access requires a valid current start/end interval and no revocation. Missing, expired, future or invalid intervals deny access. Admin grants and complimentary access remain active. An aggregate read found no existing purchased memberships to migrate. |
+| Public data | Billing internals stay private | **Passed locally:** membership interval/revocation fields are removed from public consultant responses. Booking concurrency guards include these access fields. |
+| Customer email | General recipients can receive subscription notices | **Blocked:** SES sending is enabled, but production access is still false. No fresh customer inbox-delivery proof. |
+| Merchant and policy content | Identifiable operator and explicit subscription rules | Owner-supplied entity, registration number and correspondence address added to contact/terms/privacy; policy-version identifiers synchronized. Default subscription/refund rules are an implementation draft in `subscription-policy-draft.md`, not published as working billing functionality. Bank invoice issuance and accounting treatment remain unverified. |
+| Local automated/build checks | Complete suite, theme, TypeScript and secret guard pass | **304/304 tests passed**, no skips. Production build and public-file secret guard pass. Mock tests do not establish bank permissions, recurring settlement or cancellation. |
+
+Private provider evidence is stored outside Git, with owner-only permissions. Public reports omit credentials, bank/customer identifiers and card data. No report or message was sent to the bank; no real-money payment/refund was performed. Authorized automatic bank sandbox notifications may occur.
+
+## Concrete external actions
+
+The owner can send DSK this diagnostic without credentials:
+
+> При проверка на периодични абонаменти в тестовата среда обикновено плащане със запазена карта преминава успешно. Регистрация с `clientId` и `jsonParams` за `recurringFrequency`/`recurringExpiry` връща код 11: “Recurrent initialize payments are prohibited”. Моля активирайте или посочете правилната конфигурация за начално периодично плащане и последващи MIT плащания за нашия sandbox търговец. Моля потвърдете и съответните права и параметри за production. Имаме нужда и от сигурна процедура за смяна на отделната API парола. Необходимо е уточнение дали документът от портала е данъчна фактура от името на търговеца или платежна разписка/искане за плащане.
+
+Complete the customer subscription ledger, explicit consent, cancellation/withdrawal/refund requests, monthly scheduling, recovery, payment reconciliation, onboarding and durable notices before enabling customer routes. Successful mocks or a bank account login cannot close these gates. Production activation needs verified API authentication and an owner-performed real-card/refund test after the implementation is complete.
+
+Primary references: [DSK API](https://uat.dskbank.bg/sandbox/en/integration/api/rest.html), [DSK stored-credential types](https://uat.dskbank.bg/sandbox/en/integration/api/binding_types.html), [DSK test cards](https://uat.dskbank.bg/sandbox/en/integration/structure/test-cards.html#testing).

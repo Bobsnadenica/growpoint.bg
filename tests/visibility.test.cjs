@@ -14,6 +14,20 @@ test("100% active profile publishes into the catalogue index without requiring a
   assert.equal(complete.isPublic, false);
 });
 
+test("purchased membership requires a current, unrevoked paid interval; grants and invites are preserved", () => {
+  const api = loadApi().test;
+  const expert = { ...complete, comped: false, isPublic: true, packageSource: "purchased", packageStartsAt: "2020-01-01T00:00:00.000Z", packageExpiresAt: "2099-01-01T00:00:00.000Z" };
+  assert.equal(api.isVisibleConsultant(expert), true);
+  for (const flags of [{ packageStartsAt: undefined }, { packageExpiresAt: undefined }, { packageExpiresAt: "invalid" }, { packageExpiresAt: "2020-01-02T00:00:00.000Z" }, { packageStartsAt: "2098-01-01T00:00:00.000Z" }, { packageRevokedAt: "2026-01-01T00:00:00Z" }]) {
+    assert.equal(api.isVisibleConsultant({ ...expert, ...flags }), false, JSON.stringify(flags));
+  }
+  for (const flags of [{ comped: true }, { packageSource: "granted" }]) {
+    assert.equal(api.isVisibleConsultant({ ...expert, ...flags, packageExpiresAt: "2020-01-02T00:00:00Z" }), true);
+  }
+  const publicProfile = api.stripSensitiveConsultantFields(expert);
+  for (const key of ["packageStartsAt", "packageExpiresAt", "packageRevokedAt"]) assert.equal(publicProfile[key], undefined);
+});
+
 test("auto publication never overrides explicit hiding, inactive membership or account safeguards", () => {
   const api = loadApi().test;
   for (const flags of [{ visibilityMode: "hidden" }, { comped: false }, { restricted: true }, { identityDisabled: true }, { identityDeleted: true }, { deletionScheduledAt: "2026-09-06" }, { anonymizedAt: "2026-09-06" }, { languages: [] }]) {

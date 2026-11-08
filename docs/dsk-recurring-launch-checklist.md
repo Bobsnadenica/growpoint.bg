@@ -2,6 +2,8 @@
 
 Status: **not live**. The owner selected paid expert packages with automatic monthly renewal; client session payments are outside this release. The existing public checkout is still a preview. The gateway and order ledger in this branch are isolated preparation, not a working subscription system.
 
+8 November update: the owner supplied the merchant address and confirms recurring availability, prices and preservation of grants. Provider-only sandbox checks nevertheless reject recurring initialization with code 11, `Recurrent initialize payments are prohibited`. This test-merchant gate must be resolved and production API access independently verified. See [current payment QA](qa-payments-2026-11-08.md) and the [default policy draft](subscription-policy-draft.md); earlier questions below are background, not a new owner questionnaire.
+
 ## Bank confirmation
 
 DSK's [integration documentation](https://uat.dskbank.bg/sandbox/en/integration/api/scripts.html) says saved-credential payments and bank-managed recurring tasks require merchant-level enablement, and that 3RI must be enabled when used. It describes capturing a stored-credential identifier after the first successful payment. The correct recurring mechanism, its permissions, and the applicable transaction parameters must be confirmed and tested with DSK; the ability to log into the merchant portal does not establish that they are enabled.

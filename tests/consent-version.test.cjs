@@ -5,7 +5,7 @@ const vm = require("node:vm");
 const ts = require("typescript");
 const { loadApi } = require("./helpers/api-harness.cjs");
 const source = file => readFileSync(require.resolve(`../${file}`), "utf8");
-const version = "terms-2026-09-30+privacy-2026-10-01";
+const version = "terms-2026-11-08+privacy-2026-11-08";
 const event = body => ({ body: JSON.stringify(body), requestContext: { authorizer: { jwt: { claims: { sub: "client", email: "client@example.invalid" } } } } });
 
 function authFlow() {
@@ -81,7 +81,7 @@ test("new email or console identity requires explicit current consent before pro
   assert.notEqual(accepted.stored().acceptedTermsAt, "forged");
 });
 
-test("legacy accounts are not required to accept again after this hosting-only policy update", async () => {
+test("legacy accounts are not required to accept again after this merchant-contact policy update", async () => {
   for (const original of [{}, { acceptedTermsVersion: "terms-2026-09-30+privacy-2026-09-30", acceptedTermsAt: "2026-09-30T00:00:00.000Z", termsAcceptanceRequired: false }]) {
     const store = bootstrap({ userId: "client", role: "client", referralCode: "abcdefgh", ...original });
     await store.api.bootstrapUser(event({}));

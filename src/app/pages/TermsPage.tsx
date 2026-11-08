@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import PageScene from "../layout/PageScene";
+import { MERCHANT } from "../../lib/merchant";
 
-const LAST_UPDATED_ISO = "2026-09-30";
+const LAST_UPDATED_ISO = "2026-11-08";
 const lastUpdated = new Intl.DateTimeFormat("bg-BG", {
   day: "numeric",
   month: "long",
@@ -9,6 +10,14 @@ const lastUpdated = new Intl.DateTimeFormat("bg-BG", {
 }).format(new Date(LAST_UPDATED_ISO));
 
 const TERMS_SECTIONS = [
+  {
+    title: "Търговец и контакт",
+    points: [
+      `GrowPoint се управлява от ${MERCHANT.name} (${MERCHANT.englishName}), ЕИК ${MERCHANT.eik}.`,
+      `Адрес за кореспонденция: ${MERCHANT.address}.`,
+      `Въпроси за услугата, абонаменти и плащания: ${MERCHANT.supportEmail}.`
+    ]
+  },
   {
     title: "Достъп и употреба",
     points: [

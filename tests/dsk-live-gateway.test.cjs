@@ -87,3 +87,72 @@ test("bank timeouts, unexpected HTTP content and oversize replies fail closed", 
     await assert.rejects(f.gateway.getStatus({ orderNumber: reference, amountMinor: 999 }), { code: "DSK_LIVE_INVALID_REPLY", ambiguous: true });
   }
 });
+
+test("renewals are explicitly gated, use DSK JSON endpoint, and independently verify captured state", async () => {
+  let calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return calls.length === 1 ? response({ success: true, data: { orderId: id } }) : response(status({}));
+  };
+  const order = { orderNumber: reference, amountMinor: 999, bindingId: id };
+  for (const config of [{ userName: "fixture", password: "fixture" }, { token: "fixture", recurringAllowed: true }]) {
+    await assert.rejects(createDskLiveGateway({ ...config, fetchImpl }).chargeRecurring(order), { code: "DSK_LIVE_RECURRING_DISABLED", ambiguous: false });
+  }
+  assert.equal(calls.length, 0);
+  const gateway = createDskLiveGateway({ userName: "fixture", password: "fixture", recurringAllowed: true, fetchImpl });
+  const result = await gateway.chargeRecurring(order);
+  assert.equal(result.status, "succeeded");
+  assert.equal(calls[0].url, "https://epg.dskbank.bg/payment/recurrentPayment.do");
+  assert.equal(calls[0].init.headers["Content-Type"], "application/json");
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.amount, 999); assert.equal(body.currency, "978"); assert.equal(body.preAuth, false);
+  assert.equal(body.bindingId, id); assert.equal(body.orderNumber, reference);
+  assert.equal(calls[1].url, "https://epg.dskbank.bg/payment/rest/getOrderStatusExtended.do");
+  for (const field of ["pan", "cvc", "cardNumber"]) assert.equal(body[field], undefined);
+});
+
+test("renewal acceptance is not settlement and ambiguous outcomes never retry a debit", async () => {
+  const order = { orderNumber: reference, amountMinor: 999, bindingId: id };
+  for (const first of [new Error("secret network failure"), { success: true, data: { orderId: "invalid" } }, { success: false, error: { code: "1", description: "private description" } }, { success: true, errorCode: 1, data: { orderId: id } }]) {
+    let count = 0;
+    const gateway = createDskLiveGateway({ userName: "fixture", password: "fixture", recurringAllowed: true, fetchImpl: async () => { count++; if (first instanceof Error) throw first; return response(first); } });
+    await assert.rejects(gateway.chargeRecurring(order), e => e.ambiguous === true && !String(e).includes("private description") && !String(e).includes("secret network"));
+    assert.equal(count, 1);
+  }
+  const replies = [response({ success: true, data: { orderId: id } }), response(status({ orderStatus: 1 }))];
+  const gateway = createDskLiveGateway({ userName: "fixture", password: "fixture", recurringAllowed: true, fetchImpl: async () => replies.shift() });
+  assert.equal((await gateway.chargeRecurring(order)).status, "authorized");
+});
+
+test("bank bindings are returned privately only after an exact client match", async () => {
+  const clientId = "gp-fixture-owner";
+  const bindingInfo = { clientId, bindingId: id };
+  const matching = fixture([response(status({ bindingInfo }))]);
+  assert.equal((await matching.gateway.getStatus({ orderNumber: reference, amountMinor: 999, clientId })).bindingId, id);
+  const other = fixture([response(status({ bindingInfo: { ...bindingInfo, clientId: "someone-else" } }))]);
+  await assert.rejects(other.gateway.getStatus({ orderNumber: reference, amountMinor: 999, clientId }), { code: "DSK_LIVE_INVALID_REPLY" });
+  const ordinary = fixture([response(status({ bindingInfo }))]);
+  assert.equal((await ordinary.gateway.getStatus({ orderNumber: reference, amountMinor: 999 })).bindingId, undefined);
+});
+
+test("sandbox uses only its own origin; saving a card requires explicit consent and recurring permission", async () => {
+  const calls = [];
+  const config = { bankMode: "sandbox", userName: "fixture", password: "fixture", recurringAllowed: true, fetchImpl: async (url, init) => {
+    calls.push({ url, body: Object.fromEntries(init.body) });
+    return response({ orderId: id, formUrl: checkoutUrl.replace("epg.dskbank.bg", "uat.dskbank.bg") });
+  } };
+  const gateway = createDskLiveGateway(config);
+  const order = { orderNumber: reference, checkoutId, amountMinor: 999, clientId: "gp-fixture-client" };
+  await assert.rejects(gateway.register(order), { code: "DSK_LIVE_INVALID_ORDER" });
+  assert.equal(calls.length, 0);
+  await assert.rejects(gateway.register({ ...order, saveCardConsent: true }), { code: "DSK_LIVE_INVALID_ORDER" });
+  for (const recurringExpiry of ["20300230", "20000101", "2030-12-31"]) await assert.rejects(gateway.register({ ...order, saveCardConsent: true, recurringExpiry }), { code: "DSK_LIVE_INVALID_ORDER" });
+  const result = await gateway.register({ ...order, saveCardConsent: true, recurringExpiry: "20991231" });
+  assert.equal(new URL(calls[0].url).origin, "https://uat.dskbank.bg");
+  assert.equal(new URL(result.checkoutUrl).origin, "https://uat.dskbank.bg");
+  assert.equal(calls[0].body.clientId, order.clientId);
+  assert.equal(calls[0].body.features, "FORCE_TDS", "never overrides the bank's save-card choice");
+  assert.deepEqual(JSON.parse(calls[0].body.jsonParams), { recurringFrequency: "28", recurringExpiry: "20991231" });
+  assert.throws(() => validateLiveCheckoutUrl(result.checkoutUrl, id), { code: "DSK_LIVE_INVALID_REPLY" });
+  assert.throws(() => createDskLiveGateway({ ...config, bankMode: "https://evil.invalid" }), { code: "DSK_LIVE_INVALID_CONFIGURATION" });
+});

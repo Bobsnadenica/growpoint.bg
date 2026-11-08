@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import PageScene from "../layout/PageScene";
+import { MERCHANT } from "../../lib/merchant";
 
 const contactChannels = [
   {
@@ -66,6 +67,7 @@ export default function ContactPage() {
               Общите въпроси, партньорствата и правните запитвания са разделени в ясни
               канали, за да започва разговорът по-лесно.
             </p>
+            <p className="form-note">{MERCHANT.name} · ЕИК {MERCHANT.eik}<br />{MERCHANT.address}</p>
           </div>
         </div>
       </section>

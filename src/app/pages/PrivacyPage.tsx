@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import PageScene from "../layout/PageScene";
+import { MERCHANT } from "../../lib/merchant";
 
-const LAST_UPDATED_ISO = "2026-10-01";
+const LAST_UPDATED_ISO = "2026-11-08";
 const lastUpdated = new Intl.DateTimeFormat("bg-BG", {
   day: "numeric",
   month: "long",
@@ -9,6 +10,13 @@ const lastUpdated = new Intl.DateTimeFormat("bg-BG", {
 }).format(new Date(LAST_UPDATED_ISO));
 
 const PRIVACY_SECTIONS = [
+  {
+    title: "Администратор на личните данни",
+    points: [
+      `${MERCHANT.name} (${MERCHANT.englishName}), ЕИК ${MERCHANT.eik}, управлява GrowPoint.`,
+      `Адрес за кореспонденция: ${MERCHANT.address}. За въпроси относно личните данни: ${MERCHANT.privacyEmail}.`
+    ]
+  },
   {
     title: "Какви данни събираме",
     points: [

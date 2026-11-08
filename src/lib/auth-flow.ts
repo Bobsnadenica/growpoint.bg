@@ -6,7 +6,7 @@ const SOCIAL_ONBOARDING_KEY = "growpoint.social-onboarding-pending";
 const INVITE_TOKEN_KEY = "growpoint.invite-token";
 const REFERRAL_CODE_KEY = "growpoint.referral-code";
 
-export const CURRENT_TERMS_VERSION = "terms-2026-09-30+privacy-2026-10-01";
+export const CURRENT_TERMS_VERSION = "terms-2026-11-08+privacy-2026-11-08";
 
 export type SocialAuthProviderKey = "google" | "apple" | "linkedin";
 export type SocialAuthMode = "login" | "register";

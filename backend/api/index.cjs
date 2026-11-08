@@ -122,7 +122,7 @@ const ADMIN_GROUP = "admin";
 const CONSULTANT_GROUP = "consultants";
 const CLIENT_GROUP = "clients";
 const VISITS_ITEM_ID = "system#visits";
-const TERMS_VERSION = "terms-2026-09-30+privacy-2026-10-01";
+const TERMS_VERSION = "terms-2026-11-08+privacy-2026-11-08";
 
 function termsAcceptance(body, now) {
   if (body.acceptTerms !== true) return {};
@@ -347,7 +347,7 @@ const USER_MUTATION_GUARD = {
   condition: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND attribute_not_exists(deletionScheduledAt) AND (attribute_not_exists(identityDisabled) OR identityDisabled <> :notRestricted) AND (attribute_not_exists(restricted) OR restricted <> :notRestricted)",
   values: { ":notRestricted": true }
 };
-const CONSULTANT_ACCESS_FIELDS = ["updatedAt", "restricted", "identityDisabled", "identityDeleted", "deletionScheduledAt", "comped", "packageTier", "packageSource", "visibilityMode"];
+const CONSULTANT_ACCESS_FIELDS = ["updatedAt", "restricted", "identityDisabled", "identityDeleted", "deletionScheduledAt", "comped", "packageTier", "packageSource", "packageStartsAt", "packageExpiresAt", "packageRevokedAt", "visibilityMode"];
 
 // --- Points / rewards (clients only) ----------------------------------------
 // Users earn points for engagement and spend 100 for a free consultation.
@@ -1768,6 +1768,9 @@ const PUBLIC_CONSULTANT_HIDDEN_FIELDS = [
   "priceBgn",
   // Package business internals stay private; only the tier itself is public.
   "packageSource",
+  "packageStartsAt",
+  "packageExpiresAt",
+  "packageRevokedAt",
   "packageUpdatedAt",
   "packageUpdatedBy",
   "packageUpdatedByEmail"
@@ -2019,13 +2022,18 @@ function isReasonablePublicNumber(value, min, max) {
 // paying or admin-comped/invited expert. Approval is no longer required — paid
 // (or invited) accounts are the gate. `comped` is set by an admin invite or by
 // grandfathering existing live profiles; `packageSource` purchased|granted comes
-// from Stripe (future) or an admin package grant. Restricted accounts are never
-// active.
+// from a verified purchase or an admin package grant. Purchased access must have
+// a valid paid service interval; a stale purchased flag cannot grant life access.
 function consultantMembershipActive(consultant) {
   if (!consultant || consultant.restricted === true) return false;
   if (consultant.comped === true) return true;
   const source = consultant.packageSource || "";
-  return source === "granted" || source === "purchased";
+  if (source === "granted") return true;
+  if (source !== "purchased" || consultant.packageRevokedAt) return false;
+  const start = typeof consultant.packageStartsAt === "string" ? Date.parse(consultant.packageStartsAt) : NaN;
+  const end = typeof consultant.packageExpiresAt === "string" ? Date.parse(consultant.packageExpiresAt) : NaN;
+  const now = Date.now();
+  return Number.isFinite(start) && Number.isFinite(end) && start <= now && now < end;
 }
 
 function isVisibleConsultant(consultant) {
