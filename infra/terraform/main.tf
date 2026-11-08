@@ -1493,7 +1493,7 @@ resource "aws_sns_topic" "alerts" {
 resource "aws_sns_topic_subscription" "alerts_email" {
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
-  endpoint  = "contactus@growpoint.bg"
+  endpoint  = "admin@growpoint.bg"
 }
 
 resource "aws_cloudwatch_metric_alarm" "api_errors" {

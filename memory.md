@@ -2,7 +2,16 @@
 
 Last reviewed: 2026-11-08. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
-## Mail activation — 2026-11-08 (latest)
+## Mail forwarding and alerts — 2026-11-08 (latest)
+
+- Owner explicitly asked the agent to inspect the linked AWS message and complete the remaining confirmation. The linked message was the SES approval, with no reply/action required. No support reply, bank message, or policy acceptance was sent.
+- ImprovMX had a mistyped `*contactus` alias. Corrected only that alias to `contactus`, preserving its existing private forwarding destination, and verified persistence after reload. Admin/legal/partnership routing destinations were not changed. Do not publish destination mailboxes, provider account details or confirmation URLs.
+- SES had contactus suppressed specifically for BOUNCE after delivery failures. Removed only that entry after the forwarding repair, verified absence, sent one labelled new test and found the matching message in the owner's actual inbox. The earlier admin-address SES test is also visible. SES→ImprovMX→inbox delivery now passes for these two public aliases; this does not prove every booking/payment email template or a new signup flow.
+- The first SNS contact-address confirmation remained undelivered. Replaced only the operational-alert subscription endpoint with the already working admin alias via reviewed Terraform (1add/0change/1destroy; no table/Cognito/Lambda/billing changes). Owner-authorized confirmation completed through the email link and AWS's second Confirm Subscription button. AWS UI and independent subscription attributes confirm active status.
+- Published one clearly labelled SNS test only after checking that the only confirmed subscriber was the owned admin alias. Matched the exact test in the owner's actual inbox. A leftover unconfirmed contact-address record from the single resend cannot be unsubscribed while pending; AWS normally expires these automatically. It is not a confirmed duplicate recipient; do not repeatedly resend or treat it as a new payment/identity resource.
+- Fresh full Terraform plan reports zero managed changes after confirmation. Build/theme/type and Terraform format/validation pass (existing provider deprecation warnings remain). SES stays GRANTED/production enabled; all DSK activation gates stay off and no membership, booking or paid state changed. Public readiness remains limited by independent bank/legal/customer-workflow gates.
+
+## Mail activation — 2026-11-08 (earlier request)
 
 - Owner confirms inbound forwarding for contactus/admin aliases is now directed to a monitored mailbox and authorizes activation/confirmation emails. Do not publish the private forwarding destination or confirm owner email links on their behalf.
 - SES domain verified/DKIM success, sending enabled, feedback forwarding enabled and BOUNCE/COMPLAINT suppression enabled. Two explicitly requested direct tests to the public contact/admin aliases were accepted by SES; inbox arrival is still owner-unconfirmed. Acceptance does not prove forwarding or delivery. No duplicate tests should be sent without checking the existing evidence privately.
