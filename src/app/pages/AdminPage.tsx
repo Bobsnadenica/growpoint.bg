@@ -11,6 +11,7 @@ import type {
 } from "../../lib/types";
 import PageScene from "../layout/PageScene";
 import DskSandboxPanel from "../components/DskSandboxPanel";
+import AdminBillingPanel from "../components/AdminBillingPanel";
 import { AdminBenefitsPanel } from "../components/ExpertBenefitsPanel";
 
 type Filter = "all" | "public" | "featured" | "restricted";
@@ -22,10 +23,10 @@ const PACKAGE_TIER_LABELS: Record<ConsultantPackageTier, string> = {
 };
 
 function isActiveMember(item: AdminConsultantSummary) {
+  if (typeof item.membershipActive === "boolean") return item.membershipActive;
   return (
     item.comped === true ||
-    item.packageSource === "granted" ||
-    item.packageSource === "purchased"
+    item.packageSource === "granted"
   );
 }
 
@@ -420,6 +421,7 @@ export default function AdminPage() {
       </section>
 
       <MonitoringDashboardPage embedded />
+      {token && <AdminBillingPanel token={token} />}
 
       <DskSandboxPanel key={user.id} token={token} />
 

@@ -693,6 +693,22 @@ resource "aws_dynamodb_table" "users" {
     name = "userId"
     type = "S"
   }
+  attribute {
+    name = "billingIndexPK"
+    type = "S"
+  }
+  attribute {
+    name = "billingIndexSK"
+    type = "S"
+  }
+  # Sparse index: existing ordinary accounts are not copied. Payment history,
+  # due subscriptions and pending notices share separate server-owned keyspaces.
+  global_secondary_index {
+    name            = "billing-index"
+    hash_key        = "billingIndexPK"
+    range_key       = "billingIndexSK"
+    projection_type = "ALL"
+  }
 
   point_in_time_recovery {
     enabled = true
@@ -868,6 +884,7 @@ resource "aws_iam_role_policy" "lambda" {
         ]
         Resource = [
           aws_dynamodb_table.users.arn,
+          "${aws_dynamodb_table.users.arn}/index/billing-index",
           aws_dynamodb_table.consultants.arn,
           aws_dynamodb_table.bookings.arn,
           "${aws_dynamodb_table.consultants.arn}/index/*",
@@ -958,22 +975,33 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      USERS_TABLE       = aws_dynamodb_table.users.name
-      CONSULTANTS_TABLE = aws_dynamodb_table.consultants.name
-      BOOKINGS_TABLE    = aws_dynamodb_table.bookings.name
-      USER_POOL_ID      = aws_cognito_user_pool.main.id
-      CV_BUCKET         = aws_s3_bucket.cv_documents.bucket
-      ALLOWED_ORIGIN    = element(var.frontend_origins, 0)
-      ALLOWED_ORIGINS   = join(",", var.frontend_origins)
-      SES_FROM_EMAIL    = var.ses_from_email
-      APP_URL           = var.app_url
-      DSK_UAT_ENABLED   = tostring(var.dsk_uat_enabled)
-      DSK_UAT_USERNAME  = var.dsk_uat_enabled ? var.dsk_uat_username : ""
-      DSK_UAT_PASSWORD  = var.dsk_uat_enabled ? var.dsk_uat_password : ""
+      USERS_TABLE                  = aws_dynamodb_table.users.name
+      CONSULTANTS_TABLE            = aws_dynamodb_table.consultants.name
+      BOOKINGS_TABLE               = aws_dynamodb_table.bookings.name
+      USER_POOL_ID                 = aws_cognito_user_pool.main.id
+      CV_BUCKET                    = aws_s3_bucket.cv_documents.bucket
+      ALLOWED_ORIGIN               = element(var.frontend_origins, 0)
+      ALLOWED_ORIGINS              = join(",", var.frontend_origins)
+      SES_FROM_EMAIL               = var.ses_from_email
+      APP_URL                      = var.app_url
+      DSK_UAT_ENABLED              = tostring(var.dsk_uat_enabled)
+      DSK_UAT_USERNAME             = var.dsk_uat_enabled ? var.dsk_uat_username : ""
+      DSK_UAT_PASSWORD             = var.dsk_uat_enabled ? var.dsk_uat_password : ""
+      DSK_LIVE_ENABLED             = tostring(var.dsk_live_enabled)
+      DSK_LIVE_CREDENTIALS_ROTATED = tostring(var.dsk_live_credentials_rotated)
+      DSK_RECURRING_CONFIRMED      = tostring(var.dsk_recurring_confirmed)
+      # Preserve configured access while checkout is off, so existing orders
+      # can still be reconciled. Empty defaults never reuse UAT credentials.
+      DSK_LIVE_USERNAME = var.dsk_live_username
+      DSK_LIVE_PASSWORD = var.dsk_live_password
     }
   }
 
   lifecycle {
+    precondition {
+      condition     = !var.dsk_live_enabled || (!var.dsk_uat_enabled && var.dsk_live_credentials_rotated && var.dsk_recurring_confirmed && trimspace(var.dsk_live_username) != "" && trimspace(var.dsk_live_password) != "")
+      error_message = "Live subscriptions require separate rotated credentials, verified recurring access and disabled UAT."
+    }
     precondition {
       condition     = !var.dsk_uat_enabled || (trimspace(var.dsk_uat_username) != "" && trimspace(var.dsk_uat_password) != "")
       error_message = "DSK UAT requires nonempty sandbox username and password when enabled."
@@ -1287,6 +1315,29 @@ resource "aws_apigatewayv2_route" "admin_metrics" {
   authorization_type = "JWT"
 }
 
+resource "aws_apigatewayv2_route" "billing_config" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "GET /billing/config"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+resource "aws_apigatewayv2_route" "billing" {
+  for_each = toset([
+    "GET /me/billing",
+    "POST /me/billing/checkout",
+    "POST /me/billing/cancel",
+    "POST /me/billing/resume",
+    "POST /me/billing/orders/{checkoutId}/refresh",
+    "POST /me/billing/orders/{checkoutId}/refund",
+    "GET /admin/billing",
+    "POST /admin/billing/orders/{checkoutId}/refresh"
+  ])
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = each.value
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
 resource "aws_apigatewayv2_route" "admin_payments_uat_config" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "GET /admin/payments/uat/config"
@@ -1495,6 +1546,27 @@ resource "aws_cloudwatch_metric_alarm" "api_throttles" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   tags                = local.common_tags
+}
+
+resource "aws_cloudwatch_event_rule" "billing" {
+  name                = "${local.name_prefix}-billing"
+  description         = "Bounded subscription reconciliation; no customer charging without application gates."
+  schedule_expression = "rate(5 minutes)"
+  state               = var.dsk_live_credentials_rotated ? "ENABLED" : "DISABLED"
+  tags                = local.common_tags
+}
+resource "aws_cloudwatch_event_target" "billing" {
+  rule      = aws_cloudwatch_event_rule.billing.name
+  target_id = "billing"
+  arn       = aws_lambda_function.api.arn
+  input     = jsonencode({ source = "growpoint.billing" })
+}
+resource "aws_lambda_permission" "billing" {
+  statement_id  = "AllowBillingSchedule"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.billing.arn
 }
 
 resource "aws_cloudwatch_event_rule" "booking_reminders" {

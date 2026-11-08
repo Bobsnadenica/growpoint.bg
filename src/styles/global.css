@@ -9,6 +9,11 @@
 .payment-preview__amount { font-size: 1.6rem; overflow-wrap: anywhere; }
 .payment-preview__notice { border: 2px solid var(--primary); }
 .payment-preview .modal-card__actions { flex-wrap: wrap; }
+.billing-history { display: grid; gap: 16px; margin-top: 24px; }
+.billing-summary, .billing-history > .panel { min-width: 0; overflow-wrap: anywhere; }
+.payment-preview .checkbox-row { padding: 12px; align-items: flex-start; }
+.payment-preview .checkbox-row > span, .billing-summary .checkbox-row > span { min-width: 0; flex: 1; }
+.payment-preview .checkbox-row input { flex-shrink: 0; }
 /* Monitoring uses shared tokens, including their dark-theme overrides. */
 .monitor-page { padding-block: 56px 72px; }
 .monitor-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 36px; }

@@ -58,6 +58,21 @@ jobs:
       - name: Backend regression tests
         run: npm test
 
+      - name: Install official DynamoDB Local (checksum verified)
+        run: |
+          mkdir -p "$RUNNER_TEMP/growpoint-dynamodb"
+          cd "$RUNNER_TEMP/growpoint-dynamodb"
+          curl -fsSL https://d1ni2b6xgvw0s0.cloudfront.net/v2.x/dynamodb_local_latest.tar.gz -o dynamodb_local_latest.tar.gz
+          curl -fsSL https://d1ni2b6xgvw0s0.cloudfront.net/v2.x/dynamodb_local_latest.tar.gz.sha256 -o archive.sha256
+          expected=$(awk '{print $1}' archive.sha256)
+          echo "$expected  dynamodb_local_latest.tar.gz" | sha256sum --check
+          tar -xzf dynamodb_local_latest.tar.gz
+
+      - name: Billing transactions against DynamoDB Local (no AWS or bank access)
+        run: npm run test:billing:local
+        env:
+          GP_DYNAMODB_LOCAL_JAR: ${{ runner.temp }}/growpoint-dynamodb/DynamoDBLocal.jar
+
   terraform:
     name: Terraform validate
     runs-on: ubuntu-latest

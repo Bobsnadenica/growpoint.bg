@@ -44,6 +44,7 @@ export interface AdminConsultantDetail extends ConsultantProfile {
 }
 
 export interface AdminConsultantSummary {
+  membershipActive?: boolean;
   visibilityMode?: "auto" | "shown" | "hidden";
   profileCompletion?: number;
   consultantId: string;
@@ -158,6 +159,7 @@ export interface UploadedDocument {
 }
 
 export interface ConsultantProfile {
+  membershipActive?: boolean;
   spotlightBannerEnabled?: boolean;
   visibilityMode?: "auto" | "shown" | "hidden";
   consultantId: string;

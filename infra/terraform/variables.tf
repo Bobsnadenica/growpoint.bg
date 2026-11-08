@@ -122,6 +122,32 @@ variable "dsk_uat_enabled" {
   description = "Enable admin-only DSK sandbox checks. Never enables customer charging or paid entitlements."
 }
 
+variable "dsk_live_enabled" {
+  type        = bool
+  default     = false
+  description = "Allow new expert subscription charges only after verified recurring bank and website tests."
+}
+variable "dsk_live_credentials_rotated" {
+  type        = bool
+  default     = false
+  description = "Owner confirms the exposed live API credential has been replaced."
+}
+variable "dsk_recurring_confirmed" {
+  type        = bool
+  default     = false
+  description = "Recurring merchant permissions independently verified for this environment."
+}
+variable "dsk_live_username" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+variable "dsk_live_password" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
 variable "dsk_uat_username" {
   type        = string
   default     = ""

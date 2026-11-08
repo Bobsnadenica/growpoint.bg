@@ -66,7 +66,7 @@ test("contradictory bank success flags and error codes fail closed", async () =>
 });
 
 test("authorization, refunds and ambiguous failures never become captured payment", async () => {
-  for (const [patch, expected] of [[{ orderStatus: 1, actionCode: 0 }, "authorized"], [{ orderStatus: 4, actionCode: 0 }, "refunded"], [{ paymentAmountInfo: { depositedAmount: 999, refundedAmount: 20, paymentState: "DEPOSITED" } }, "partially_refunded"]]) {
+  for (const [patch, expected] of [[{ orderStatus: 1, actionCode: 0 }, "authorized"], [{ orderStatus: 4, actionCode: 0, paymentAmountInfo: {depositedAmount:999,refundedAmount:999,paymentState:"REFUNDED"} }, "refunded"], [{ paymentAmountInfo: { depositedAmount: 999, refundedAmount: 20, paymentState: "DEPOSITED" } }, "partially_refunded"]]) {
     const { gateway } = fixture([response(status(patch))]);
     assert.equal((await gateway.getStatus({ orderNumber: reference, amountMinor: 999 })).status, expected);
   }
@@ -76,7 +76,7 @@ test("authorization, refunds and ambiguous failures never become captured paymen
   const duplicate = fixture([response({ errorCode: "1" })]);
   await assert.rejects(duplicate.gateway.register({ orderNumber: reference, checkoutId, amountMinor: 999 }), { code: "DSK_LIVE_DUPLICATE_ORDER", ambiguous: true });
   assert.equal(duplicate.calls.length, 1);
-  await assert.rejects(f.gateway.register({ orderNumber: reference, checkoutId, amountMinor: 1 }), { code: "DSK_LIVE_INVALID_ORDER" });
+  await assert.rejects(f.gateway.register({ orderNumber: reference, checkoutId, amountMinor: 0 }), { code: "DSK_LIVE_INVALID_ORDER" });
 });
 
 test("bank timeouts, unexpected HTTP content and oversize replies fail closed", async () => {
@@ -155,4 +155,25 @@ test("sandbox uses only its own origin; saving a card requires explicit consent 
   assert.deepEqual(JSON.parse(calls[0].body.jsonParams), { recurringFrequency: "28", recurringExpiry: "20991231" });
   assert.throws(() => validateLiveCheckoutUrl(result.checkoutUrl, id), { code: "DSK_LIVE_INVALID_REPLY" });
   assert.throws(() => createDskLiveGateway({ ...config, bankMode: "https://evil.invalid" }), { code: "DSK_LIVE_INVALID_CONFIGURATION" });
+});
+test("bank-confirmed remaining refund balance matches the observed sandbox response",async()=>{
+  const f=fixture([response(status({orderStatus:4,paymentAmountInfo:{depositedAmount:0,refundedAmount:999,paymentState:"REFUNDED"}}))]);
+  assert.equal((await f.gateway.getStatus({orderNumber:reference,amountMinor:999})).status,"refunded");
+  const invalid=fixture([response(status({orderStatus:4,paymentAmountInfo:{depositedAmount:0,refundedAmount:998,paymentState:"REFUNDED"}}))]);
+  await assert.rejects(invalid.gateway.getStatus({orderNumber:reference,amountMinor:999}),{code:"DSK_LIVE_INVALID_REPLY"});
+});
+test("zero-charge setup is recognized only with exact bank and binding-owner evidence",async()=>{
+  const clientId="gp-fixture-client";
+  const value=status({orderStatus:3,bindingInfo:{clientId,bindingId:id},paymentAmountInfo:{depositedAmount:0,refundedAmount:0,paymentState:"REVERSED"}});
+  const f=fixture([response(value)]);
+  assert.equal((await f.gateway.getStatus({orderNumber:reference,amountMinor:999,clientId})).cardSetupVerified,true);
+  const cancelled=fixture([response({...value,bindingInfo:undefined})]);
+  assert.equal((await cancelled.gateway.getStatus({orderNumber:reference,amountMinor:999,clientId})).cardSetupVerified,undefined);
+});
+test("recurring-card lookup uses the typed bank endpoint and never treats a common card as recurrent",async()=>{
+  const f=fixture([response({errorCode:0,bindings:[]}),response({errorCode:0,bindings:[{bindingId:id}]})]);
+  assert.equal(await f.gateway.isRecurringBinding({clientId:"gp-fixture-client",bindingId:id}),false);
+  assert.equal(await f.gateway.isRecurringBinding({clientId:"gp-fixture-client",bindingId:id}),true);
+  assert.equal(f.calls[0].body.bindingType,"R");
+  assert.equal(f.calls[0].url,"https://epg.dskbank.bg/payment/rest/getBindings.do");
 });

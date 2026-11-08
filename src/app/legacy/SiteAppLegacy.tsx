@@ -18,6 +18,8 @@ import {
   useSearchParams
 } from "react-router-dom";
 import { api } from "../../lib/api";
+import ExpertBillingPanel from "../components/ExpertBillingPanel";
+import { billingApi } from "../../lib/billing";
 import { usePublicRefresh } from "../../lib/use-public-refresh";
 import { useLiveBookingMessages } from "../../lib/use-live-booking-messages";
 import { mergeMessages } from "../../lib/live-messages";
@@ -2385,6 +2387,8 @@ function scorePasswordStrength(value: string) {
 }
 
 export function AuthPage() {
+  const [expertSignupEnabled,setExpertSignupEnabled]=useState(false);
+  useEffect(()=>{let active=true;billingApi.config().then(value=>{if(active)setExpertSignupEnabled(value.enabled === true);}).catch(()=>{});return()=>{active=false;};},[]);
   const {
     configured,
     socialConfigured,
@@ -2615,7 +2619,7 @@ export function AuthPage() {
 
     // Expert profiles are paid (DKS pending) — until then a mentor account
     // can only be created from an admin email invite. Clients stay free + open.
-    if (form.role === "consultant" && !readInviteToken()) {
+    if (form.role === "consultant" && !readInviteToken() && !expertSignupEnabled) {
       setError(
         "Експертните профили са с покана засега. Онлайн плащането предстои — пиши ни на contactus@growpoint.bg за достъп."
       );
@@ -3091,7 +3095,7 @@ export function AuthPage() {
                     </button>
                   ))}
                 </div>
-                {form.role === "consultant" && !readInviteToken() ? (
+                {form.role === "consultant" && !readInviteToken() && !expertSignupEnabled ? (
                   <p className="form-note auth-invite-note">
                     Експертните профили (консултанти и ментори) са платени. Онлайн
                     плащането предстои — засега нов експертен профил се
@@ -5602,46 +5606,7 @@ export function DashboardPage() {
                 Покажи експертизата си пред повече хора и отключи допълнителни
                 възможности за представяне и позициониране.
               </p>
-              <div className="package-plans">
-                {PACKAGE_PLANS.map((plan) => {
-                  const isCurrent =
-                    (consultantProfile?.packageTier || "start") === plan.tier;
-                  return (
-                    <article
-                      className={`package-plan package-plan--${plan.tier} ${
-                        isCurrent ? "package-plan--current" : ""
-                      }`}
-                      key={plan.tier}
-                    >
-                      <header className="package-plan__head">
-                        <p className="eyebrow">{plan.level}</p>
-                        <h3>{plan.name}</h3>
-                        <p className="form-note">{plan.tagline}</p>
-                      </header>
-                      <p>{plan.description}</p>
-                      <ul className="package-plan__features">
-                        {plan.features.map((feature) => (
-                          <li key={feature}>{feature}</li>
-                        ))}
-                      </ul>
-                      <div className="package-plan__footer">
-                        <strong>{plan.price}</strong>
-                        {isCurrent ? (
-                          <span className="status-badge status-badge--success">
-                            Текущ пакет
-                          </span>
-                        ) : (
-                          <PaymentPlaceholder description={`Пакет ${plan.name}`} amount={plan.price} />
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-              <p className="form-note">
-                Онлайн плащането се подготвя. За активиране на пакет междувременно —{" "}
-                <Link to="/contact">свържи се с нас</Link>.
-              </p>
+              <ExpertBillingPanel key={consultantProfile?.consultantId || profile.userId} token={token || ""} consultant={consultantProfile} plans={PACKAGE_PLANS} onMembershipChange={async()=>{if(!token)return;const fresh=await api.getMyConsultantProfile(token);setConsultantProfile(current=>current?.consultantId===fresh.consultantId?{...current,packageTier:fresh.packageTier,packageSource:fresh.packageSource,membershipActive:fresh.membershipActive}:current);}} />
             </section>
           ) : profile.plan !== "pro" ? (
             <section

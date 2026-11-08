@@ -1,8 +1,8 @@
 # DSK expert subscriptions: launch checklist
 
-Status: **not live**. The owner selected paid expert packages with automatic monthly renewal; client session payments are outside this release. The existing public checkout is still a preview. The gateway and order ledger in this branch are isolated preparation, not a working subscription system.
+Status: **not live**. The owner selected paid expert packages with automatic monthly renewal; client session payments are outside this release. The existing public checkout is still a preview. The subscription ledger, customer/admin panels and scheduler are now implemented behind default-off gates. Local tests do not establish successful bank recurring or complete live customer workflows. See [implementation and operations](billing-integration.md).
 
-8 November update: the owner supplied the merchant address and confirms recurring availability, prices and preservation of grants. Provider-only sandbox checks nevertheless reject recurring initialization with code 11, `Recurrent initialize payments are prohibited`. This test-merchant gate must be resolved and production API access independently verified. See [current payment QA](qa-payments-2026-11-08.md) and the [default policy draft](subscription-policy-draft.md); earlier questions below are background, not a new owner questionnaire.
+8 November update: the owner supplied the merchant address and confirms recurring availability, prices and preservation of grants. Both provider diagnostics and the new service against local DynamoDB plus the real sandbox reject recurring initialization with code 11, `Recurrent initialize payments are prohibited`. This test-merchant gate must be resolved and production API access independently verified. See [current payment QA](qa-payments-2026-11-08.md) and the [default policy draft](subscription-policy-draft.md); earlier questions below are background, not a new owner questionnaire.
 
 ## Bank confirmation
 
@@ -18,7 +18,7 @@ Only the owner sends the message. Store any bank reply and credentials privately
 
 - Confirm the merchant's verified contact details and approved subscription, cancellation, withdrawal and refund terms; obtain appropriate legal review. Explain renewal frequency, price, consent, cancellation and effective dates before a customer commits.
 - Verify that the bank permits the chosen recurring flow and run successful, declined, interrupted and cancelled renewal tests in sandbox. Verify the provider's exact response shapes and callback configuration.
-- Complete server-owned price and consent recording, payment and refund reconciliation, recovery after ambiguous network outcomes, safe idempotency, entitlement expiry, renewal cancellation, account deletion and admin support flows. Preserve existing granted and complimentary memberships.
+- Verify the implemented server-owned price and consent recording, payment and refund reconciliation, recovery after ambiguous network outcomes, safe idempotency, entitlement expiry, renewal cancellation, account deletion and admin support flows. Preserve existing granted and complimentary memberships.
 - Keep card entry on the bank-hosted page. Never log card details, credentials or private bank responses. Store API secrets outside Git and restrict access. Treat callbacks and browser returns as signals, not proof of payment; verify the final bank state server-side.
 - Resolve production customer email delivery and test receipts and subscription notices. SES sandbox status is a separate launch gate.
 - Have the owner perform and verify a bounded production card payment and refund after implementation and bank approval. Confirm the actual bank record and subscription state; mocked responses are not live proof.

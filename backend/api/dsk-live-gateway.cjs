@@ -1,13 +1,12 @@
 "use strict";
 
-// Preparation only: not wired to any route or deployed for live payments.
-// Callers must persist and reconcile purchases before calling this module.
+// Used only by the guarded, server-owned billing service. Persist and reserve
+// each purchase/cycle before any registration or debit request.
 // A browser return is never proof of payment.
 const BANK_ORIGIN = "https://epg.dskbank.bg";
 const RETURN_ORIGIN = "https://www.growpoint.bg";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REFERENCE = /^[A-Za-z0-9_-]{1,36}$/;
-const VALID_AMOUNTS = new Set([999, 2999, 9999]);
 const MAX_BYTES = 65536;
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 
@@ -28,7 +27,9 @@ function bankId(value) {
 }
 
 function assertOrder(orderNumber, amountMinor) {
-  if (typeof orderNumber !== "string" || !REFERENCE.test(orderNumber) || !VALID_AMOUNTS.has(amountMinor)) {
+  // The billing ledger owns product prices. The transport must also reconcile
+  // historical price snapshots after a catalogue change, within the card cap.
+  if (typeof orderNumber !== "string" || !REFERENCE.test(orderNumber) || !Number.isSafeInteger(amountMinor) || amountMinor <= 0 || amountMinor > 400000) {
     throw new DskLiveGatewayError("DSK_LIVE_INVALID_ORDER", false);
   }
 }
@@ -151,18 +152,25 @@ function createDskLiveGateway({ userName, password, token, bankMode = "productio
     if ((gatewayOrderId !== undefined && verifiedId !== gatewayOrderId) || (own(reply, "orderId") && reply.orderId !== verifiedId)) throw invalid();
     const bankStatus = number(reply.orderStatus), actionCode = number(reply.actionCode, true);
     let status = ({ 0: "created", 1: "authorized", 2: "succeeded", 3: "cancelled", 4: "refunded", 5: "pending", 6: "failed", 7: "pending", 8: "pending" })[bankStatus] || "unknown";
-    if (bankStatus === 2) {
+    if (bankStatus === 2 || bankStatus === 4) {
       if (actionCode !== 0) throw invalid();
       const amounts = reply.paymentAmountInfo;
       // Missing refund/deposit evidence is not equivalent to zero. In
       // particular, never grant access to a partly refunded transaction.
       if (!amounts || typeof amounts !== "object" || Array.isArray(amounts) ||
           !own(amounts, "depositedAmount") || !own(amounts, "refundedAmount") ||
-          number(amounts.depositedAmount) !== amountMinor || amounts.paymentState !== "DEPOSITED") throw invalid();
+          !["DEPOSITED","REFUNDED"].includes(amounts.paymentState)) throw invalid();
       const refunded = number(amounts.refundedAmount);
+      const deposited=number(amounts.depositedAmount);
       if (refunded > amountMinor) throw invalid();
+      // DSK can report either the captured total or the remaining deposited
+      // balance after a refund. Both must reconcile to the original order.
+      if (deposited !== amountMinor && deposited+refunded !== amountMinor) throw invalid();
+      if (bankStatus === 4 && (refunded !== amountMinor || amounts.paymentState !== "REFUNDED")) throw invalid();
+      if (bankStatus === 2 && amounts.paymentState !== "DEPOSITED") throw invalid();
       if (refunded) status = refunded === amountMinor ? "refunded" : "partially_refunded";
     }
+    if (reply.chargeback === true) status="disputed";
     let bindingId;
     if (clientId !== undefined) {
       // Bindings are private server data. Never infer their owner from a callback.
@@ -171,7 +179,8 @@ function createDskLiveGateway({ userName, password, token, bankMode = "productio
         bindingId = bankId(reply.bindingInfo.bindingId);
       }
     }
-    return { gatewayOrderId: verifiedId, status, bankStatus, actionCode, ...(bindingId ? { bindingId } : {}) };
+    const cardSetupVerified=Boolean(bindingId && bankStatus===3 && actionCode===0 && reply.paymentAmountInfo?.paymentState === "REVERSED" && number(reply.paymentAmountInfo.depositedAmount)===0 && number(reply.paymentAmountInfo.refundedAmount)===0);
+    return { gatewayOrderId: verifiedId, status, bankStatus, actionCode, ...(bindingId ? { bindingId } : {}),...(cardSetupVerified?{cardSetupVerified:true}:{}) };
   }
   async function chargeRecurring({ orderNumber, amountMinor, bindingId }) {
     // A portal token is not documented for this API. No credential substitution.
@@ -195,7 +204,20 @@ function createDskLiveGateway({ userName, password, token, bankMode = "productio
     // success=true means processed, not paid. Always verify capture separately.
     return getStatus({ orderNumber, amountMinor, gatewayOrderId });
   }
-  return { register, getStatus, chargeRecurring };
+  async function isRecurringBinding({clientId,bindingId}) {
+    if (!userAuth || typeof clientId !== "string" || !REFERENCE.test(clientId)) throw new DskLiveGatewayError("DSK_LIVE_INVALID_ORDER",false);
+    bankId(bindingId);
+    const reply=await request("getBindings.do",{clientId,bindingType:"R",language:"bg"});
+    if (!accepted(reply) || !Array.isArray(reply.bindings)) throw invalid();
+    return reply.bindings.some(binding => binding?.bindingId === bindingId);
+  }
+  async function disableBinding({clientId,bindingId}) {
+    if(!await isRecurringBinding({clientId,bindingId}))return true;
+    const reply=await request("unBindCard.do",{bindingId,language:"bg"});
+    if(!accepted(reply) || await isRecurringBinding({clientId,bindingId}))throw invalid();
+    return true;
+  }
+  return { register, getStatus, chargeRecurring, isRecurringBinding, disableBinding };
 }
 
 module.exports = { createDskLiveGateway, validateLiveCheckoutUrl, DskLiveGatewayError };

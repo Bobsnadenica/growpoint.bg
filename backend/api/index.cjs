@@ -6,6 +6,8 @@ const { createAccountLifecycle } = require("./account-lifecycle.cjs");
 const { createDskUatAdapter } = require("./dsk-uat.cjs");
 const { createDskUatService } = require("./dsk-uat-service.cjs");
 const { createDskUatRecords } = require("./dsk-uat-records.cjs");
+const { createDskLiveGateway } = require("./dsk-live-gateway.cjs");
+const { createBilling, POLICY: BILLING_POLICY, PRICES: BILLING_PRICES } = require("./billing.cjs");
 const { monthOf, monthlyFreeMutation, monthlyFreeSummary, monthlyFreeAvailableMonths, withMonthlyQuota, spotlightSummary, createBenefitRequest, updateBenefitRequest } = require("./expert-benefits.cjs");
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
@@ -67,6 +69,32 @@ const dskUatRecords = createDskUatRecords({ dynamo, table: env.usersTable });
 const identity = createIdentityChecks({ cognito, userPoolId: env.userPoolId });
 const cachedAdminMetrics = createMetricsCache({ dynamo, table: env.usersTable, collect: buildAdminMetrics });
 const lifecycle = createAccountLifecycle({ dynamo, cognito, s3, env, getUserBySub, listConsultantsByOwner, queryAllItems, scanAllItems, refundFreePointsIfNeeded });
+let liveBank;
+let activeLambdaContext;
+let billingMailProof={expiresAt:0,enabled:false};
+function liveCredentialsConfigured() {
+  return process.env.DSK_LIVE_CREDENTIALS_ROTATED === "true" && Boolean(process.env.DSK_LIVE_USERNAME && process.env.DSK_LIVE_PASSWORD);
+}
+function liveGateway() {
+  if (!liveCredentialsConfigured()) throw Object.assign(new Error("Банковото свързване още не е активирано."),{statusCode:503});
+  return liveBank ||= createDskLiveGateway({ userName:process.env.DSK_LIVE_USERNAME,password:process.env.DSK_LIVE_PASSWORD,recurringAllowed:process.env.DSK_RECURRING_CONFIRMED === "true" });
+}
+async function liveBillingEnabled() {
+  if (process.env.DSK_LIVE_ENABLED !== "true" || process.env.DSK_RECURRING_CONFIRMED !== "true" || !liveCredentialsConfigured()) return false;
+  if(billingMailProof.expiresAt>Date.now())return billingMailProof.enabled;
+  try { const account=await ses.send(new GetAccountCommand({}));billingMailProof={expiresAt:Date.now()+30000,enabled:account.ProductionAccessEnabled === true && account.SendingEnabled === true}; }
+  catch (_) { billingMailProof={expiresAt:Date.now()+5000,enabled:false}; }
+  return billingMailProof.enabled;
+}
+const billing = createBilling({dynamo,usersTable:env.usersTable,consultantsTable:env.consultantsTable,allowCharges:liveBillingEnabled,applyVisibility:applyAutomaticVisibility,verifyIdentity:owner=>identity.assertCallerActive({sub:owner}),remainingTime:()=>activeLambdaContext?.getRemainingTimeInMillis?.() ?? 29000,
+  gateway:Object.fromEntries(["register","getStatus","chargeRecurring","isRecurringBinding","disableBinding"].map(method=>[method,args=>liveGateway()[method](args)])),
+  notify:async(owner,notice)=>{
+    const user=await getUserBySub(owner);
+    if (!user?.email || user.identityDeleted) return false;
+    const labels={payment_confirmed:"Плащането за експертния пакет е потвърдено",payment_failed:"Месечното плащане е неуспешно; подновяването е спряно",payment_refunded:"Банката потвърди възстановяването на плащането",renewal_cancelled:"Автоматичното подновяване е спряно",refund_review_required:"Плащането изисква преглед",refund_requested:"Заявката за възстановяване е записана",renewal_resumed:"Автоматичното подновяване е възстановено"};
+    const text=[labels[notice.event] || "Промяна по абонамента",notice.amountMinor ? `Сума: ${(notice.amountMinor/100).toFixed(2)} EUR.` : "",notice.periodEndsAt ? `Платен достъп до: ${notice.periodEndsAt} (UTC).` : "","Провери подробностите и историята в таблото си: https://www.growpoint.bg/dashboard#upgrade","Банковото потвърждение не се представя като данъчна фактура."].filter(Boolean).join("\n");
+    return (await sendEmail({to:user.email,subject:`GrowPoint · ${labels[notice.event] || "Абонамент"}`,text,abortSignal:AbortSignal.timeout(4000)})).status === "accepted";
+  }});
 
 function headerValue(headers, name) {
   const expected = String(name || "").toLowerCase();
@@ -347,7 +375,7 @@ const USER_MUTATION_GUARD = {
   condition: "attribute_exists(userId) AND attribute_not_exists(identityDeleted) AND attribute_not_exists(deletionScheduledAt) AND (attribute_not_exists(identityDisabled) OR identityDisabled <> :notRestricted) AND (attribute_not_exists(restricted) OR restricted <> :notRestricted)",
   values: { ":notRestricted": true }
 };
-const CONSULTANT_ACCESS_FIELDS = ["updatedAt", "restricted", "identityDisabled", "identityDeleted", "deletionScheduledAt", "comped", "packageTier", "packageSource", "packageStartsAt", "packageExpiresAt", "packageRevokedAt", "visibilityMode"];
+const CONSULTANT_ACCESS_FIELDS = ["updatedAt", "restricted", "identityDisabled", "identityDeleted", "deletionScheduledAt", "comped", "packageTier", "packageSource", "packageStartsAt", "packageExpiresAt", "packageRevokedAt", "packageSubscriptionId", "packageLastOrderId", "visibilityMode"];
 
 // --- Points / rewards (clients only) ----------------------------------------
 // Users earn points for engagement and spend 100 for a free consultation.
@@ -995,7 +1023,7 @@ function textToEmailHtml(text) {
 </body></html>`;
 }
 
-async function sendEmail({ to, subject, text, html }) {
+async function sendEmail({ to, subject, text, html, abortSignal }) {
   if (!env.sesFromEmail || !to) {
     await monitoring.record("emailSkipped");
     return { status: "skipped" };
@@ -1023,7 +1051,7 @@ async function sendEmail({ to, subject, text, html }) {
             Body: body
           }
         }
-      })
+      }), { abortSignal }
     );
     await monitoring.record("emailAccepted");
     return { status: "accepted" };
@@ -1771,6 +1799,8 @@ const PUBLIC_CONSULTANT_HIDDEN_FIELDS = [
   "packageStartsAt",
   "packageExpiresAt",
   "packageRevokedAt",
+  "packageSubscriptionId",
+  "packageLastOrderId",
   "packageUpdatedAt",
   "packageUpdatedBy",
   "packageUpdatedByEmail"
@@ -2672,6 +2702,8 @@ async function exportMyData(event) {
     bookingsAsClient: clientBookings.map((booking) => bookingForViewer(booking, claims.sub)),
     bookingsAsConsultant: consultantBookings,
     bankSandboxTests,
+    billing:await billing.summary(claims.sub),
+    billingConsent:(await billing.subscription(claims.sub))?.consent || null,
     notes: [
       "Този файл съдържа цялата информация, която GrowPoint съхранява за теб.",
       "Документите (CV, сертификати) се пазят в S3 и се свалят чрез временни линкове, генерирани при поискване.",
@@ -2751,6 +2783,8 @@ function deletionExpertGuard(expert) {
 
 async function deleteMyAccount(event) {
   const claims = requireAuth(event);
+  // Cancelling deletion later must never silently restart card debits.
+  if (await billing.subscription(claims.sub)) await billing.cancel(claims.sub);
   for (let attempt = 0; attempt < 3; attempt++) {
     const user = await getUserBySub(claims.sub);
     if (!user) return notFound("Profile not found.");
@@ -3088,7 +3122,7 @@ async function getMyConsultant(event) {
     }), ...(isAdmin(claims) ? { visibilityMode: "hidden" } : {}) });
   }
 
-  return response(200, { ...await decorateConsultantMedia(consultant), benefits: expertBenefitsSummary(consultant) });
+  return response(200, { ...await decorateConsultantMedia(consultant), benefits: expertBenefitsSummary(consultant), membershipActive:consultantMembershipActive(consultant) });
 }
 
 function expertBenefitsEligible(consultant) {
@@ -5169,6 +5203,7 @@ async function listConsultantsForAdmin(event) {
         restricted: item.restricted === true,
         packageTier: normalizeConsultantPackageTier(item.packageTier),
         packageSource: item.packageSource || "",
+        membershipActive:consultantMembershipActive(item),
         membershipTier: item.membershipTier || "standard",
         avatarUrl,
         experienceYears: item.experienceYears || 0,
@@ -5806,9 +5841,67 @@ async function adminDskUatGet(event, checkoutId) {
   return response(200, await sandboxPayments().get(claims.sub, checkoutId), { "Cache-Control": "no-store" });
 }
 
-exports.handler = async (event) => {
+async function getBilling(event) {
+  const claims=requireAuth(event);
+  return response(200,{...await billing.summary(claims.sub),enabled:await liveBillingEnabled()},{"Cache-Control":"no-store"});
+}
+async function publicBillingConfig() {
+  return response(200,{enabled:await liveBillingEnabled(),policyVersion:BILLING_POLICY,prices:BILLING_PRICES,currency:"EUR"},{"Cache-Control":"public, max-age=30"});
+}
+async function startBilling(event) {
+  const claims=requireAuth(event);
+  const expert=await getConsultantByOwner(claims.sub);
+  if(!expert) return badRequest("Първо попълни експертния си профил.");
+  return response(200,await billing.create(claims.sub,expert,parseBody(event)),{"Cache-Control":"no-store"});
+}
+async function refreshBilling(event,id) {
+  const claims=requireAuth(event);
+  const result=await billing.reconcile(claims.sub,id);
+  await billing.deliverNotices(claims.sub);
+  return response(200,result,{"Cache-Control":"no-store"});
+}
+function emptyBillingBody(event) {
+  const body=parseBody(event);
+  if(!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length) throw Object.assign(new Error("Не са необходими допълнителни данни."),{statusCode:400});
+}
+async function cancelBilling(event) {
+  const claims=requireAuth(event);emptyBillingBody(event);
+  const result=await billing.cancel(claims.sub);
+  await billing.deliverNotices(claims.sub);
+  return response(200,result,{"Cache-Control":"no-store"});
+}
+async function resumeBilling(event) {
+  const claims=requireAuth(event);
+  const result=await billing.resume(claims.sub,parseBody(event));await billing.deliverNotices(claims.sub);
+  return response(200,result,{"Cache-Control":"no-store"});
+}
+async function refundBilling(event,id) {
+  const claims=requireAuth(event);emptyBillingBody(event);
+  const result=await billing.requestRefund(claims.sub,id);
+  await billing.deliverNotices(claims.sub);
+  return response(200,result,{"Cache-Control":"no-store"});
+}
+async function adminBilling(event) {
+  requireAdmin(event);
+  return response(200,{items:await billing.adminOrders(),enabled:await liveBillingEnabled()},{"Cache-Control":"no-store"});
+}
+async function adminRefreshBilling(event,id) {
+  requireAdmin(event);emptyBillingBody(event);
+  const row=await billing.orderForAdmin(id);
+  return response(200,await billing.reconcile(row.ownerId,id),{"Cache-Control":"no-store"});
+}
+
+exports.handler = async (event,context) => {
+  activeLambdaContext=context;
   activeRequestOrigin = headerValue(event?.headers, "origin");
   try {
+    if (event.source === "growpoint.billing") {
+      if(!liveCredentialsConfigured()) return {disabled:true};
+      const remaining=()=>context?.getRemainingTimeInMillis?.() ?? 29000;
+      const sweep=await billing.sweep({budgetMs:Math.max(0,remaining()-6000)});
+      const notices=remaining()>6000 ? await billing.deliverNotices():{pending:true};
+      return {sweep,notices};
+    }
     if (event.source === "aws.cognito-idp" && event["detail-type"] === "AWS API Call via CloudTrail") return await lifecycle.handleEvent(event);
     if (
       event?.source === "aws.events" ||
@@ -5849,6 +5942,16 @@ exports.handler = async (event) => {
     }
 
     if (method === "GET" && path === "/health") return await health();
+    if (method === "GET" && path === "/billing/config") return await publicBillingConfig();
+    if (method === "GET" && path === "/me/billing") return await getBilling(event);
+    if (method === "POST" && path === "/me/billing/checkout") return await startBilling(event);
+    if (method === "POST" && path === "/me/billing/cancel") return await cancelBilling(event);
+    if (method === "POST" && path === "/me/billing/resume") return await resumeBilling(event);
+    const billingOrder=/^\/me\/billing\/orders\/([^/]+)\/(refresh|refund)$/.exec(path);
+    if(method === "POST" && billingOrder) return billingOrder[2] === "refresh" ? await refreshBilling(event,billingOrder[1]) : await refundBilling(event,billingOrder[1]);
+    if (method === "GET" && path === "/admin/billing") return await adminBilling(event);
+    const adminBillingOrder=/^\/admin\/billing\/orders\/([^/]+)\/refresh$/.exec(path);
+    if (method === "POST" && adminBillingOrder) return await adminRefreshBilling(event,adminBillingOrder[1]);
     if (method === "POST" && path === "/metrics/visit") return await recordVisit();
     if (method === "GET" && path === "/consultants") return await listConsultants(event);
     if (method === "GET" && path === "/consultants/me") return await getMyConsultant(event);
