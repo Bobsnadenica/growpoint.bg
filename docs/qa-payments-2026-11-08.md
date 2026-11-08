@@ -30,3 +30,9 @@ After the bank resolves this gate, repeat complete application flows for success
 Implementation/operations: [billing integration](billing-integration.md). Primary references: [DSK API](https://uat.dskbank.bg/sandbox/en/integration/api/rest.html), [stored-credential types](https://uat.dskbank.bg/sandbox/en/integration/api/binding_types.html), [test cards](https://uat.dskbank.bg/sandbox/en/integration/structure/test-cards.html#testing).
 
 Terraform format/validation passed with non-blocking AWS-provider deprecation warnings for legacy DynamoDB index key syntax. These are not runtime payment failures.
+
+## Mail follow-up — 8 November
+
+After the owner confirmed forwarding and authorized activation emails, two direct SES tests to the public contact/admin aliases were accepted. Owner inbox arrival remains unconfirmed. The production-access request was corrected to the canonical GrowPoint website, transactional use case and monitored public contacts; API submission succeeded and independent readback is **PENDING**, with production access still false. This supersedes the obsolete denied request, not the customer-delivery gate.
+
+A reviewed targeted apply recreated the existing operational-alert subscription only (1add/0change/0destroy). AWS reports PendingConfirmation; the owner must click Confirm subscription. The previously held SNS drift in the deployment snapshot above has therefore changed and must be rechecked. No bank flag, credential, billing schedule, package or booking changed. Mail forwarding/alert confirmation does not resolve the DSK recurring bank refusal or enable charging.
