@@ -20,3 +20,5 @@ Operational links and switch instructions are in the README. Contact exports, te
 ## Visual follow-up — 11 November 2026
 
 Removed the “Безплатно” word and visible admin-login footer link. Colours, fonts and main wording are preserved. Decorative connection trails/nodes, light drift, tape-marker rotation, status pulse and CTA shimmer use CSS/SVG only. Local desktop and 320/390px checks confirm removed labels, moving stroke offsets, pause/resume with the form, normal form entrance, keyboard close and readable focused comments. Build and all313 regressions pass. No form submission or backend change; reduced-motion CSS disables the effects.
+
+Release6c131792 is deployed with matching HTML/four entry assets, completed invalidation, passing CI/Pages, smoke19/19 and HTTPS4/4. Live browser confirms both removed labels, changing trail offsets, form pause/resume, mobile no-overflow and readable focused comments. Runtime maintenance flag remains1. No registration was submitted in this visual follow-up.
