@@ -1,6 +1,15 @@
 # GrowPoint working memory
 
-Last reviewed: 2026-11-08. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+Last reviewed: 2026-11-10. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+
+## DSK configuration review — 2026-11-10 (latest)
+
+- Owner asks to finish configuration and explicitly permits the browser. Authenticated live operator portal verified. Do not confuse operator login with API access. Its unlabeled top-right button is Logout; inspect native controls visually before clicking. Native screenshots are at2x scale; derive coordinates correctly instead of guessing. An accidental logout was recovered by owner-approved Safari Touch ID and re-login.
+- Merchant Payments currently exposes session timeout only, not a recurring-permission toggle. Payment token has not been generated and cannot replace API credentials for recurrentPayment.do. Official DSK API-users documentation requires both2FA and suitable permissions. Operator2FA was off; verified existing email, selected email method as preparation, and asked the owner to complete credential setup. The bank warns2FA cannot later be disabled. New/rotated bank credentials and final real-card actions require owner handoff, never ask for passwords in chat.
+- Prepared private owner-only ignored live tfvars with empty credentials/false flags. The owner should enter freshly rotated API credentials there; never overwrite an existing populated file or set confirmed flags without evidence. Sandbox credentials remain private and separate.
+- One fresh sandbox registration reproduces error11 on10November with documented recurring frequency/expiry and no card submission. No funds, production payment flag or membership changed. Private evidence and an exact-reference bank-message draft are outside Git; owner sends any bank correspondence.
+- Corrected gateway username/password length limits to DSK's documented100/200, retaining control-character/oversize rejection. Tests306/306 and build/theme/type/secret checks pass. See docs/qa-payments-2026-11-10.md. Bank recurring and rotated live authentication are still unverified; do not equate software/portal checks with working payments.
+- Reviewed code-only Lambda apply0add/1change/0destroy, complete deployed gateway bytes match source and Lambda is Active/Successful. Public charging is off and live credentials remain empty. Fresh smoke19/19 and HTTPS4/4 pass; frontend bytes were unchanged so no CloudFront upload was needed. Owner authentication/API setup answer is still pending at this snapshot.
 
 ## Mail forwarding and alerts — 2026-11-08 (latest)
 

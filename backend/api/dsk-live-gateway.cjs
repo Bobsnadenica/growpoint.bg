@@ -83,7 +83,7 @@ function accepted(reply) {
 }
 
 function createDskLiveGateway({ userName, password, token, bankMode = "production", recurringAllowed = false, fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
-  const userAuth = typeof userName === "string" && userName.length > 0 && userName.length <= 50 && typeof password === "string" && password.length > 0 && password.length <= 128 && !/[\u0000-\u001f\u007f]/.test(userName + password);
+  const userAuth = typeof userName === "string" && userName.length > 0 && userName.length <= 100 && typeof password === "string" && password.length > 0 && password.length <= 200 && !/[\u0000-\u001f\u007f]/.test(userName + password);
   const tokenAuth = typeof token === "string" && token.length > 0 && token.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(token);
   if (userAuth === tokenAuth || (tokenAuth && (userName !== undefined || password !== undefined)) ||
       (userAuth && token !== undefined) || !["production", "sandbox"].includes(bankMode) || typeof recurringAllowed !== "boolean" || typeof fetchImpl !== "function" || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 10000) {

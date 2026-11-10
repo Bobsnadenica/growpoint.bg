@@ -8,6 +8,12 @@ const reference = "gp-live-fixture-01";
 const checkoutUrl = `https://epg.dskbank.bg/payment/merchants/multiecom/payment.html?mdOrder=${id}&language=bg`;
 const response = value => new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json" } });
 const status = extra => ({ orderNumber: reference, orderStatus: 2, actionCode: 0, amount: 999, currency: "978", attributes: [{ name: "mdOrder", value: id }], paymentAmountInfo: { depositedAmount: 999, refundedAmount: 0, paymentState: "DEPOSITED" }, ...extra });
+test("API credentials accept the documented bank lengths and reject oversized or control-character values", () => {
+  assert.doesNotThrow(() => createDskLiveGateway({userName:"u".repeat(100),password:"p".repeat(200)}));
+  for(const credentials of [{userName:"u".repeat(101),password:"p"},{userName:"u",password:"p".repeat(201)},{userName:"u",password:"p\n"}]) {
+    assert.throws(() => createDskLiveGateway(credentials),{code:"DSK_LIVE_INVALID_CONFIGURATION"});
+  }
+});
 function fixture(replies) {
   const calls = [];
   const gateway = createDskLiveGateway({ userName: "fixture-api", password: "fixture-password", fetchImpl: async (url, init) => {
