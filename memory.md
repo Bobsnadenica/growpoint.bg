@@ -2,6 +2,12 @@
 
 Last reviewed: 2026-11-10. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
+## Coming-soon presentation — 2026-11-10 (in progress)
+
+- Owner requests hiding the site for tomorrow's presentation: blurred animated background, yellow construction tape “Очаквайте скоро”, and Bulgarian pre-registration form. `public/maintenance.txt` is the canonical runtime switch: 1 on, 0 normal. `npm run deploy:maintenance` publishes only the flag; local file changes are not a production publish. Root maintenance.txt is a generated legacy copy. Public routes are gated without mounting the normal app, admins bypass it, auth/legal pages remain available, and `/?preview=soon` lets admins preview. Initial fetch errors fail closed; focus/60-second checks observe changes.
+- New module `backend/api/preregistrations.cjs`: validated first/last name, client/mentor interest, email, optional phone/comment and required consent; atomic email deduplication, honeypot and expiring hashed-IP counters. Private, on-demand separate table with 180-day expiry/TTL; no Cognito signup, email sending, package, payment or account metrics mutation. New public POST and JWT+admin-only summary/CSV routes. CSV includes UTF-8 BOM, quoting and spreadsheet-formula protection; no public/signed permanent contact-list URL.
+- Admin panel has counts and CSV download. Direct owner link `/admin?download=preregistrations#preregistrations` preserves auth flow and triggers one download, with a manual fallback button. Source/app checks pass 313/313; local 320/390px and desktop layout, keyboard focus/close, flag 0 and hidden direct public routes checked. Backend plan reviewed: 5 add / 2 change / 0 destroy; payment settings are not part of the change. Production browser/export verification and final release pending. DSK work stays paused.
+
 ## DSK configuration review — 2026-11-10 (latest)
 
 - Follow-up: owner enabled email-code 2FA. Live portal explicitly shows Enabled; API users remains absent after both a full reload and an owner-completed fresh 2FA sign-in. Private screenshot retained outside Git. DSK docs require both 2FA and suitable permissions; bank-enabled API-user management or secure API password rotation is needed. Do not keep asking the owner to enable 2FA or search the operator-password page. Private bank diagnostic updated. No password/token was generated or changed by the agent. This supersedes the pending 2FA notes below.

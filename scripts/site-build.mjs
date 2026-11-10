@@ -408,7 +408,7 @@ async function copyBuildOutput({ keepDist }) {
 
   await cp(path.join(distDir, "index.html"), deployIndexPath);
 
-  const filesToCopy = ["manifest.json", "sw.js", "favicon.svg", "robots.txt"];
+  const filesToCopy = ["manifest.json", "sw.js", "favicon.svg", "robots.txt", "maintenance.txt"];
 
   for (const file of filesToCopy) {
     await copyIfExists(path.join(distDir, file), path.join(projectDir, file));

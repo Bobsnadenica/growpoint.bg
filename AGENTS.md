@@ -39,6 +39,7 @@ node --check backend/api/index.cjs   # backend syntax
 5. The owner sometimes auto-commits to `main` as `ko` mid-session — re-check `git log` before committing.
 
 ## Conventions & gotchas
+- **Coming soon:** runtime `public/maintenance.txt`: 1 hides public pages with the launch form, 0 restores the site. `npm run deploy:maintenance` publishes only the flag; root maintenance.txt is generated. Admins bypass it; `/?preview=soon` forces preview. Private pre-registrations use their own on-demand/TTL table; `/admin?download=preregistrations#preregistrations` requires admin login for CSV. Never publish contact exports or count these entries as Cognito users.
 - **Overlays:** all modals/lightboxes render via `createPortal(..., document.body)` — page CSS otherwise breaks `position:fixed` and the sticky header covers them.
 - **Dark theme:** every color needs a `:root[data-theme="dark"]` override; enforced by `scripts/check-theme.mjs` (part of `npm run build`).
 - **Assets:** static `/assets/...` files live in `public/assets/`; existing owner creatives are tracked in `assets/advertisement/` and copied into both deployment builds. Preserve those originals. Header logos use `/assets/logo/logo_dark.png` + `/assets/logo/logo_white.png`. Require real media MIME/bytes: CloudFront can return SPA HTML with status 200 for a missing asset.

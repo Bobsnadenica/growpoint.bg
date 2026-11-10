@@ -13,6 +13,7 @@
     "build": "node scripts/check-theme.mjs && tsc --noEmit && node scripts/site-build.mjs build",
     "build:cloudfront": "node scripts/check-theme.mjs && tsc --noEmit && node scripts/site-build.mjs cloudfront",
     "deploy:cloudfront": "node scripts/deploy-frontend-cloudfront.mjs",
+    "deploy:maintenance": "node scripts/publish-maintenance.mjs",
     "preview": "tsc --noEmit && node scripts/site-build.mjs preview && vite preview",
     "smoke:prod": "node scripts/smoke-production.mjs",
     "qa:identity": "node scripts/qa-identity-lifecycle.mjs"

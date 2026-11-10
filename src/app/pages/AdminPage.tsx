@@ -12,6 +12,7 @@ import type {
 import PageScene from "../layout/PageScene";
 import DskSandboxPanel from "../components/DskSandboxPanel";
 import AdminBillingPanel from "../components/AdminBillingPanel";
+import AdminPreregistrationsPanel from "../components/AdminPreregistrationsPanel";
 import { AdminBenefitsPanel } from "../components/ExpertBenefitsPanel";
 
 type Filter = "all" | "public" | "featured" | "restricted";
@@ -421,6 +422,7 @@ export default function AdminPage() {
       </section>
 
       <MonitoringDashboardPage embedded />
+      {token && <AdminPreregistrationsPanel token={token} />}
       {token && <AdminBillingPanel token={token} />}
 
       <DskSandboxPanel key={user.id} token={token} />

@@ -1,4 +1,5 @@
 const { randomUUID, createHash } = require("node:crypto");
+const { createPreregistrations, registrationsCsv } = require("./preregistrations.cjs");
 const { createMonitoring, monitoringSummary, profileCompletion } = require("./monitoring.cjs");
 const { createIdentityChecks } = require("./identity.cjs");
 const { createMetricsCache } = require("./metrics-cache.cjs");
@@ -43,6 +44,7 @@ const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const s3 = new S3Client({});
 const ses = new SESv2Client({});
 const cognito = new CognitoIdentityProviderClient({});
+const preregistrations = createPreregistrations({ dynamo, table: process.env.PREREGISTRATIONS_TABLE });
 
 const env = {
   usersTable: process.env.USERS_TABLE,
@@ -5891,6 +5893,21 @@ async function adminRefreshBilling(event,id) {
   return response(200,await billing.reconcile(row.ownerId,id),{"Cache-Control":"no-store"});
 }
 
+async function submitPreregistration(event) {
+  if (Buffer.byteLength(event.body || "") > 12000) return badRequest("Заявката е твърде голяма.");
+  if (!/^application\/json(?:;|$)/i.test(headerValue(event.headers, "content-type"))) return response(415, { message: "Изпрати заявката като JSON." });
+  if (activeRequestOrigin && !env.allowedOrigins.includes(activeRequestOrigin)) return forbidden("Непозволен източник на заявката.");
+  await preregistrations.submit(parseBody(event), event.requestContext?.http?.sourceIp);
+  return response(202, { message: "Благодарим! Заявката е приета. Ще се свържем с теб за старта на GrowPoint." });
+}
+
+async function adminPreregistrations(event, csv = false) {
+  requireAdmin(event);
+  const items = await preregistrations.list();
+  if (!csv) return response(200, { total: items.length, clients: items.filter(item => item.audience === "client").length, mentors: items.filter(item => item.audience === "mentor").length });
+  return { ...response(200, null, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="growpoint-preregistrations.csv"' }), body: registrationsCsv(items) };
+}
+
 exports.handler = async (event,context) => {
   activeLambdaContext=context;
   activeRequestOrigin = headerValue(event?.headers, "origin");
@@ -5942,6 +5959,9 @@ exports.handler = async (event,context) => {
     }
 
     if (method === "GET" && path === "/health") return await health();
+    if (method === "POST" && path === "/preregistrations") return await submitPreregistration(event);
+    if (method === "GET" && path === "/admin/preregistrations") return await adminPreregistrations(event);
+    if (method === "GET" && path === "/admin/preregistrations.csv") return await adminPreregistrations(event, true);
     if (method === "GET" && path === "/billing/config") return await publicBillingConfig();
     if (method === "GET" && path === "/me/billing") return await getBilling(event);
     if (method === "POST" && path === "/me/billing/checkout") return await startBilling(event);

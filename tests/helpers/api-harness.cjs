@@ -28,6 +28,7 @@ function loadApi({ send = async () => ({}), environment = {}, presign, logError 
   vm.runInNewContext("exports.test.assertAuthValidAfter = assertAuthValidAfter;", context);
   vm.runInNewContext("Object.assign(exports.test, { liveBillingEnabled, getBilling, startBilling, cancelBilling, refundBilling, adminBilling });", context);
   vm.runInNewContext("Object.assign(exports.test, { deleteMyAccount, cancelMyDeletion, processScheduledDeletions, publicConsultantOwnerAvailable, listConsultants, getConsultant });", context);
+  vm.runInNewContext("exports.test.adminPreregistrations = adminPreregistrations;", context);
   return context.exports;
 }
 module.exports = { loadApi };

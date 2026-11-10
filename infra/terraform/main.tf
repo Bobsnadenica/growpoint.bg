@@ -976,6 +976,7 @@ resource "aws_lambda_function" "api" {
   environment {
     variables = {
       USERS_TABLE                  = aws_dynamodb_table.users.name
+      PREREGISTRATIONS_TABLE       = aws_dynamodb_table.preregistrations.name
       CONSULTANTS_TABLE            = aws_dynamodb_table.consultants.name
       BOOKINGS_TABLE               = aws_dynamodb_table.bookings.name
       USER_POOL_ID                 = aws_cognito_user_pool.main.id
@@ -1052,6 +1053,21 @@ resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.http.id
   route_key = "GET /health"
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "preregistrations_create" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /preregistrations"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "preregistrations_admin" {
+  for_each           = toset(["GET /admin/preregistrations", "GET /admin/preregistrations.csv"])
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = each.value
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
 
@@ -1469,6 +1485,12 @@ resource "aws_apigatewayv2_stage" "default" {
     route_key              = aws_apigatewayv2_route.admin_metrics.route_key
     throttling_burst_limit = 5
     throttling_rate_limit  = 1
+  }
+
+  route_settings {
+    route_key              = aws_apigatewayv2_route.preregistrations_create.route_key
+    throttling_burst_limit = 5
+    throttling_rate_limit  = 2
   }
 
   tags = local.common_tags

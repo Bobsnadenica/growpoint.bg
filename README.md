@@ -12,6 +12,16 @@ The project is a React single-page app with a small serverless AWS backend. Its 
 
 ## Product behaviour
 
+### Coming-soon mode and private pre-registration
+
+The presentation starts with a blurred, animated preview and the **Очаквайте скоро** tape. Public routes show this screen while the switch is on; authenticated admins can still use the normal site. Login and legal pages remain available. Admins can preview the reveal with `/?preview=soon`.
+
+Edit [`public/maintenance.txt`](public/maintenance.txt): **`1` = coming soon**, **`0` = normal website**. Run `npm run deploy:maintenance` to publish only this small file without rebuilding or running Terraform. A full CloudFront deployment also includes it. Local edits alone do not change production. Open pages recheck on focus and every 60 seconds; an unavailable/invalid initial setting keeps the reveal screen visible. Root `maintenance.txt` is a generated legacy Pages copy.
+
+The form collects first/last name, user-or-mentor interest, email, optional phone/comment and explicit launch-contact consent. It **does not create an account, grant a package or send email**. A separate on-demand DynamoDB table stores the private list, with 180-day expiry and automatic TTL cleanup. Duplicate email requests are acknowledged without overwriting the earlier submission. Body/field validation, a honeypot, atomic short-lived per-IP limits and API throttling bound abuse without a new service.
+
+Admins use **Предварителни регистрации → Изтегли CSV за Excel** in `/admin`. The [direct CSV download link](https://www.growpoint.bg/admin?download=preregistrations#preregistrations) signs the admin in if needed, then starts the download. CSV requests require a valid Cognito admin session; no public data file or permanent bearer link exists. UTF-8 BOM, quoted fields and formula protection support Excel/Numbers/Sheets. The list is separate from registered-account statistics. Coming-soon mode controls presentation; it does not replace backend authorization for private data.
+
 - **Clients** create a free account, build a private profile, browse public expert profiles, request sessions, and manage bookings.
 - **Consultants and mentors** manage a profile, availability, bookings, meeting links, and confirmed-session messages.
 - **Admins** invite experts, manage visibility packages and featured status, restrict accounts, send admin messages, inspect platform metrics, and mark a booking paid until online payment is introduced.
@@ -92,12 +102,14 @@ flowchart TB
     API[API Gateway - public routes and protected JWT routes]
     L[One Lambda - authorization and business logic]
     D[(DynamoDB - profiles, bookings, counters)]
+    PR[(Private pre-registration table - on demand, TTL)]
     S[(Private S3 - documents and images)]
     E[SES - transactional emails]
     JOB[EventBridge hourly maintenance]
     CW[CloudWatch - logs and alarms]
     API --> L
     L <--> D
+    L <--> PR
     L --> S
     L --> E
     L --> CW
@@ -113,7 +125,7 @@ flowchart TB
   classDef static fill:#eaf4ee,stroke:#387052,color:#173926
   classDef secure fill:#edf2fc,stroke:#496ca8,color:#233751
   class SPA,GH,CF,LEGACY,ADMIN static
-  class C,API,L,D,S secure
+  class C,API,L,D,PR,S secure
 ```
 
 The frontend uses Cognito for email/password authentication and optional hosted-UI social identity providers. API Gateway validates Cognito JWTs before protected requests reach the Node.js 22 Lambda. The Lambda owns authorization, validation, data access, notification creation, signed S3 URLs, email sending, identity reconciliation, scheduled deletion, and reminders. Legacy mock seed/refresh jobs and the static example catalogue are removed; the owner-managed demonstration account uses the normal backend.
@@ -153,11 +165,12 @@ Public expert pages are cacheable briefly; media URLs are signed and short-lived
 
 ## Data model and access boundaries
 
-Three DynamoDB tables hold application state:
+Four DynamoDB tables hold application state:
 
 - `users`: Cognito-sub keyed private profiles, preferences, points, notification list, documents, referral state, invitations, and the visit counter.
 - `consultants`: expert profiles, ownership, public slug, availability, membership/package state, visibility status, and aggregate review data.
 - `bookings`: client/consultant relationship, slot, workflow state, payment state, messages, review, and meeting-link state.
+- `preregistrations`: private launch-interest records and short-lived rate counters. These are not Cognito accounts and never inflate user statistics. Only admin-authorized exports expose submitted contacts.
 
 The public catalogue exposes only visible consultant records and strips owner, booking, moderation, storage-key, and package-source fields. A member share link exposes a deliberately limited, unlisted profile card; it excludes email, documents, goals, plan, bookings, and other private fields. Admin authority comes from Cognito's `admin` group; the `consultants` and `clients` groups determine account roles at bootstrap.
 
@@ -255,6 +268,7 @@ Live checks use owner-supplied QA accounts and explicitly authorized disposable 
 
 | Area tested | Result | Remaining issue / scope |
 | --- | --- | --- |
+| Coming soon and private pre-registration — 10 November | **313/313 regressions pass**; local 320/390px form, desktop layout, keyboard focus/close, `0` restoration and direct-route hiding checked. Reviewed backend apply: 5 add / 2 change / 0 destroy | Production browser submission, admin CSV and final release checks are being verified. Existing payment activation remains disabled and separate. |
 | DSK configuration — 10 November | **306/306 regressions pass**; build/theme/type/secret checks pass. Live operator access verified; adapter credential limits aligned with bank specification | Fresh sandbox recurring initialization still returns error 11. Email 2FA is enabled; API users remains absent after reload and a fresh 2FA sign-in. DSK documents a separate management permission requirement; secure API password rotation/configuration remains blocked. Real charging remains disabled. See [current payment checks](docs/qa-payments-2026-11-10.md). |
 | Expert subscription integration — 8 November | **305/305 regressions and 27/27 DynamoDB Local integration checks passed**, no skips; build/theme/type checks and public secret guard pass. Local 320/390/1440px checkout, consent, cancellation, history and refund-request UI checked | Bank adapter sandbox capture and full refund passed. Actual recurring initialization through the new service is **blocked by DSK code 11**. Pushed source and cleanup fix pass CI/Pages; reviewed non-destructive AWS apply and CloudFront deployment verified. Index and authenticated existing-Google admin/owner reads pass, source bytes match live, smoke19/19 and HTTPS4/4. Live flags remain off; real-money recurring/card/refund and delivered customer receipts are unverified. See [payment QA](docs/qa-payments-2026-11-08.md). |
 | Merchant/adapter review — 8 November, earlier release | **304/304 tests pass.** New adapter completes a bank-hosted fake-card payment and independent capture verification. Merchant details and purchased-membership guards deployed; CI, live byte verification, smoke19/19 and HTTPS4/4 pass. | **Recurring launch blocked:** DSK sandbox refuses recurrent initialization with code 11. At that release the subscription application was unfinished; the newer integration row above supersedes it. Live credentials, successful bank recurring/customer emails and real-card proof remain open. See [payment QA](docs/qa-payments-2026-11-08.md). No live charging enabled. |
