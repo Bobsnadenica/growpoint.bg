@@ -17,30 +17,38 @@
 .coming-soon__ghost-avatar--2 { background: linear-gradient(135deg, #ab9fc6, #4b5365); }
 .coming-soon__ghost-cards i { height: 10px; background: #719981; border-radius: 8px; }
 .coming-soon::before { content: ""; position: absolute; z-index: -2; inset: 0; background: linear-gradient(180deg, rgba(13,30,24,.4), rgba(13,30,24,.75) 75%, #10231d); pointer-events: none; }
-.coming-soon__glow { position: absolute; z-index: -1; width: min(65vw, 700px); aspect-ratio: 1; border-radius: 50%; filter: blur(80px); opacity: .16; pointer-events: none; animation: soon-drift 18s ease-in-out infinite alternate; }
+.coming-soon__glow { position: absolute; z-index: -1; width: min(65vw, 700px); aspect-ratio: 1; border-radius: 50%; filter: blur(80px); opacity: .23; pointer-events: none; animation: soon-drift 18s ease-in-out infinite alternate; }
 .coming-soon__glow--one { top: 5%; left: -20%; background: #9de9a0; }
-.coming-soon__glow--two { top: 28%; right: -20%; background: #c7ad6c; animation-delay: -9s; }
+.coming-soon__glow--two { top: 28%; right: -20%; background: #c7ad6c; animation-duration: 24s; animation-delay: -9s; }
+.coming-soon__network { position: absolute; z-index: -1; top: 60px; left: 0; width: 100%; height: min(900px, 100svh); pointer-events: none; }
+.coming-soon__connection { fill: none; stroke: #bad4a8; stroke-width: 1; opacity: .13; }
+.coming-soon__signal { fill: none; stroke: #efcc65; stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 3 97; opacity: .55; animation: soon-signal 16s linear infinite; }
+.coming-soon__node { fill: #d3e8b7; opacity: .4; transform-box: fill-box; transform-origin: center; animation: soon-node 7s ease-in-out infinite alternate; }
 .coming-soon__header, .coming-soon__footer { width: min(1120px, calc(100% - 64px)); margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .coming-soon__header { padding: 30px 0; }
 .coming-soon__header img { width: 160px; height: auto; object-fit: contain; }
 .coming-soon__status { display: flex; align-items: center; gap: 9px; border: 1px solid var(--soon-line); border-radius: 30px; padding: 9px 14px; font-size: 12px; white-space: nowrap; color: #d1e4d3; background: rgba(26,52,38,.5); }
-.coming-soon__status i { width: 6px; height: 6px; background: #b6e3a5; border-radius: 50%; box-shadow: 0 0 15px rgba(182,227,165,.5); }
+.coming-soon__status i { position: relative; width: 6px; height: 6px; background: #b6e3a5; border-radius: 50%; box-shadow: 0 0 15px rgba(182,227,165,.5); }
+.coming-soon__status i::after { content: ""; position: absolute; inset: -4px; border: 1px solid #b6e3a5; border-radius: inherit; animation: soon-beacon 4s ease-out infinite; }
 .coming-soon__main { padding: clamp(40px, 8vh, 105px) 0 68px; text-align: center; }
-.coming-soon__intro { padding: 0 24px; }
+.coming-soon__intro { padding: 0 24px; animation: soon-reveal .8s ease-out both; }
 .coming-soon__eyebrow { margin: 0 0 22px; color: #c7d8b8; font-size: 12px; font-weight: 650; letter-spacing: .13em; text-transform: uppercase; }
 .coming-soon h1 { color: var(--soon-ink); max-width: 1000px; margin: 0 auto; font-size: clamp(38px, 6.4vw, 80px); line-height: 1.08; letter-spacing: -.055em; font-weight: 650; }
 .coming-soon h1 span { color: #bad4a8; }
 .coming-soon__lede { margin: 27px auto 0; color: var(--soon-muted); font-size: clamp(16px, 1.7vw, 20px); line-height: 1.65; }
 .coming-soon__tape { width: calc(100% + 100px); margin: 61px -50px 55px; background: #efcc65; color: #15251c; border-block: 4px solid #15251c; box-shadow: 0 0 0 2px #efcc65, 0 15px 45px rgba(0,0,0,.22); padding: 13px 0; overflow: hidden; transform: rotate(-3deg); }
-.coming-soon__tape > div { display: flex; width: max-content; animation: soon-tape 35s linear infinite; }
+.coming-soon__tape > div { display: flex; width: max-content; animation: soon-tape 28s linear infinite; }
 .coming-soon__tape span { display: flex; align-items: center; gap: 30px; padding: 0 22px; font-size: clamp(21px, 3vw, 35px); font-weight: 850; letter-spacing: .035em; white-space: nowrap; line-height: 1.1; }
-.coming-soon__tape b { font-size: 30px; }
+.coming-soon__tape b { display: inline-block; font-size: 30px; animation: soon-turn 24s linear infinite; }
 .coming-soon__invitation { display: grid; justify-items: center; gap: 18px; padding: 0 24px; }
 .coming-soon__invitation > p { color: #d0dfd0; margin: 0; font-size: 16px; }
 .coming-soon__cta { display: inline-flex; align-items: center; justify-content: center; gap: 24px; min-height: 56px; padding: 16px 25px; border-radius: 17px; border: 1px solid #d3e8b7; background: #d3e8b7; color: #15251c; font-family: inherit; font-weight: 650; font-size: 15px; line-height: 1.4; cursor: pointer; box-shadow: 0 8px 28px rgba(0,0,0,.15); transition: transform .2s, background .2s, box-shadow .2s; }
 .coming-soon__cta span { font-size: 21px; line-height: 1; }
 .coming-soon__cta:hover { transform: translateY(-2px); background: #e1f1ce; box-shadow: 0 12px 35px rgba(0,0,0,.22); }
 .coming-soon__cta:disabled { opacity: .6; cursor: wait; transform: none; }
+.coming-soon__invitation .coming-soon__cta { position: relative; overflow: hidden; }
+.coming-soon__invitation .coming-soon__cta::after { content: ""; position: absolute; top: -50%; left: 0; height: 200%; width: 25%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent); pointer-events: none; animation: soon-shine 8s ease-in-out infinite; }
+.coming-soon__invitation .coming-soon__cta span { animation: soon-arrow 5s ease-in-out infinite; }
 .coming-soon__micro { font-size: 12px; line-height: 1.6; color: var(--soon-muted); }
 .coming-soon__form-card { position: relative; width: min(560px, calc(100% - 32px)); margin: 48px auto 0; padding: 35px; scroll-margin-top: 24px; border: 1px solid var(--soon-line); border-radius: 26px; background: rgba(19,42,31,.94); box-shadow: 0 25px 80px rgba(0,0,0,.24); text-align: left; animation: soon-reveal .35s ease-out both; }
 .coming-soon__form-card .coming-soon__eyebrow { margin-bottom: 12px; font-size: 10px; }
@@ -81,6 +89,16 @@
 @keyframes soon-tape { to { transform: translateX(-50%); } }
 @keyframes soon-drift { to { transform: translate(14vw, 12vh) scale(1.2); } }
 @keyframes soon-reveal { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes soon-signal { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes soon-node { to { opacity: .8; transform: scale(1.45); } }
+@keyframes soon-turn { to { transform: rotate(360deg); } }
+@keyframes soon-beacon { 0% { transform: scale(.65); opacity: .65; } 80%, 100% { transform: scale(1.8); opacity: 0; } }
+@keyframes soon-arrow { 0%, 60%, 100% { transform: translate(0, 0); } 75% { transform: translate(3px, -3px); } }
+@keyframes soon-shine { 0%, 65% { transform: translateX(-200%) skewX(-20deg); opacity: 0; } 70% { opacity: 1; } 95%, 100% { transform: translateX(500%) skewX(-20deg); opacity: 0; } }
+/* Let the registration form take visual priority while someone is typing. */
+.coming-soon--form-open :is(.coming-soon__glow, .coming-soon__signal, .coming-soon__node, .coming-soon__tape > div, .coming-soon__tape b, .coming-soon__invitation .coming-soon__cta span),
+.coming-soon--form-open .coming-soon__status i::after,
+.coming-soon--form-open .coming-soon__invitation .coming-soon__cta::after { animation-play-state: paused; }
 @media (min-width: 601px) and (max-height: 800px) {
   .coming-soon__header { padding-block: 20px; }
   .coming-soon__main { padding-top: 22px; padding-bottom: 25px; }

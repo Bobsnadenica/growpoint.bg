@@ -3,6 +3,13 @@ import { Link } from "react-router-dom";
 import { request } from "../../lib/api";
 import "./ComingSoon.css";
 
+const connectionPaths = [
+  "M-80 650C130 670 150 430 300 450S430 200 600 190",
+  "M950-80C910 160 1150 100 1190 340S1410 440 1530 700",
+  "M100 900C240 650 430 800 600 660S920 600 1050 820"
+];
+const connectionNodes = [[110, 615], [300, 450], [465, 260], [1120, 135], [1190, 340], [1350, 470], [255, 765], [600, 660], [795, 650], [1050, 820]];
+
 export default function ComingSoon() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -43,7 +50,7 @@ export default function ComingSoon() {
     finally { setBusy(false); }
   }
   return (
-    <div className="coming-soon">
+    <div className={`coming-soon${open ? " coming-soon--form-open" : ""}`}>
       <div className="coming-soon__backdrop" aria-hidden="true">
         <div className="coming-soon__ghost-nav"><img src="/assets/logo/logo_white.png" alt="" /><span>Ментори</span><span>Възможности</span><span>Твоят профил</span></div>
         <div className="coming-soon__ghost-hero"><span>Твоят следващ ход.</span><div /><div /></div>
@@ -51,6 +58,13 @@ export default function ComingSoon() {
       </div>
       <div className="coming-soon__glow coming-soon__glow--one" aria-hidden="true" />
       <div className="coming-soon__glow coming-soon__glow--two" aria-hidden="true" />
+      <svg className="coming-soon__network" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+        {connectionPaths.map((d, index) => <g key={d}>
+          <path className="coming-soon__connection" d={d} />
+          <path className="coming-soon__signal" d={d} pathLength="100" style={{ animationDelay: `${index * -5}s` }} />
+        </g>)}
+        {connectionNodes.map(([cx, cy], index) => <circle className="coming-soon__node" key={index} cx={cx} cy={cy} r={index % 3 === 0 ? 3.5 : 2} style={{ animationDelay: `${index * -.7}s` }} />)}
+      </svg>
       <header className="coming-soon__header">
         <Link to="/" aria-label="GrowPoint начало"><img src="/assets/logo/logo_white.png" alt="GrowPoint" width="174" height="48" /></Link>
         <span className="coming-soon__status"><i />Скоро сме тук</span>
@@ -67,7 +81,7 @@ export default function ComingSoon() {
         <div className="coming-soon__invitation">
           <p>Бъди сред първите, които ще открият GrowPoint.</p>
           <button ref={trigger} className="coming-soon__cta" type="button" disabled={busy} aria-expanded={open} aria-controls="early-registration" onClick={() => setOpen(value => !value)}>Регистрирайте се предварително <span aria-hidden="true">↗</span></button>
-          <span className="coming-soon__micro">Безплатно. Без ангажимент. Само една нова възможност.</span>
+          <span className="coming-soon__micro">Без ангажимент. Само една нова възможност.</span>
         </div>
         {open && <section id="early-registration" className="coming-soon__form-card" aria-labelledby="registration-title" onKeyDown={event => { if (event.key === "Escape" && !busy) close(); }}>
           <button className="coming-soon__close" type="button" aria-label="Затвори формата" disabled={busy} onClick={close}>×</button>
@@ -93,7 +107,7 @@ export default function ComingSoon() {
           </>}
         </section>}
       </main>
-      <footer className="coming-soon__footer"><span>© {new Date().getFullYear()} GrowPoint</span><Link to="/privacy">Поверителност</Link><Link to="/auth?redirect=%2Fadmin">Админ вход</Link></footer>
+      <footer className="coming-soon__footer"><span>© {new Date().getFullYear()} GrowPoint</span><Link to="/privacy">Поверителност</Link></footer>
     </div>
   );
 }

@@ -1,6 +1,12 @@
 # GrowPoint working memory
 
-Last reviewed: 2026-11-10. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+Last reviewed: 2026-11-11. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
+
+## Coming-soon visual polish — 2026-11-11
+
+- Owner asked to remove “Безплатно” and “Админ вход” from the maintenance page, while preserving its wording/colours/font. Only that word and the visible admin footer link were removed; the remaining microcopy and direct admin/CSV routes are preserved.
+- Added decorative SVG connection trails/nodes, stronger drifting existing green/gold light, rotating tape markers, a slow status beacon and occasional CTA shine/arrow movement. All effects use CSS/SVG and existing assets, no dependency, video, provider, per-frame JS or backend service. Ambient motion pauses while the registration form is open and resumes on close. Existing reduced-motion rule disables all decorative animations.
+- Local browser checks: actual moving stroke offsets, pause/resume, visible form entrance, keyboard close, focused typed-comment colours, and 320/390px no-overflow pass. Both removed labels are absent from rendered content; headline/copy retained. Build/theme/type/secret checks and all 313 regressions pass. No form submitted during this UI-only follow-up; backend, payment settings and maintenance flag are unchanged.
 
 ## Coming-soon presentation — 2026-11-10 (deployed)
 

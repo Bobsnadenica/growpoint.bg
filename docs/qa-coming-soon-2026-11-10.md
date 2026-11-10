@@ -16,3 +16,7 @@ Coming-soon mode is enabled for public visitors. Signed-in admins retain the nor
 | Privacy and cost | Implemented, bounded | Separate private on-demand table; optional phone/comment, launch-contact consent, no marketing subscription. Records expire after 180 days, then DynamoDB TTL removes them asynchronously. No natural six-month expiry proof or independent legal audit claimed. No new always-on service or scheduled scan. |
 
 Operational links and switch instructions are in the README. Contact exports, test references, screenshots and Terraform plans remain private. No bank report or other message was sent. Existing DSK blockers and disabled payment flags are unchanged.
+
+## Visual follow-up — 11 November 2026
+
+Removed the “Безплатно” word and visible admin-login footer link. Colours, fonts and main wording are preserved. Decorative connection trails/nodes, light drift, tape-marker rotation, status pulse and CTA shimmer use CSS/SVG only. Local desktop and 320/390px checks confirm removed labels, moving stroke offsets, pause/resume with the form, normal form entrance, keyboard close and readable focused comments. Build and all313 regressions pass. No form submission or backend change; reduced-motion CSS disables the effects.

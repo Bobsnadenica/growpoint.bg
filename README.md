@@ -14,7 +14,7 @@ The project is a React single-page app with a small serverless AWS backend. Its 
 
 ## Coming-soon mode and private pre-registration
 
-The presentation starts with a blurred, animated preview and the **Очаквайте скоро** tape. Public routes show this screen while the switch is on; authenticated admins can still use the normal site. Login and legal pages remain available. Admins can preview the reveal with `/?preview=soon`.
+The presentation starts with a blurred preview, moving connection lights, soft ambient glows and the **Очаквайте скоро** tape. The original colours, type and headline are preserved. Background motion pauses while the form is open and respects reduced-motion preferences. The public footer contains only privacy information; admins access `/admin` directly. Public routes show this screen while the switch is on; authenticated admins can still use the normal site. Login and legal pages remain available. Admins can preview the reveal with `/?preview=soon`.
 
 Edit [`public/maintenance.txt`](public/maintenance.txt): **`1` = coming soon**, **`0` = normal website**. Run `npm run deploy:maintenance` to publish only this small file without rebuilding or running Terraform. A full CloudFront deployment also includes it. Local edits alone do not change production. Open pages recheck on focus and every 60 seconds; an unavailable/invalid initial setting keeps the reveal screen visible. Root `maintenance.txt` is a generated legacy Pages copy.
 
