@@ -26,3 +26,5 @@ Release6c131792 is deployed with matching HTML/four entry assets, completed inva
 ## Form interaction follow-up — 11 November 2026
 
 Owner explicitly requested no pause-control buttons; none are included. Local UI checks preserve draft fields/role/consent after closing and reopening, skip the hidden form during Tab navigation, and focus confirmation on initial success and reopening. Exactly one synthetic submission went to an isolated localhost fixture, not AWS. With that local server stopped, the translated network error appeared, busy cleared and the draft remained. Focused comment uses the existing dark background and a matching green border; phone width has no horizontal overflow. Drafts are memory-only within the page, not persistent browser storage.
+
+Release `ad86daca` is live: CI/Pages passed, CloudFront invalidation completed and HTML/four entry assets match. Live desktop/mobile draft retention, hiding, guidance and focus checks passed; zero pause controls. Smoke 19/19 and HTTPS 4/4 pass. No production registration was submitted for this follow-up; successful/error completion checks above used the isolated local fixture.

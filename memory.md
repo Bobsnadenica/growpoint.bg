@@ -8,6 +8,8 @@ Last reviewed: 2026-11-11. This is the canonical project memory. The historical 
 - Keep the approved colours/font/headline/motion. Form fields now stay mounted but truly hidden when closed, preserving drafts in this page's DOM only (no local/session storage; navigation/reload clears them). Hidden fields are excluded from keyboard navigation. Required-field guidance and consistent green/gold focus styling added; raw fetch TypeErrors become a Bulgarian retry message. Confirmation receives focus after success and when reopened.
 - Local browser evidence: name/role/comment/consent retained across close/reopen, next Tab skips hidden form, normal submission and confirmation focus/reopen pass against a PRIVATE localhost fixture. Exactly one synthetic local submission; no AWS/email request. Stopping the local server reproduces friendly network failure with draft preserved and busy cleared. 390px no-overflow and focused colours pass; no pause button exists. Backend/maintenance/payment configuration unchanged.
 
+- Release `ad86daca` is pushed/deployed; CI and legacy Pages passed. CloudFront invalidation and full HTML/four entry-asset matches verified. Live draft close/reopen, hidden state, focused colours, required guidance, mobile no-overflow and zero pause controls pass without a production submission. Smoke 19/19 and HTTPS 4/4 pass; no backend or service changes.
+
 ## Coming-soon visual polish — 2026-11-11
 
 - Owner asked to remove “Безплатно” and “Админ вход” from the maintenance page, while preserving its wording/colours/font. Only that word and the visible admin footer link were removed; the remaining microcopy and direct admin/CSV routes are preserved.
