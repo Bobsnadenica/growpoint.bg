@@ -28,11 +28,10 @@ export default function ComingSoon() {
   }, []);
   useEffect(() => {
     if (open) {
-      firstName.current?.focus({ preventScroll: true });
+      (success ? result.current : firstName.current)?.focus({ preventScroll: true });
       document.getElementById("early-registration")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
     }
-  }, [open]);
-  useEffect(() => { if (success) result.current?.focus(); }, [success]);
+  }, [open, success]);
   function close() { setOpen(false); setError(""); trigger.current?.focus({ preventScroll: true }); }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,7 +45,7 @@ export default function ComingSoon() {
         consent: form.get("consent") === "on", website: form.get("website")
       }) });
       setSuccess(true);
-    } catch (value) { setError(value instanceof Error ? value.message : "Заявката не беше записана. Опитай отново."); }
+    } catch (value) { setError(value instanceof TypeError ? "Не успяхме да изпратим заявката. Провери връзката си и опитай отново — въведеното е запазено във формата." : value instanceof Error ? value.message : "Заявката не беше записана. Опитай отново."); }
     finally { setBusy(false); }
   }
   return (
@@ -83,13 +82,13 @@ export default function ComingSoon() {
           <button ref={trigger} className="coming-soon__cta" type="button" disabled={busy} aria-expanded={open} aria-controls="early-registration" onClick={() => setOpen(value => !value)}>Регистрирайте се предварително <span aria-hidden="true">↗</span></button>
           <span className="coming-soon__micro">Без ангажимент. Само една нова възможност.</span>
         </div>
-        {open && <section id="early-registration" className="coming-soon__form-card" aria-labelledby="registration-title" onKeyDown={event => { if (event.key === "Escape" && !busy) close(); }}>
+        <section id="early-registration" hidden={!open} className="coming-soon__form-card" aria-labelledby="registration-title" onKeyDown={event => { if (event.key === "Escape" && !busy) close(); }}>
           <button className="coming-soon__close" type="button" aria-label="Затвори формата" disabled={busy} onClick={close}>×</button>
           {success ? <div ref={result} tabIndex={-1} className="coming-soon__success" role="status"><span aria-hidden="true">✓</span><h2 id="registration-title">В списъка си.</h2><p>Благодарим за интереса! Ще се свържем с теб за старта на GrowPoint.</p><p className="coming-soon__micro">Това е заявка за интерес, а не създаден потребителски профил.</p></div> : <>
             <p className="coming-soon__eyebrow">Първата стъпка е твоя</p>
             <h2 id="registration-title">Да се запознаем.</h2>
-            <p className="coming-soon__form-lede">Остави ни контакт. Ще ти пишем, когато сме готови.</p>
-            <form onSubmit={submit} aria-busy={busy}>
+            <p className="coming-soon__form-lede">Остави ни контакт. Ще ти пишем, когато сме готови.<span id="registration-hint" className="coming-soon__field-hint">Полетата без „по желание“ са задължителни.</span></p>
+            <form onSubmit={submit} aria-busy={busy} aria-describedby="registration-hint">
               <fieldset disabled={busy} className="coming-soon__fields">
                 <legend className="sr-only">Данни за предварителна регистрация</legend>
                 <div className="coming-soon__row"><label>Име<input ref={firstName} name="firstName" autoComplete="given-name" required maxLength={80} /></label><label>Фамилия<input name="lastName" autoComplete="family-name" required maxLength={80} /></label></div>
@@ -105,9 +104,12 @@ export default function ComingSoon() {
               </fieldset>
             </form>
           </>}
-        </section>}
+        </section>
       </main>
-      <footer className="coming-soon__footer"><span>© {new Date().getFullYear()} GrowPoint</span><Link to="/privacy">Поверителност</Link></footer>
+      <footer className="coming-soon__footer">
+        <span>© {new Date().getFullYear()} GrowPoint</span>
+        <Link to="/privacy">Поверителност</Link>
+      </footer>
     </div>
   );
 }

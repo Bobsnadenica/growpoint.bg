@@ -51,16 +51,18 @@
 .coming-soon__invitation .coming-soon__cta span { animation: soon-arrow 5s ease-in-out infinite; }
 .coming-soon__micro { font-size: 12px; line-height: 1.6; color: var(--soon-muted); }
 .coming-soon__form-card { position: relative; width: min(560px, calc(100% - 32px)); margin: 48px auto 0; padding: 35px; scroll-margin-top: 24px; border: 1px solid var(--soon-line); border-radius: 26px; background: rgba(19,42,31,.94); box-shadow: 0 25px 80px rgba(0,0,0,.24); text-align: left; animation: soon-reveal .35s ease-out both; }
+.coming-soon__form-card[hidden] { display: none; }
 .coming-soon__form-card .coming-soon__eyebrow { margin-bottom: 12px; font-size: 10px; }
 .coming-soon h2 { margin: 0; color: var(--soon-ink); font-size: 29px; letter-spacing: -.04em; line-height: 1.2; }
 .coming-soon__form-lede { margin: 12px 0 25px; font-size: 14px; line-height: 1.5; color: var(--soon-muted); }
+.coming-soon__field-hint { display: block; margin-top: 9px; color: #92ab98; font-size: 11px; line-height: 1.6; }
 .coming-soon__close { position: absolute; right: 12px; top: 12px; display: grid; place-items: center; width: 44px; height: 44px; color: #b6c8b9; background: transparent; border: 0; border-radius: 50%; font-size: 28px; cursor: pointer; }
 .coming-soon__close:hover { background: rgba(255,255,255,.08); }
 .coming-soon__fields { display: grid; gap: 19px; border: 0; padding: 0; margin: 0; min-width: 0; }
 .coming-soon__fields label { display: block; color: #deeadf; font-size: 13px; line-height: 1.5; font-weight: 550; }
 .coming-soon__fields input:not([type="checkbox"]):not([type="radio"]), .coming-soon__fields textarea { display: block; width: 100%; min-height: 46px; margin-top: 7px; border-radius: 11px; border: 1px solid rgba(200,226,207,.24); padding: 11px 13px; background: #10271b; color: var(--soon-ink); font: inherit; font-size: 16px; box-shadow: none; }
 .coming-soon__fields textarea { resize: vertical; min-height: 92px; }
-.coming-soon .coming-soon__fields :is(input, textarea):focus { background: var(--surface); color: var(--soon-ink); }
+.coming-soon .coming-soon__fields :is(input, textarea):focus { --ui-line: #c5dfa5; background: var(--surface); color: var(--soon-ink); border-color: #c5dfa5; box-shadow: none; }
 .coming-soon__fields textarea::placeholder { color: #8ea996; font-size: 13px; }
 .coming-soon__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .coming-soon__roles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; border: 0; margin: 0; padding: 0; min-width: 0; }
