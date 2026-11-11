@@ -2,6 +2,11 @@
 
 Last reviewed: 2026-11-11. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
+## Responsive layouts — 2026-11-11
+
+- At 320–390px, client and mentor profile fields exceeded the panel because the form retained wide grid columns. Keep the question body shrinkable and stack its profile fields at phone and tablet widths. All four setup tabs wrap at tablet and phone widths. At 360px and below, pre-registration roles and availability modes stack and hour choices use three columns.
+- Browser QA covered 320–1920px, including short landscape, public pages in light and dark, and 11 widths for synthetic client/mentor profiles, availability editors, messages, files, notifications and billing in Chromium and WebKit. Signed-in layouts were checked with local fixtures.
+
 ## Public payment wording — 2026-11-11
 
 - Terms, privacy, legal summary and FAQ use customer-facing language. The card rules apply when card payment is offered for the chosen service. Customer billing and booking screens use availability notices in place of the mock checkout. Admin sandbox access, consent policy versions and payment configuration are unchanged.

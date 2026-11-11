@@ -130,6 +130,9 @@
   .coming-soon__ghost-nav span { display: none; }
   .coming-soon__roles small { font-size: 9px; }
 }
+@media (max-width: 360px) {
+  .coming-soon__roles { grid-template-columns: minmax(0, 1fr); }
+}
 @media (prefers-reduced-motion: reduce) {
   .coming-soon *, .coming-soon *::before, .coming-soon *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

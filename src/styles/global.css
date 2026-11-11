@@ -6712,6 +6712,7 @@ textarea {
 
 .question-card__body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   min-width: 0;
 }
@@ -6828,6 +6829,7 @@ textarea {
   display: grid;
   justify-items: start;
   gap: 4px;
+  min-width: 0;
   min-height: 60px;
   padding: 10px 14px;
   border-radius: 12px;
@@ -9722,26 +9724,14 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .question-grid--profile .three-column {
-    grid-template-columns: 1fr;
+  .question-grid--profile :is(.two-column, .three-column) {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .profile-setup-shell__header,
   .question-form__footer--setup {
     flex-direction: column;
     align-items: start;
-  }
-
-  .profile-setup-nav {
-    display: flex;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    scrollbar-width: thin;
-  }
-
-  .profile-setup-nav__button {
-    min-width: 172px;
-    flex: 0 0 auto;
   }
 
   .search-card {
@@ -11382,8 +11372,7 @@ textarea {
   .dashboard-sidebar > .form-note { display: none; }
   .profile-setup-shell { padding: 14px; gap: 14px; }
   .profile-setup-shell__header strong, .profile-setup-shell__header p { display: none; }
-  .profile-setup-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; padding: 0; }
-  .profile-setup-nav__button { min-width: 0; min-height: 48px; padding: 8px 10px; }
+  .profile-setup-nav__button { min-height: 48px; padding: 8px 10px; }
   .profile-setup-nav__step { font-size: .62rem; }
   .profile-setup-nav__label { font-size: .82rem; }
   .profile-setup-panel .question-card { padding: 14px; gap: 12px; border-radius: 16px; }
@@ -11431,6 +11420,11 @@ textarea {
   .availability-editor__choice > span { flex: 0 0 24px; }
   .availability-editor__choice small { display: none; }
   .availability-editor__choice strong { font-size: .78rem; }
+}
+@media (max-width: 360px) {
+  .dashboard-sidebar__nav :is(a, button)::after { content: none; }
+  .availability-editor__choices { grid-template-columns: minmax(0, 1fr); }
+  .availability-editor__hours { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .profile-setup-panel--active, .availability-editor__section { animation: none; }
