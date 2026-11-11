@@ -81,10 +81,6 @@ export default function ComingSoon() {
           <p>Бъди сред първите, които ще открият GrowPoint.</p>
           <button ref={trigger} className="coming-soon__cta" type="button" disabled={busy} aria-expanded={open} aria-controls="early-registration" onClick={() => setOpen(value => !value)}>Регистрирайте се предварително <span aria-hidden="true">↗</span></button>
           <span className="coming-soon__micro">Без ангажимент. Само една нова възможност.</span>
-          {!open && <figure className="coming-soon__qr">
-            <img src="/assets/growpoint-qr.png" width="156" height="156" alt="QR код за www.growpoint.bg" />
-            <figcaption>Отвори GrowPoint на телефона си</figcaption>
-          </figure>}
         </div>
         <section id="early-registration" hidden={!open} className="coming-soon__form-card" aria-labelledby="registration-title" onKeyDown={event => { if (event.key === "Escape" && !busy) close(); }}>
           <button className="coming-soon__close" type="button" aria-label="Затвори формата" disabled={busy} onClick={close}>×</button>

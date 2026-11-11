@@ -50,8 +50,6 @@
 .coming-soon__invitation .coming-soon__cta::after { content: ""; position: absolute; top: -50%; left: 0; height: 200%; width: 25%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent); pointer-events: none; animation: soon-shine 8s ease-in-out infinite; }
 .coming-soon__invitation .coming-soon__cta span { animation: soon-arrow 5s ease-in-out infinite; }
 .coming-soon__micro { font-size: 12px; line-height: 1.6; color: var(--soon-muted); }
-.coming-soon__qr { display: grid; justify-items: center; gap: 10px; margin: 4px 0 0; color: var(--soon-muted); font-size: 12px; line-height: 1.5; }
-.coming-soon__qr img { display: block; border-radius: 12px; box-shadow: 0 0 0 1px rgba(239,204,101,.35), 0 10px 30px rgba(0,0,0,.2); }
 .coming-soon__form-card { position: relative; width: min(560px, calc(100% - 32px)); margin: 48px auto 0; padding: 35px; scroll-margin-top: 24px; border: 1px solid var(--soon-line); border-radius: 26px; background: rgba(19,42,31,.94); box-shadow: 0 25px 80px rgba(0,0,0,.24); text-align: left; animation: soon-reveal .35s ease-out both; }
 .coming-soon__form-card[hidden] { display: none; }
 .coming-soon__form-card .coming-soon__eyebrow { margin-bottom: 12px; font-size: 10px; }
