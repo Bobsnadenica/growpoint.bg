@@ -2,6 +2,10 @@
 
 Last reviewed: 2026-11-11. This is the canonical project memory. The historical review is preserved below for context, **not as current instructions**; the latest dated sections supersede conflicting historical claims.
 
+## Public payment wording — 2026-11-11
+
+- Terms, privacy, legal summary and FAQ use customer-facing language. The card rules apply when card payment is offered for the chosen service. Customer billing and booking screens use availability notices in place of the mock checkout. Admin sandbox access, consent policy versions and payment configuration are unchanged.
+
 ## Coming-soon interaction polish — 2026-11-11 (latest)
 
 - Explicit owner preference: NO pause-control buttons. Do not add these to the maintenance page. Existing automatic ambient pause during form entry and device reduced-motion support remain.

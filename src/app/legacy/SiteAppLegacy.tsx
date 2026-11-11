@@ -51,7 +51,6 @@ import {
 } from "./availability";
 import AvailabilityCalendar from "./AvailabilityCalendar";
 import HeroAnimation from "./HeroAnimation";
-import PaymentPlaceholder from "../components/PaymentPlaceholder";
 import ConsultantAvailabilityEditor from "../components/ConsultantAvailabilityEditor";
 import ScheduledDeletionPanel from "../components/ScheduledDeletionPanel";
 import { HomeGuide, HomeTopics } from "../components/HomeDiscovery";
@@ -144,9 +143,7 @@ type MatchInsight = {
 type SuggestedFillMode = "replace" | "append-list" | "append-lines" | "append-text";
 type QuestionSuggestionOption = string | { label: string; value: string };
 
-// Expert visibility packages (Стр. 6 of the designer doc). Payments go through
-// DKS integration is pending — until then previews cannot charge and admins can
-// grant a package from the admin panel.
+// Expert visibility packages shown in the expert dashboard.
 const PACKAGE_PLANS: Array<{
   tier: "start" | "grow" | "spotlight";
   level: string;
@@ -2617,11 +2614,9 @@ export function AuthPage() {
     event.preventDefault();
     clearFeedback();
 
-    // Expert profiles are paid (DKS pending) — until then a mentor account
-    // can only be created from an admin email invite. Clients stay free + open.
     if (form.role === "consultant" && !readInviteToken() && !expertSignupEnabled) {
       setError(
-        "Експертните профили са с покана засега. Онлайн плащането предстои — пиши ни на contactus@growpoint.bg за достъп."
+        "За създаване на експертен профил е нужна покана от GrowPoint. За достъп пиши на contactus@growpoint.bg."
       );
       return;
     }
@@ -3097,9 +3092,8 @@ export function AuthPage() {
                 </div>
                 {form.role === "consultant" && !readInviteToken() && !expertSignupEnabled ? (
                   <p className="form-note auth-invite-note">
-                    Експертните профили (консултанти и ментори) са платени. Онлайн
-                    плащането предстои — засега нов експертен профил се
-                    създава само с покана от екипа на GrowPoint. Пиши ни на{" "}
+                    Експертните профили се създават с покана от екипа на GrowPoint.
+                    За достъп пиши на{" "}
                     <a href="mailto:contactus@growpoint.bg">contactus@growpoint.bg</a>.
                   </p>
                 ) : null}
@@ -6424,7 +6418,7 @@ function BookingMeetingLink({
   }
   if (booking.meetingLinkLocked) {
     return (
-      <div className="payment-preview-inline"><p className="form-note">Линкът за срещата ще се отвори след реално потвърдено плащане. Онлайн плащането все още е демонстрация.</p><PaymentPlaceholder description={`Резервация с ${booking.consultantName || "експерт"}`} /></div>
+      <p className="form-note">Връзката за срещата още не е достъпна. За съдействие с резервацията <Link to="/contact">се свържи с нас</Link>.</p>
     );
   }
   return null;

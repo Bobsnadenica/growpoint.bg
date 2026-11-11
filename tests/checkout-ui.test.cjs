@@ -3,20 +3,20 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const source = path => readFileSync(new URL(`../${path}`, `file://${__filename}`), "utf8");
 
-test("payment preview retains the no-card-data and no-payment-API boundary", () => {
-  const checkout = source("src/app/components/PaymentPlaceholder.tsx");
-  assert.doesNotMatch(checkout, /<input|<form|fetch\(|\bapi\.|localStorage|sessionStorage/);
-  assert.match(checkout, /setAttempted\(current => !current\)/);
-  assert.match(checkout, /role="status"/);
-  assert.match(checkout, /mockup/);
-  assert.match(checkout, /useModalFocus\(open, dialog/);
+test("customer checkout requires server enablement and explicit recurring consent", () => {
+  const billing = source("src/app/components/ExpertBillingPanel.tsx");
+  assert.match(billing, /if\(!selected \|\| !consent \|\| !data\?\.enabled \|\| submitted\) return/);
+  assert.match(billing, /data\?\.enabled\?<button/);
+  assert.doesNotMatch(billing, /PaymentPlaceholder|демонстрац|mockup/i);
+  assert.doesNotMatch(source("src/app/legacy/SiteAppLegacy.tsx"), /PaymentPlaceholder/);
 });
 
-test("terms include requested card clauses and disclose that payments are not live", () => {
+test("terms describe card and refund rules when card payment is available", () => {
   const terms = source("src/app/pages/TermsPage.tsx");
-  for (const text of ["V-POS", "Visa, Mastercard и bCard", "MasterCard Identity Check и VISA Secure", "4000 EUR", "Не съхраняваме данни за банковите карти", "възстановява по същата карта", "след активиране на реалната платежна услуга"]) {
+  for (const text of ["V-POS", "Visa, Mastercard и bCard", "Mastercard Identity Check и Visa Secure", "4 000 EUR", "Не съхраняваме данни за банковите карти", "възстановява по същата карта", "Когато за избраната услуга е налично плащане с карта"]) {
     assert.ok(terms.includes(text), text);
   }
+  assert.doesNotMatch(terms, /демонстрац|mockup/i);
 });
 
 test("mobile shortcuts use standalone destinations and portrait uses modal isolation", () => {

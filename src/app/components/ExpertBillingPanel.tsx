@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { billingApi, billingAmount, billingDate, bankCheckoutUrl, PAYMENT_STATUS, type BillingSummary, type PaymentOrder } from "../../lib/billing";
 import type { ConsultantPackageTier, ConsultantProfile } from "../../lib/types";
 import { useModalFocus } from "../../lib/use-modal-focus";
-import PaymentPlaceholder from "./PaymentPlaceholder";
 import { MERCHANT } from "../../lib/merchant";
 type Plan={tier:ConsultantPackageTier;name:string;price:string;level:string;tagline:string;description:string;features:readonly string[]};
 
@@ -98,11 +97,11 @@ export default function ExpertBillingPanel({token,consultant,plans,onMembershipC
         <header className="package-plan__head"><p className="eyebrow">{plan.level}</p><h3>{plan.name}</h3><p className="form-note">{plan.tagline}</p></header>
         <p>{plan.description}</p><ul className="package-plan__features">{plan.features.map(feature=><li key={feature}>{feature}</li>)}</ul>
         <div className="package-plan__footer"><strong>{data?`${billingAmount(data.prices[plan.tier])} / месец`:plan.price}</strong>
-          {isCurrent?<span className="status-badge status-badge--success">Текущ пакет</span>:data?.enabled?<button className="primary-button" type="button" disabled={busy || Boolean(manual || sub?.autoRenew || sub?.inFlight || paidIntervalActive)} onClick={()=>{setSelected(plan);setConsent(false);setSubmitted(false);setError("");}}>Избери {plan.name}</button>:data?<PaymentPlaceholder description={`Пакет ${plan.name}`} amount={plan.price}/>:null}
+          {isCurrent?<span className="status-badge status-badge--success">Текущ пакет</span>:data?.enabled?<button className="primary-button" type="button" disabled={busy || Boolean(manual || sub?.autoRenew || sub?.inFlight || paidIntervalActive)} onClick={()=>{setSelected(plan);setConsent(false);setSubmitted(false);setError("");}}>Избери {plan.name}</button>:null}
         </div>
       </article>;
     })}</div>
-    {data && !data.enabled && <p className="form-note">Реалните плащания още не са включени. Показаните платежни прозорци са демонстрация.</p>}
+    {data && !data.enabled && <p className="form-note">Онлайн покупката на план в момента е недостъпна. За съдействие пиши на <a href={`mailto:${MERCHANT.supportEmail}`}>{MERCHANT.supportEmail}</a>.</p>}
     {data && data.orders.length>0 && <div className="billing-history"><h3>История на плащанията</h3>{data.orders.map(row=><article className="panel" key={row.checkoutId}>
       <h4>{row.tier} · {billingAmount(row.amountMinor)}</h4><p>{PAYMENT_STATUS[row.status] || "Изисква проверка"} · {billingDate(row.createdAt)}</p>
       {row.periodEndsAt && <p>Платен период до {billingDate(row.periodEndsAt)}.</p>}
